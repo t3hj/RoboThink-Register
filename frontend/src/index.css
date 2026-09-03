@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import './style.css';
+
+/* Project tokens and helper classes */
+:root{
+  --rt-teal: #0e7c7b;
+  --rt-ink: #182238;
+  --rt-ink-soft: #4b5568;
+  --rt-paper: #F6F3EC;
+  --rt-amber: #DE9B33;
+}
+
+/* Card and badge helpers used across the app */
+.card { @apply bg-white shadow-sm rounded-xl border border-slate-100; }
+.btn-primary { @apply bg-[color:var(--rt-teal)] text-white font-semibold px-4 py-2 rounded-lg shadow-sm hover:bg-teal-700; }
+.btn-ghost { @apply bg-white border px-3 py-2 rounded-lg text-sm hover:bg-slate-50; }
+.badge { @apply inline-flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-full bg-slate-100 text-slate-700; }
+.badge-assess{ @apply bg-amber-100 text-[#8a3b2a] }
+.badge-arrived{ @apply bg-emerald-100 text-emerald-800 }
+.badge-absent{ @apply bg-rose-100 text-rose-800 }
+
+/* Utility overrides for narrow screens */
+@media (max-width: 768px){
+  .hide-mobile { display: none; }
+}
