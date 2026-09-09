@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import { supabase, supabaseConfigured } from '../lib/supabaseClient'
 
 export default function Auth() {
   const [email, setEmail] = useState('')
@@ -41,6 +41,13 @@ export default function Auth() {
             <p className="text-sm text-slate-500">Register &amp; Progress</p>
           </div>
         </div>
+        {!supabaseConfigured && (
+          <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+            Supabase is not configured. Copy <code>frontend/.env.example</code> to{' '}
+            <code>frontend/.env</code> and set <code>VITE_SUPABASE_URL</code> and{' '}
+            <code>VITE_SUPABASE_ANON_KEY</code>, then restart the dev server.
+          </div>
+        )}
         <form onSubmit={signIn} className="space-y-3">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Instructor email</span>
