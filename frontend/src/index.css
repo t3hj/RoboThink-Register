@@ -1,28 +1,73 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@import './style.css';
-
-/* Project tokens and helper classes */
-:root{
+/* Project tokens */
+:root {
   --rt-teal: #0e7c7b;
   --rt-ink: #182238;
   --rt-ink-soft: #4b5568;
-  --rt-paper: #F6F3EC;
-  --rt-amber: #DE9B33;
+  --rt-paper: #f6f3ec;
+  --rt-amber: #de9b33;
 }
 
-/* Card and badge helpers used across the app */
-.card { @apply bg-white shadow-sm rounded-xl border border-slate-100; }
-.btn-primary { @apply bg-[color:var(--rt-teal)] text-white font-semibold px-4 py-2 rounded-lg shadow-sm hover:bg-teal-700; }
-.btn-ghost { @apply bg-white border px-3 py-2 rounded-lg text-sm hover:bg-slate-50; }
-.badge { @apply inline-flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-full bg-slate-100 text-slate-700; }
-.badge-assess{ @apply bg-amber-100 text-[#8a3b2a] }
-.badge-arrived{ @apply bg-emerald-100 text-emerald-800 }
-.badge-absent{ @apply bg-rose-100 text-rose-800 }
+body {
+  margin: 0;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  color: var(--rt-ink);
+  -webkit-font-smoothing: antialiased;
+}
 
-/* Utility overrides for narrow screens */
-@media (max-width: 768px){
-  .hide-mobile { display: none; }
+/* Reusable component classes (plain CSS, Tailwind-v4 safe) */
+.card {
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.btn-primary {
+  background: var(--rt-teal);
+  color: #fff;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: background 0.15s ease;
+}
+.btn-primary:hover { background: #0b6362; }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-ghost {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.btn-ghost:hover { background: #f8fafc; }
+.btn-ghost:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  color: #334155;
+  white-space: nowrap;
+}
+.badge-assess { background: #fef3c7; color: #8a3b2a; }
+.badge-arrived { background: #d1fae5; color: #065f46; }
+.badge-absent { background: #ffe4e6; color: #9f1239; }
+
+input, select, textarea {
+  font: inherit;
+  color: inherit;
+  background: #fff;
 }
