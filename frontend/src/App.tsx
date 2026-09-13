@@ -23,11 +23,12 @@ function Layout() {
   const { profile, signOut } = useAuth()
   return (
     <div className="min-h-screen bg-[color:var(--rt-paper)] text-[color:var(--rt-ink)]">
+      <div className="brand-stripe" aria-hidden />
       <div className="max-w-7xl mx-auto px-4 py-4 lg:py-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
         <aside className="lg:col-span-1">
           <div className="card p-4 lg:sticky lg:top-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-[color:var(--rt-teal)] flex items-center justify-center text-white font-bold shrink-0">RT</div>
+              <div className="w-10 h-10 rounded-full bg-[color:var(--rt-primary)] flex items-center justify-center text-white font-bold shrink-0">RT</div>
               <div>
                 <div className="text-lg font-semibold leading-tight">RoboThink</div>
                 <div className="text-xs text-slate-500">Register & Progress</div>
@@ -41,7 +42,7 @@ function Layout() {
                   end={item.end}
                   className={({ isActive }) =>
                     `px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                      isActive ? 'bg-[color:var(--rt-teal)] text-white' : 'text-slate-600 hover:bg-slate-100'
+                      isActive ? 'bg-[color:var(--rt-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'
                     }`
                   }
                 >

@@ -140,7 +140,7 @@ export default function Reports() {
       </div>
       <div className="h-1.5 bg-slate-100 rounded-full">
         <div
-          className="h-1.5 bg-[color:var(--rt-teal)] rounded-full"
+          className="h-1.5 bg-[color:var(--rt-primary)] rounded-full"
           style={{ width: max ? `${(count / max) * 100}%` : '0%' }}
         />
       </div>
@@ -156,7 +156,7 @@ export default function Reports() {
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle={`${from} → ${to}`} />
+      <PageHeader title="Reports" subtitle={`${from} → ${to}`} accent="yellow" />
 
       <div className="flex flex-wrap items-end gap-2 mb-6">
         <label className="text-sm">

@@ -54,7 +54,7 @@ export default function Curriculum() {
 
   return (
     <div>
-      <PageHeader title="Curriculum" subtitle={`${totalLessons} lessons across ${levels.length} terms/levels`} />
+      <PageHeader title="Curriculum" subtitle={`${totalLessons} lessons across ${levels.length} terms/levels`} accent="red" />
 
       {levels.length === 0 ? (
         <EmptyState title="No curriculum levels found" hint="Add levels and lessons to the database to see them here." />
@@ -88,7 +88,7 @@ export default function Curriculum() {
                             <ol className="divide-y divide-slate-100">
                               {level.lessons.map((lesson) => (
                                 <li key={lesson.id} className="p-4 flex gap-4">
-                                  <div className="w-9 h-9 rounded-full bg-[color:var(--rt-teal)]/10 text-[color:var(--rt-teal)] font-semibold text-sm flex items-center justify-center shrink-0">
+                                  <div className="w-9 h-9 rounded-full bg-[color:var(--rt-primary)]/10 text-[color:var(--rt-primary)] font-semibold text-sm flex items-center justify-center shrink-0">
                                     {lesson.lesson_number}
                                   </div>
                                   <div className="min-w-0">
