@@ -2,17 +2,28 @@
 
 An internal register and lesson-progress tracking system for RoboThink instructors.
 Instructors sign in with a magic link, take the daily register (Arrived / Absent /
-Time Out / Mark Done), and track each student's progression through the curriculum.
+Time Out / Mark Done), and track each student's progression through the curriculum —
+including age-based programme placement and the pass/fail assessment → remediation →
+reassessment → intervention workflow.
+
+> **Note on `db/`:** the `.sql` files in this folder describe an *earlier* version of
+> the schema and are kept for history only. The live database (Supabase project
+> `RoboThink-Register`) has moved well beyond them via migrations applied directly
+> to the project (`curriculum_seed`, `persistent_progress`, `staff_curriculum_access`,
+> `fix_security_definer_views_and_rls_gaps`, `seed_assessment_points_at_end_of_each_level`,
+> `harden_function_search_paths`). Treat the live database, not these files, as the
+> source of truth, and run `supabase db pull` (or inspect via the dashboard/SQL editor)
+> before assuming the schema matches what's committed here.
 
 ## Features
 
 - **Magic-link authentication** via Supabase Auth, mapped to staff profiles with `admin` / `instructor` roles
-- **Dashboard** — who's expected today, who's in the centre, absences, lessons completed, recent completions
-- **Daily register** — date navigation, per-student status, automatic arrival/time-out times, one-click lesson completion with confirmation, catch-up attendees shown alongside the scheduled day
-- **Students** — searchable/filterable/sortable list with level, preferred day/time, subscription and progress
-- **Student profile** — lesson history, attendance history and percentage, subscription and parent details, next-lesson override (admin only)
-- **Curriculum** — levels and lessons straight from the database
-- **Reports** — attendance and lesson-completion statistics over any date range, per student/instructor/level, plus students whose attendance may need a check-in
+- **Dashboard** — who's expected today, who's in the centre, absences, lessons completed today, recent completions, and everyone currently needing an assessment/remediation/intervention follow-up
+- **Daily register** — date navigation, per-student status, automatic arrival/time-out times, lesson completion via the real curriculum (with term-boundary rollover), inline PASS/FAIL and "complete remediation lesson" actions when a student has an assessment or remediation pending, catch-up attendees shown alongside the scheduled day
+- **Students** — searchable/filterable/sortable list with programme/term, preferred day/time, subscription and progress; admin-only **Add student** with an age-based default programme (Engineer at 7+, Junior Engineer under 7 — corrected before saving if needed)
+- **Student profile** — current lesson and next lesson shown explicitly (not just a lesson number), lesson/assessment/remediation/attendance history, admin-only **Change current lesson** control (reason required, audited server-side) and **Edit details**
+- **Curriculum** — every programme (Junior/Engineer/Advanced/Expert/Master Engineer, Coding), grouped by programme with terms nested underneath, straight from the database, with assessment checkpoints flagged
+- **Reports** — attendance, lesson-completion, and assessment/remediation statistics over any date range, per student/instructor/level
 - **404 handling** and authenticated-route protection throughout
 
 ## Architecture & tech stack
@@ -20,23 +31,20 @@ Time Out / Mark Done), and track each student's progression through the curricul
 | Layer    | Tech |
 |----------|------|
 | Frontend | React 18, TypeScript, Vite, React Router, Tailwind CSS v4 |
-| Backend  | Supabase (PostgreSQL, Auth, Row Level Security) |
-| Testing  | Vitest (unit tests for date handling and lesson-progression logic) |
+| Backend  | Supabase (PostgreSQL, Auth, Row Level Security, SQL functions/RPCs) |
+| Testing  | Vitest (unit tests mirroring the live progression/assessment logic and date handling) |
 
 ```
 frontend/
   src/
-    components/   # Toast notifications + shared UI (badges, stat cards, dialogs)
-    lib/          # Supabase client, auth context, UK-local date utilities
+    components/   # Toast, shared UI, LevelLessonPicker, ChangeLessonControl,
+                  # AssessmentPanel, StudentForm
+    lib/          # Supabase client, auth context, date utilities, curriculum
+                  # helpers (programme/term parsing), cached curriculum loader
     pages/        # Auth, Dashboard, Register, Students, StudentProfile,
                   # Curriculum, Reports, NotFound
   tests/          # Vitest unit tests
-db/
-  robothink_schema.sql                   # tables, views, compute_next_lesson
-  robothink_seed_fixed.sql               # sample data
-  robothink_rls.sql                      # RLS policies & role helper functions
-  map_auth_tehjpatel.sql                 # example auth-user → profile mapping
-  migration_001_progression_and_rls.sql  # hardened progression + RLS + validation
+db/               # HISTORICAL schema files — see note above; live DB has diverged
 ```
 
 ## Local setup
@@ -58,40 +66,45 @@ VITE_SUPABASE_ANON_KEY=your-anon-public-key
 Only the **anon** key is used — it is safe to expose in the browser because all access
 is governed by RLS. **Never** put the service-role key in the frontend, and never commit
 `.env` (it is gitignored).
-## Supabase setup
 
-1. Create a Supabase project.
-2. In the SQL editor, run the files in `db/` **in this order**:
-   1. `robothink_schema.sql` — tables, views, `compute_next_lesson`
-   2. `robothink_seed_fixed.sql` — sample students/levels/records (optional)
-   3. `robothink_rls.sql` — enables RLS and creates the policies
-   4. `migration_001_progression_and_rls.sql` — **required**: hardened next-lesson
-      calculation, RLS fixes (no self-promotion to admin, admin deletes) and
-      data-validation triggers
-3. Authentication → enable **Email magic link**.
-4. Create staff users in Authentication → Users.
-5. Map each auth user to a staff profile row (see `db/map_auth_tehjpatel.sql`):
+## How the curriculum is modelled
 
-```sql
-UPDATE public.profiles
-SET auth_id = '<auth-user-uuid>'
-WHERE email = 'instructor@example.com';
-```
+- Each **term** of a term-based programme (Junior Engineer, Engineer, Advanced Engineer)
+  is its own row in `levels` (e.g. `engineer-term-2`); Expert Engineer, Master Engineer
+  and Coding are single, non-termed levels. `frontend/src/lib/curriculum.ts` is the one
+  place that parses this convention (`"Engineer - Term 2"` → programme `Engineer`, term `2`).
+- `lessons.lesson_kind` is `'normal'` or `'assessment'`; `assessment_points` marks which
+  lesson an assessment checkpoint follows.
+- A student's progress is entirely separate from the curriculum: `students.current_lesson_id`
+  references a real `lessons.id`. Nothing in the frontend hard-codes lesson numbers or names.
 
 ## How lesson progression works
 
-`compute_next_lesson(student_id)` (see `db/`):
+- `complete_current_lesson(student_id, date)` (SQL, `SECURITY DEFINER`) records the lesson,
+  the authenticated instructor, and calls `next_curriculum_lesson(lesson_id)` to move the
+  student on — within the same term if there's a next lesson number, otherwise to lesson 1
+  of the next term/level (the Coding track only ever advances within Coding).
+- It refuses to advance a student who has an unresolved remediation plan.
+- `set_student_current_lesson(student_id, lesson_id, reason)` is the **only** way the
+  current lesson is changed outside normal completion — admin-only (checked server-side,
+  not just hidden in the UI), and every use is written to `progress_overrides` + `audit_log`.
 
-1. The next lesson is `MAX(completed lesson_number) + 1` for the student's current level.
-2. A manual `override_next_lesson` (set by an admin) wins if it is higher than the
-   completed max — used for transfers from other centres.
-3. Missed lessons are simply not completed, so they remain the next lesson.
-4. If the current level is unset, the most recent level with completions is used;
-   a student with no level shows `—` rather than erroring.
-5. `UNIQUE(student_id, level_id, lesson_number)` on `lesson_records` makes lesson
-   completion idempotent — double-clicks can't create duplicate completions.
+## How assessment / remediation works
 
-Unit tests mirroring this rule live in `frontend/tests/progression.test.ts`.
+- `record_assessment_result(student_id, 'PASS'|'FAIL', date, notes)`:
+  - **PASS** → student continues normally.
+  - **FAIL** → a `remediation_plans` row is created requiring 3 remediation lessons.
+- `complete_remediation_lesson(...)` logs each remediation lesson; after the 3rd, the plan
+  moves to `ready_for_reassessment`.
+- Recording a result while `ready_for_reassessment`:
+  - **PASS** → normal progression resumes.
+  - **FAIL** → the plan moves to `intervention_required` — the UI shows a red banner and
+    stops offering further automatic actions; a human decides what happens next.
+- The Register and Student Profile both surface this via `AssessmentPanel`, driven by the
+  `student_progress` view (`current_kind`: `normal` / `assessment` / `remediation` / `complete`).
+
+Unit tests mirroring this logic live in `frontend/tests/progression.test.ts` and
+`frontend/tests/curriculum.test.ts`.
 
 ## Development commands
 
@@ -112,20 +125,34 @@ Add the deployed URL to Supabase → Authentication → URL Configuration
 
 ## Security notes
 
-- All access control is enforced by **Postgres RLS**, not the frontend. The frontend
-  only ever uses the anon key; a signed-in user can do exactly what the policies permit.
+- All access control is enforced by **Postgres RLS** and server-side checks inside the
+  progression/assessment RPCs, not the frontend. The frontend only ever uses the anon key.
 - Roles (`admin`, `instructor`) live in `public.profiles`; the RLS helper functions
   `is_admin()` / `is_instructor()` resolve the caller via `auth.uid()`.
-- Instructors can read students and write attendance/lesson records; only admins
-  manage students, progress overrides and deletions.
-- Users cannot change their own role (enforced in migration 001).
-- `audit_log` is admin-only and append-only.
-- Data-validation triggers reject future dates and out-of-order attendance times.
+- Instructors can read students/curriculum and write attendance/lesson/assessment records;
+  only admins create/edit/delete students, change a student's current lesson, and manage
+  curriculum content.
+- Users cannot change their own role.
+- `audit_log` and `curriculum_progression_log` are staff-readable and effectively
+  append-only from the client (writes happen inside `SECURITY DEFINER` functions).
+- Three views (`student_assessment_status`, `students_requiring_assessment_action`,
+  `total_lessons_per_level`) were `SECURITY DEFINER`, which bypassed RLS and — combined
+  with Supabase's default `anon` grants — let unauthenticated requests read student and
+  assessment data via the REST API. They've been switched to `security_invoker = true` so
+  they now respect the same RLS as everything else.
+- **Still open:** Supabase Auth's "leaked password protection" (HaveIBeenPwned check) is
+  disabled for this project. This is an Auth setting, not a SQL migration — enable it in
+  Supabase Dashboard → Authentication → Policies.
 
-## Known limitations
+## Known limitations / follow-ups
 
-- Adding/editing students is a database-level task for now (admin via the Supabase
-  dashboard); the UI is read-only for student records.
+- Curriculum lesson titles are placeholders (`Lesson 1`, `Lesson 2`, …) for CMAP-backed
+  programmes, by design — they're meant to be replaced later. There is no in-app curriculum
+  *editing* UI yet (only viewing, which is available to all staff); editing is currently a
+  database-level task for admins.
+- `assessment_points` were seeded generically (one checkpoint after the final lesson of
+  every level) so the assessment workflow has something to trigger against end-to-end.
+  Replace these with the real assessment points for your curriculum when known.
 - Magic-link sign-in requires email delivery to be configured in your Supabase project.
-- Reports are computed client-side over the selected date range; for very large
-  datasets these aggregations would be better served by SQL views/RPCs.
+- Reports are computed client-side over the selected date range; for very large datasets
+  these aggregations would be better served by SQL views/RPCs.
