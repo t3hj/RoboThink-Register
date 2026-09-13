@@ -126,6 +126,7 @@ export default function StudentProfile() {
         ]
           .filter(Boolean)
           .join(' · ')}
+        accent="blue"
         actions={
           role === 'admin' ? (
             <button className="btn-ghost" onClick={() => setEditing(true)}>

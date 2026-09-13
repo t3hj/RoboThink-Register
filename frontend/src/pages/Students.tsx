@@ -80,6 +80,7 @@ export default function Students() {
       <PageHeader
         title="Students"
         subtitle={`${visible.length} of ${rows.length} shown`}
+        accent="green"
         actions={
           role === 'admin' ? (
             <button className="btn-primary" onClick={() => setShowForm(true)}>

@@ -35,7 +35,7 @@ export default function Auth() {
     <div className="min-h-screen bg-[color:var(--rt-paper)] text-[color:var(--rt-ink)] flex items-center justify-center p-6">
       <div className="card p-6 sm:p-8 max-w-md w-full">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-full bg-[color:var(--rt-teal)] flex items-center justify-center text-white font-bold">RT</div>
+          <div className="w-12 h-12 rounded-full bg-[color:var(--rt-primary)] flex items-center justify-center text-white font-bold">RT</div>
           <div>
             <h2 className="text-xl font-semibold">Sign in to RoboThink</h2>
             <p className="text-sm text-slate-500">Register &amp; Progress</p>
@@ -55,7 +55,7 @@ export default function Auth() {
               type="email"
               required
               autoComplete="email"
-              className="mt-1 w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--rt-teal)]/40"
+              className="mt-1 w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--rt-primary)]/40"
               placeholder="you@robothink.co.uk"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

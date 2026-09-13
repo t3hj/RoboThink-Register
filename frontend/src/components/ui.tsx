@@ -42,7 +42,7 @@ export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: ()
 export function LoadingPanel({ label = 'Loading…' }: { label?: string }) {
   return (
     <div className="card p-8 text-center text-slate-500">
-      <div className="inline-block w-6 h-6 border-2 border-slate-300 border-t-[color:var(--rt-teal)] rounded-full animate-spin mb-3" />
+      <div className="inline-block w-6 h-6 border-2 border-slate-300 border-t-[color:var(--rt-primary)] rounded-full animate-spin mb-3" />
       <div className="text-sm">{label}</div>
     </div>
   )
@@ -57,10 +57,33 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   )
 }
 
-/** Page header with title, subtitle and optional actions. */
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: React.ReactNode }) {
+type BrandAccent = 'yellow' | 'green' | 'red' | 'blue'
+const ACCENT_VAR: Record<BrandAccent, string> = {
+  yellow: 'var(--rt-yellow)',
+  green: 'var(--rt-green)',
+  red: 'var(--rt-red)',
+  blue: 'var(--rt-blue)',
+}
+
+/** Page header with title, subtitle and optional actions. `accent` is a
+ *  purely decorative brand-colour touch (see .accent-bar) — it carries no
+ *  status meaning. */
+export function PageHeader({
+  title,
+  subtitle,
+  actions,
+  accent = 'blue',
+}: {
+  title: string
+  subtitle?: string
+  actions?: React.ReactNode
+  accent?: BrandAccent
+}) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+    <div
+      className="accent-bar flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5"
+      style={{ '--accent-color': ACCENT_VAR[accent] } as React.CSSProperties}
+    >
       <div>
         <h2 className="text-2xl font-semibold">{title}</h2>
         {subtitle && <div className="text-sm text-slate-500 mt-0.5">{subtitle}</div>}

@@ -94,6 +94,7 @@ export default function Dashboard() {
       <PageHeader
         title="Today at a glance"
         subtitle={`${formatDisplayDate(today)} · ${dayName(today)}`}
+        accent="yellow"
         actions={
           <Link to="/register" className="btn-primary">
             Take Register
@@ -207,7 +208,7 @@ export default function Dashboard() {
             <div className="text-slate-500">Awaiting register mark</div>
           </div>
         </div>
-        <Link to="/students" className="text-sm text-[color:var(--rt-teal)] font-medium hover:underline">
+        <Link to="/students" className="text-sm text-[color:var(--rt-primary)] font-medium hover:underline">
           View all students →
         </Link>
       </section>

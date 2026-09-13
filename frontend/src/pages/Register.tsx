@@ -13,9 +13,11 @@ import {
   ConfirmDialog,
 } from '../components/ui'
 import AssessmentPanel from '../components/AssessmentPanel'
+import LessonsToday from '../components/LessonsToday'
 import { todayISO, dayName, nowHM, formatDisplayDate, addDays } from '../lib/dates'
 import { levelLabel } from '../lib/curriculum'
-import type { Attendance, RemediationPlan, Student, StudentProgress } from '../types'
+import { loadCurriculum } from '../lib/curriculumData'
+import type { Attendance, Level, RemediationPlan, Student, StudentProgress } from '../types'
 
 interface RosterEntry extends Student {
   attendance: Attendance | null
@@ -32,6 +34,11 @@ export default function Register() {
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<RosterEntry | null>(null)
+  const [levels, setLevels] = useState<Level[]>([])
+
+  useEffect(() => {
+    void loadCurriculum().then(({ levels: lv }) => setLevels(lv))
+  }, [])
 
   const loadRoster = useCallback(
     async (forDate: string) => {
@@ -206,6 +213,49 @@ export default function Register() {
     }
   }
 
+  /** "Not Finished / Repeat" — the student worked on their current lesson
+   *  but didn't finish it. Records the attempt in lesson_records (reusing
+   *  the same table/columns as a completed lesson, just with
+   *  status='not_completed') without touching students.current_lesson_id at
+   *  all, so the current AND next lesson shown stay exactly the same until
+   *  the lesson is genuinely completed. No RPC needed: instructors/admins
+   *  already have INSERT/UPDATE rights on lesson_records via RLS. */
+  async function repeatLesson(student: RosterEntry) {
+    const prog = student.progress
+    if (!prog || prog.current_lesson_number == null || prog.current_level_id == null || !prog.current_lesson_id) {
+      notify('This student has no current lesson to repeat.', 'error')
+      return
+    }
+    if (!profile) {
+      notify('Your profile is not loaded — cannot record who made this change.', 'error')
+      return
+    }
+    setBusyId(student.id)
+    const { error: err } = await supabase.from('lesson_records').upsert(
+      {
+        student_id: student.id,
+        level_id: prog.current_level_id,
+        lesson_number: prog.current_lesson_number,
+        lesson_id: prog.current_lesson_id,
+        date,
+        instructor_id: profile.id,
+        status: 'not_completed',
+      },
+      { onConflict: 'student_id,level_id,lesson_number' },
+    )
+    if (err) {
+      setBusyId(null)
+      notify(err.message, 'error')
+      return
+    }
+    const ok = await upsertAttendance(student, { status: 'Arrived', time_out: nowHM() })
+    setBusyId(null)
+    if (ok) {
+      notify(`${student.full_name} will repeat Lesson ${prog.current_lesson_number}`, 'info')
+      void loadRoster(date)
+    }
+  }
+
   const summary = useMemo(() => {
     const counts = { arrived: 0, absent: 0, completed: 0, unmarked: 0 }
     for (const s of roster) {
@@ -226,6 +276,7 @@ export default function Register() {
       <PageHeader
         title="Register"
         subtitle={`${formatDisplayDate(date)} · ${dayName(date)}`}
+        accent="green"
         actions={
           <>
             <button className="btn-ghost" onClick={() => setDate(addDays(date, -1))} aria-label="Previous day">
@@ -255,6 +306,8 @@ export default function Register() {
         <span className="badge">{summary.completed} completed</span>
         <span className="badge">{summary.unmarked} not marked</span>
       </div>
+
+      <LessonsToday roster={roster} levels={levels} />
 
       {roster.length === 0 ? (
         <EmptyState
@@ -299,7 +352,7 @@ export default function Register() {
                     <div className="text-xs text-slate-500">
                       {prog?.current_lesson_number != null ? (
                         <>
-                          Lesson <span className="font-semibold text-slate-700">{prog.current_lesson_number}</span>
+                          TODAY: Lesson <span className="font-semibold text-slate-700">{prog.current_lesson_number}</span>
                           {prog.next_lesson_number != null && (
                             <> · Next: <span className="font-semibold text-slate-700">{prog.next_lesson_number}</span></>
                           )}
@@ -324,6 +377,18 @@ export default function Register() {
                         <>
                           <button className="btn-ghost text-sm" disabled={busy} onClick={() => void markTimeOut(s)}>
                             Time Out
+                          </button>
+                          <button
+                            className="btn-ghost text-sm"
+                            disabled={busy || !canCompleteLesson}
+                            title={
+                              needsAction
+                                ? 'Resolve the assessment/remediation below first'
+                                : `Record an attempt at Lesson ${prog?.current_lesson_number ?? ''} without advancing`
+                            }
+                            onClick={() => void repeatLesson(s)}
+                          >
+                            Not Finished
                           </button>
                           <button
                             className="btn-primary text-sm"
