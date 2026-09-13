@@ -4,11 +4,10 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState, StatusBadge } from '../components/ui'
 import { todayISO, dayName, formatDisplayDate } from '../lib/dates'
-import type { Attendance, Student, LessonRecord } from '../types'
+import type { Attendance, Student, LessonRecord, StudentProgress, StudentRequiringAction } from '../types'
 
 interface UpcomingStudent extends Student {
-  next_lesson: number | null
-  total_lessons: number | null
+  progress: StudentProgress | null
 }
 
 interface DashboardData {
@@ -16,6 +15,7 @@ interface DashboardData {
   attendance: Attendance[]
   recentLessons: LessonRecord[]
   totals: { total: number; active: number }
+  needsAction: StudentRequiringAction[]
 }
 
 export default function Dashboard() {
@@ -30,8 +30,7 @@ export default function Dashboard() {
     setError(null)
     const dow = dayName(today)
 
-    // Parallel, batched queries — no per-student N+1.
-    const [studentsRes, attendanceRes, lessonsRes, progressRes] = await Promise.all([
+    const [studentsRes, attendanceRes, lessonsRes, progressRes, actionRes] = await Promise.all([
       supabase.from('students').select('*').order('full_name'),
       supabase.from('attendance').select('*').eq('date', today),
       supabase
@@ -40,15 +39,17 @@ export default function Dashboard() {
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
         .limit(8),
-      supabase.from('student_progress').select('student_id, next_lesson, total_lessons'),
+      supabase.from('student_progress').select('*'),
+      supabase.from('students_requiring_assessment_action').select('*'),
     ])
 
-    if (studentsRes.error || attendanceRes.error || lessonsRes.error || progressRes.error) {
+    if (studentsRes.error || attendanceRes.error || lessonsRes.error || progressRes.error || actionRes.error) {
       setError(
         studentsRes.error?.message ??
           attendanceRes.error?.message ??
           lessonsRes.error?.message ??
           progressRes.error?.message ??
+          actionRes.error?.message ??
           'Unknown database error',
       )
       setLoading(false)
@@ -56,16 +57,8 @@ export default function Dashboard() {
     }
 
     const students = (studentsRes.data ?? []) as Student[]
-    const progressMap = new Map(
-      ((progressRes.data ?? []) as { student_id: string; next_lesson: number | null; total_lessons: number | null }[]).map(
-        (p) => [p.student_id, p],
-      ),
-    )
-    const withProgress: UpcomingStudent[] = students.map((s) => ({
-      ...s,
-      next_lesson: progressMap.get(s.id)?.next_lesson ?? null,
-      total_lessons: progressMap.get(s.id)?.total_lessons ?? null,
-    }))
+    const progressMap = new Map(((progressRes.data ?? []) as StudentProgress[]).map((p) => [p.student_id, p]))
+    const withProgress: UpcomingStudent[] = students.map((s) => ({ ...s, progress: progressMap.get(s.id) ?? null }))
 
     setData({
       expected: withProgress.filter(
@@ -74,6 +67,7 @@ export default function Dashboard() {
       attendance: (attendanceRes.data ?? []) as Attendance[],
       recentLessons: (lessonsRes.data ?? []) as LessonRecord[],
       totals: { total: students.length, active: students.filter((s) => s.active).length },
+      needsAction: (actionRes.data ?? []) as StudentRequiringAction[],
     })
     setLoading(false)
   }, [today])
@@ -136,7 +130,7 @@ export default function Dashboard() {
                         {s.full_name}
                       </Link>
                       <div className="text-xs text-slate-500">
-                        {s.preferred_time} · Next lesson {s.next_lesson ?? '—'}
+                        {s.preferred_time} · Lesson {s.progress?.current_lesson_number ?? '—'}
                       </div>
                     </div>
                     {att ? <StatusBadge status={att.status} /> : <span className="badge">Not Arrived</span>}
@@ -170,6 +164,28 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+
+      <section className="card p-4 mt-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold">Needs assessment / remediation follow-up</h3>
+          <span className="badge">{data.needsAction.length}</span>
+        </div>
+        {data.needsAction.length === 0 ? (
+          <EmptyState title="Nobody currently needs assessment or remediation follow-up" />
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {data.needsAction.map((a) => (
+              <li key={`${a.student_id}-${a.action}`} className="py-2 flex items-center justify-between gap-3 text-sm">
+                <div>
+                  <Link to={`/students/${a.student_id}`} className="font-medium hover:underline">{a.full_name}</Link>
+                  <span className="text-slate-500"> · {a.current_level}</span>
+                </div>
+                <span className="badge badge-assess">{a.action}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="card p-4 mt-6">
         <h3 className="font-semibold mb-3">Students</h3>

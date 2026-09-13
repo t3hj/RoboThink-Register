@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../lib/auth'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, SubscriptionBadge } from '../components/ui'
-import type { Student } from '../types'
+import StudentForm from '../components/StudentForm'
+import { levelLabel } from '../lib/curriculum'
+import type { Student, StudentProgress } from '../types'
 
 type SortKey = 'name' | 'day' | 'level' | 'progress'
 
 interface Row extends Student {
-  next_lesson: number | null
-  total_lessons: number | null
+  progress: StudentProgress | null
 }
 
 export default function Students() {
+  const { role } = useAuth()
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -19,31 +22,22 @@ export default function Students() {
   const [dayFilter, setDayFilter] = useState('all')
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('active')
   const [sort, setSort] = useState<SortKey>('name')
+  const [showForm, setShowForm] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     const [studentsRes, progressRes] = await Promise.all([
       supabase.from('students').select('*, levels(name), subscriptions(name)').order('full_name'),
-      supabase.from('student_progress').select('student_id, next_lesson, total_lessons'),
+      supabase.from('student_progress').select('*'),
     ])
     if (studentsRes.error || progressRes.error) {
       setError(studentsRes.error?.message ?? progressRes.error?.message ?? 'Unknown error')
       setLoading(false)
       return
     }
-    const progMap = new Map(
-      ((progressRes.data ?? []) as { student_id: string; next_lesson: number | null; total_lessons: number | null }[]).map(
-        (p) => [p.student_id, p],
-      ),
-    )
-    setRows(
-      ((studentsRes.data ?? []) as Student[]).map((s) => ({
-        ...s,
-        next_lesson: progMap.get(s.id)?.next_lesson ?? null,
-        total_lessons: progMap.get(s.id)?.total_lessons ?? null,
-      })),
-    )
+    const progMap = new Map(((progressRes.data ?? []) as StudentProgress[]).map((p) => [p.student_id, p]))
+    setRows(((studentsRes.data ?? []) as Student[]).map((s) => ({ ...s, progress: progMap.get(s.id) ?? null })))
     setLoading(false)
   }, [])
 
@@ -67,8 +61,8 @@ export default function Students() {
         case 'level':
           return (a.current_level_id ?? 99) - (b.current_level_id ?? 99)
         case 'progress': {
-          const ap = a.total_lessons ? (a.next_lesson ?? 0) / a.total_lessons : 0
-          const bp = b.total_lessons ? (b.next_lesson ?? 0) / b.total_lessons : 0
+          const ap = a.progress?.total_lessons ? (a.progress.current_lesson_number ?? 0) / a.progress.total_lessons : 0
+          const bp = b.progress?.total_lessons ? (b.progress.current_lesson_number ?? 0) / b.progress.total_lessons : 0
           return ap - bp
         }
         default:
@@ -78,13 +72,22 @@ export default function Students() {
     return sorted
   }, [rows, query, dayFilter, activeFilter, sort])
 
-
   if (loading) return <LoadingPanel label="Loading students…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
 
   return (
     <div>
-      <PageHeader title="Students" subtitle={`${visible.length} of ${rows.length} shown`} />
+      <PageHeader
+        title="Students"
+        subtitle={`${visible.length} of ${rows.length} shown`}
+        actions={
+          role === 'admin' ? (
+            <button className="btn-primary" onClick={() => setShowForm(true)}>
+              + Add student
+            </button>
+          ) : undefined
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <input
@@ -94,33 +97,18 @@ export default function Students() {
           onChange={(e) => setQuery(e.target.value)}
           className="flex-1 min-w-[12rem] p-2 border border-slate-200 rounded-lg text-sm"
         />
-        <select
-          value={dayFilter}
-          onChange={(e) => setDayFilter(e.target.value)}
-          className="p-2 border border-slate-200 rounded-lg text-sm"
-          aria-label="Filter by day"
-        >
+        <select value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="p-2 border border-slate-200 rounded-lg text-sm" aria-label="Filter by day">
           <option value="all">All days</option>
           {days.map((d) => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
-        <select
-          value={activeFilter}
-          onChange={(e) => setActiveFilter(e.target.value as typeof activeFilter)}
-          className="p-2 border border-slate-200 rounded-lg text-sm"
-          aria-label="Filter by status"
-        >
+        <select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value as typeof activeFilter)} className="p-2 border border-slate-200 rounded-lg text-sm" aria-label="Filter by status">
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="all">All</option>
         </select>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as SortKey)}
-          className="p-2 border border-slate-200 rounded-lg text-sm"
-          aria-label="Sort"
-        >
+        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="p-2 border border-slate-200 rounded-lg text-sm" aria-label="Sort">
           <option value="name">Sort: Name</option>
           <option value="day">Sort: Day &amp; time</option>
           <option value="level">Sort: Level</option>
@@ -139,8 +127,9 @@ export default function Students() {
                 <span className={`badge ${s.active ? 'badge-arrived' : 'badge-absent'}`}>{s.active ? 'Active' : 'Inactive'}</span>
               </div>
               <div className="text-sm text-slate-500">
-                {s.levels?.name ?? `Level ${s.current_level_id ?? '—'}`} · Lesson {s.next_lesson ?? '—'}
-                {s.total_lessons ? ` of ${s.total_lessons}` : ''}
+                {s.progress ? levelLabel({ name: s.progress.level_name ?? '' }) : s.levels?.name ?? '—'}
+                {s.progress?.current_lesson_number != null ? ` · Lesson ${s.progress.current_lesson_number}` : ''}
+                {s.progress?.total_lessons ? ` of ${s.progress.total_lessons}` : ''}
               </div>
               <div className="text-sm text-slate-500">{s.preferred_day ?? '—'} · {s.preferred_time ?? '—'}</div>
               <div className="mt-auto flex items-center justify-between">
@@ -150,6 +139,16 @@ export default function Students() {
             </Link>
           ))}
         </div>
+      )}
+
+      {showForm && (
+        <StudentForm
+          onClose={() => setShowForm(false)}
+          onSaved={() => {
+            setShowForm(false)
+            void load()
+          }}
+        />
       )}
     </div>
   )

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, StatCard } from '../components/ui'
 import { addDays, todayISO } from '../lib/dates'
-import type { Attendance, LessonRecord, Student } from '../types'
+import type { Assessment, Attendance, LessonRecord, RemediationPlan, Student } from '../types'
 
 type Range = '7' | '30' | '90' | 'custom'
 
@@ -17,11 +17,13 @@ export default function Reports() {
   const [attendance, setAttendance] = useState<Attendance[]>([])
   const [lessons, setLessons] = useState<LessonRecord[]>([])
   const [students, setStudents] = useState<Student[]>([])
+  const [assessments, setAssessments] = useState<Assessment[]>([])
+  const [remediationPlans, setRemediationPlans] = useState<RemediationPlan[]>([])
 
   const load = useCallback(async (fromDate: string, toDate: string) => {
     setLoading(true)
     setError(null)
-    const [aRes, lRes, sRes] = await Promise.all([
+    const [aRes, lRes, sRes, asRes, rpRes] = await Promise.all([
       supabase.from('attendance').select('*').gte('date', fromDate).lte('date', toDate),
       supabase
         .from('lesson_records')
@@ -30,15 +32,21 @@ export default function Reports() {
         .gte('date', fromDate)
         .lte('date', toDate),
       supabase.from('students').select('*').order('full_name'),
+      supabase.from('assessments').select('*').gte('date', fromDate).lte('date', toDate),
+      supabase.from('remediation_plans').select('*').neq('status', 'completed'),
     ])
-    if (aRes.error || lRes.error || sRes.error) {
-      setError(aRes.error?.message ?? lRes.error?.message ?? sRes.error?.message ?? 'Unknown error')
+    if (aRes.error || lRes.error || sRes.error || asRes.error || rpRes.error) {
+      setError(
+        aRes.error?.message ?? lRes.error?.message ?? sRes.error?.message ?? asRes.error?.message ?? rpRes.error?.message ?? 'Unknown error',
+      )
       setLoading(false)
       return
     }
     setAttendance((aRes.data ?? []) as Attendance[])
     setLessons((lRes.data ?? []) as LessonRecord[])
     setStudents((sRes.data ?? []) as Student[])
+    setAssessments((asRes.data ?? []) as Assessment[])
+    setRemediationPlans((rpRes.data ?? []) as RemediationPlan[])
     setLoading(false)
   }, [])
 
@@ -228,6 +236,21 @@ export default function Reports() {
             <ul>{lessonSummary.byStudent.map(([name, c]) => simpleBar(name, c, maxStudent))}</ul>
           )}
         </section>
+      </div>
+
+      <h3 className="font-semibold mb-3">Assessments & remediation</h3>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard value={assessments.filter((a) => a.passed === true).length} label="Passed" tone="good" />
+        <StatCard value={assessments.filter((a) => a.passed === false).length} label="Failed" tone={assessments.some((a) => a.passed === false) ? 'warn' : undefined} />
+        <StatCard
+          value={remediationPlans.filter((p) => p.status === 'required' || p.status === 'in_progress').length}
+          label="In remediation"
+        />
+        <StatCard
+          value={remediationPlans.filter((p) => p.status === 'intervention_required').length}
+          label="Intervention required"
+          tone={remediationPlans.some((p) => p.status === 'intervention_required') ? 'bad' : undefined}
+        />
       </div>
 
       <h3 className="font-semibold mb-3">Student overview</h3>
