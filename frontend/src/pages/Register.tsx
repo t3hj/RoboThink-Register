@@ -14,15 +14,18 @@ import {
 } from '../components/ui'
 import AssessmentPanel from '../components/AssessmentPanel'
 import LessonsToday from '../components/LessonsToday'
+import FeedbackControl from '../components/FeedbackControl'
 import { todayISO, dayName, nowHM, formatDisplayDate, addDays } from '../lib/dates'
 import { levelLabel } from '../lib/curriculum'
 import { loadCurriculum } from '../lib/curriculumData'
-import type { Attendance, Level, RemediationPlan, Student, StudentProgress } from '../types'
+import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
+import type { Attendance, FeedbackSheet, Level, RemediationPlan, Student, StudentProgress } from '../types'
 
 interface RosterEntry extends Student {
   attendance: Attendance | null
   progress: StudentProgress | null
   plan: RemediationPlan | null
+  feedback: FeedbackSheet | null
 }
 
 export default function Register() {
@@ -87,14 +90,20 @@ export default function Register() {
 
       let progress: StudentProgress[] = []
       let plans: RemediationPlan[] = []
+      let feedbackSheets: FeedbackSheet[] = []
       if (ids.length) {
-        const [progRes, planRes] = await Promise.all([
+        const [progRes, planRes, feedbackRes] = await Promise.all([
           supabase.from('student_progress').select('*').in('student_id', ids),
           supabase
             .from('remediation_plans')
             .select('*')
             .in('student_id', ids)
             .in('status', ['required', 'in_progress', 'ready_for_reassessment', 'intervention_required']),
+          // Outstanding feedback, by student_id only — deliberately NOT
+          // filtered by date/schedule, so it follows the student to
+          // whatever session they next appear at (normal day, catch-up, or
+          // any other day).
+          supabase.from('feedback_sheets').select('*').in('student_id', ids).neq('status', 'given'),
         ])
         if (progRes.error) {
           setError(progRes.error.message)
@@ -103,16 +112,22 @@ export default function Register() {
         }
         progress = (progRes.data ?? []) as StudentProgress[]
         plans = (planRes.data ?? []) as RemediationPlan[]
+        feedbackSheets = (feedbackRes.data ?? []) as FeedbackSheet[]
       }
       const progMap = new Map(progress.map((p) => [p.student_id, p]))
       const planMap = new Map(plans.map((p) => [p.student_id, p]))
       const attMap = new Map(attendance.map((a) => [a.student_id, a]))
+      const feedbackByStudent = new Map<string, FeedbackSheet[]>()
+      for (const f of feedbackSheets) {
+        feedbackByStudent.set(f.student_id, [...(feedbackByStudent.get(f.student_id) ?? []), f])
+      }
 
       const entries: RosterEntry[] = everyone.map((s) => ({
         ...s,
         attendance: attMap.get(s.id) ?? null,
         progress: progMap.get(s.id) ?? null,
         plan: planMap.get(s.id) ?? null,
+        feedback: findOutstandingFeedback(feedbackByStudent.get(s.id) ?? []),
       }))
 
       entries.sort((a, b) => {
@@ -268,6 +283,8 @@ export default function Register() {
     return counts
   }, [roster])
 
+  const feedbackOutstanding = useMemo(() => roster.filter((s) => s.feedback != null), [roster])
+
   if (loading) return <LoadingPanel label="Loading register…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void loadRoster(date)} />
 
@@ -306,6 +323,32 @@ export default function Register() {
         <span className="badge">{summary.completed} completed</span>
         <span className="badge">{summary.unmarked} not marked</span>
       </div>
+
+      {feedbackOutstanding.length > 0 && (
+        <section className="card card-accent-top p-3 mb-4" style={{ ['--accent-color' as string]: 'var(--rt-red)' }} aria-label="Feedback reminders">
+          <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+            <span aria-hidden>📝</span> Feedback reminders — {feedbackOutstanding.length}
+          </h3>
+          <ul className="flex flex-col gap-1.5">
+            {feedbackOutstanding.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
+                <span>
+                  <Link to={`/students/${s.id}`} className="font-medium hover:underline">{s.full_name}</Link>
+                  {' — '}
+                  {FEEDBACK_SHORT[s.feedback!.status]}
+                </span>
+                <FeedbackControl
+                  feedbackId={s.feedback!.id}
+                  status={s.feedback!.status}
+                  studentName={s.full_name}
+                  onChanged={() => void loadRoster(date)}
+                  variant="full"
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <LessonsToday roster={roster} levels={levels} />
 
@@ -417,6 +460,15 @@ export default function Register() {
                     plan={s.plan}
                     onDone={() => void loadRoster(date)}
                     compact
+                  />
+                )}
+
+                {s.feedback && (
+                  <FeedbackControl
+                    feedbackId={s.feedback.id}
+                    status={s.feedback.status}
+                    studentName={s.full_name}
+                    onChanged={() => void loadRoster(date)}
                   />
                 )}
               </div>

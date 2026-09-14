@@ -16,6 +16,7 @@ interface DashboardData {
   recentLessons: LessonRecord[]
   totals: { total: number; active: number }
   needsAction: StudentRequiringAction[]
+  feedbackOutstanding: number
 }
 
 export default function Dashboard() {
@@ -30,7 +31,7 @@ export default function Dashboard() {
     setError(null)
     const dow = dayName(today)
 
-    const [studentsRes, attendanceRes, lessonsRes, progressRes, actionRes] = await Promise.all([
+    const [studentsRes, attendanceRes, lessonsRes, progressRes, actionRes, feedbackRes] = await Promise.all([
       supabase.from('students').select('*').order('full_name'),
       supabase.from('attendance').select('*').eq('date', today),
       supabase
@@ -41,15 +42,17 @@ export default function Dashboard() {
         .limit(8),
       supabase.from('student_progress').select('*'),
       supabase.from('students_requiring_assessment_action').select('*'),
+      supabase.from('feedback_sheets').select('id', { count: 'exact', head: true }).neq('status', 'given'),
     ])
 
-    if (studentsRes.error || attendanceRes.error || lessonsRes.error || progressRes.error || actionRes.error) {
+    if (studentsRes.error || attendanceRes.error || lessonsRes.error || progressRes.error || actionRes.error || feedbackRes.error) {
       setError(
         studentsRes.error?.message ??
           attendanceRes.error?.message ??
           lessonsRes.error?.message ??
           progressRes.error?.message ??
           actionRes.error?.message ??
+          feedbackRes.error?.message ??
           'Unknown database error',
       )
       setLoading(false)
@@ -68,6 +71,7 @@ export default function Dashboard() {
       recentLessons: (lessonsRes.data ?? []) as LessonRecord[],
       totals: { total: students.length, active: students.filter((s) => s.active).length },
       needsAction: (actionRes.data ?? []) as StudentRequiringAction[],
+      feedbackOutstanding: feedbackRes.count ?? 0,
     })
     setLoading(false)
   }, [today])
@@ -101,15 +105,22 @@ export default function Dashboard() {
           </Link>
         }
       />
-      <p className="text-sm text-slate-500 -mt-3 mb-5">
+      <p className="text-sm text-slate-500 -mt-3 mb-4">
         Signed in as <span className="font-medium">{profile?.name ?? 'staff'}</span>
       </p>
+
+      <nav aria-label="Quick actions" className="flex flex-wrap gap-2 mb-6">
+        <Link to="/register" className="btn-ghost text-sm">📋 Today's Register</Link>
+        <Link to="/students" className="btn-ghost text-sm">🧑‍🎓 Students</Link>
+        <Link to="/curriculum" className="btn-ghost text-sm">📚 Curriculum</Link>
+        <Link to="/reports" className="btn-ghost text-sm">📊 Reports</Link>
+      </nav>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard value={data.expected.length} label="Expected today" />
         <StatCard value={arrived} label="In centre now" tone="good" />
         <StatCard value={absent} label="Absent" tone={absent > 0 ? 'bad' : undefined} />
-        <StatCard value={completedToday} label="Lessons done today" />
+        <StatCard value={data.feedbackOutstanding} label="Feedback outstanding" tone={data.feedbackOutstanding > 0 ? 'warn' : undefined} />
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
@@ -200,8 +211,8 @@ export default function Dashboard() {
             <div className="text-slate-500">Active</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3">
-            <div className="text-xl font-bold">{data.totals.total - data.totals.active}</div>
-            <div className="text-slate-500">Inactive</div>
+            <div className="text-xl font-bold">{completedToday}</div>
+            <div className="text-slate-500">Lessons done today</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3">
             <div className="text-xl font-bold">{notMarked}</div>

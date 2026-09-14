@@ -10,9 +10,10 @@ reassessment → intervention workflow.
 > the schema and are kept for history only. The live database (Supabase project
 > `RoboThink-Register`) has moved well beyond them via migrations applied directly
 > to the project (`curriculum_seed`, `persistent_progress`, `staff_curriculum_access`,
-> plus everything under `db/migrations_applied_2026-09-13/`). Treat the live database,
-> not these files, as the source of truth, and run `supabase db pull` (or inspect via
-> the dashboard/SQL editor) before assuming the schema matches what's committed here.
+> plus everything under `db/migrations_applied_2026-09-13/` and
+> `db/migrations_applied_2026-09-14/`). Treat the live database, not these files, as
+> the source of truth, and run `supabase db pull` (or inspect via the dashboard/SQL
+> editor) before assuming the schema matches what's committed here.
 > A `student_schedules` table also now exists in the live DB (day/time/week-pattern
 > per student) but isn't wired into the frontend yet — the Register still schedules
 > off `students.preferred_day`/`preferred_time`, unchanged from before.
@@ -21,7 +22,15 @@ reassessment → intervention workflow.
 
 - **Magic-link authentication** via Supabase Auth, mapped to staff profiles with `admin` / `instructor` roles
 - **Dashboard** — who's expected today, who's in the centre, absences, lessons completed today, recent completions, and everyone currently needing an assessment/remediation/intervention follow-up
-- **Daily register** — date navigation, a prominent **"Lessons to be done today"** panel (grouped by programme → term → lesson number, so instructors can pull the right lesson folders before the session starts), per-student status, automatic arrival/time-out times, lesson completion via the real curriculum (with term-boundary rollover), a **"Not Finished / Repeat"** action for lessons that don't get finished in a session, inline PASS/FAIL and "complete remediation lesson" actions when a student has an assessment or remediation pending, catch-up attendees shown alongside the scheduled day
+- **Daily register** — date navigation, a compact **feedback reminders** panel, a
+  prominent **"Lessons to be done today"** panel (grouped by programme → term → lesson
+  number, so instructors can pull the right lesson folders before the session starts),
+  per-student status, automatic arrival/time-out times, lesson completion via the real
+  curriculum (with term-boundary rollover), a **"Not Finished / Repeat"** action for
+  lessons that don't get finished in a session, inline PASS/FAIL and "complete
+  remediation lesson" actions when a student has an assessment or remediation pending,
+  inline feedback-sheet reminders per student row, catch-up attendees shown alongside
+  the scheduled day
 - **Students** — searchable/filterable/sortable list with programme/term, preferred day/time, subscription and progress; admin-only **Add student** with an age-based default programme (Engineer at 7+, Junior Engineer under 7 — corrected before saving if needed)
 - **Student profile** — current lesson and next lesson shown explicitly (not just a lesson number), lesson/assessment/remediation/attendance history, admin-only **Change current lesson** control (reason required, audited server-side) and **Edit details**
 - **Curriculum** — every programme (Junior/Engineer/Advanced/Expert/Master Engineer, Coding), grouped by programme with terms nested underneath, straight from the database, with assessment checkpoints flagged
@@ -118,7 +127,8 @@ is governed by RLS. **Never** put the service-role key in the frontend, and neve
   `student_progress` view (`current_kind`: `normal` / `assessment` / `remediation` / `complete`).
 
 Unit tests mirroring this logic live in `frontend/tests/progression.test.ts`,
-`frontend/tests/repeatLesson.test.ts` and `frontend/tests/curriculum.test.ts`.
+`frontend/tests/repeatLesson.test.ts`, `frontend/tests/feedback.test.ts` and
+`frontend/tests/curriculum.test.ts`.
 
 ## "Lessons to be done today"
 
@@ -130,6 +140,48 @@ physical lesson folders before the session starts. Grouping/sort order: programm
 curriculum `sort_order`) → term (where the programme has terms) → lesson number → student
 name. It uses the same roster the rest of the Register uses, so catch-up students are
 included automatically, and it updates whenever the selected date changes.
+
+## Feedback sheets
+
+Every completed lesson automatically gets a `feedback_sheets` row (`status='not_written'`),
+created inside `complete_current_lesson` itself — not a separate step, so it can never be
+forgotten. It's linked to the specific `lesson_records` row (`lesson_record_id`, unique),
+not to the student's timetable, and it never duplicates the student/lesson/date already on
+that record. "Not Finished / Repeat" attempts never create one (feedback only tracks
+completed sessions).
+
+Outstanding feedback (`not_written` or `written_not_taken`) is looked up **by student_id
+only** — never by date, schedule, or day-of-week — so the reminder follows the student to
+whatever session they next appear at: their normal day, a catch-up, or any other day. It
+shows up:
+- In the Register's compact **"Feedback reminders"** panel near the top, for every
+  attending student with an outstanding sheet.
+- Inline in that student's Register row.
+- On the Student page, with the full history.
+
+Attendance never changes a feedback status — only an explicit instructor action does
+(`components/FeedbackControl.tsx`). Logic lives in `lib/feedback.ts` (tested in
+`tests/feedback.test.ts`, including the catch-up scenario described in the spec).
+
+## UI/UX polish
+
+- **Focus/contrast/semantics**: a visible `:focus-visible` ring app-wide, one `<h1>` per
+  page (`PageHeader`), a skip-to-content link, `role="alert"`/`role="status"` on
+  error/loading panels, `aria-label`s on icon-only controls and filters.
+- **No raw database errors**: `lib/errors.ts#friendlyMessage` maps Postgres/RLS error text
+  to plain language before it reaches `ErrorPanel`; the original is available behind a
+  collapsed "Technical details" disclosure rather than being hidden entirely.
+- **Students**: added a programme filter (alongside the existing day/active filters) and a
+  visual progress bar per student card.
+- **Student profile**: a "current lesson" hero section at the top of the page, with a
+  visible badge when the current lesson was set by a manual admin override (name, date,
+  reason — sourced from `progress_overrides`), plus a feedback-sheet history section.
+- **Dashboard**: a quick-actions row to the other main pages, plus a real "feedback
+  outstanding" count alongside the existing today/attendance/assessment stats.
+- **Curriculum**: the expanded term/level is now visually highlighted (accent border +
+  coloured heading) rather than just an open/closed accordion.
+- Status colours (attendance, `StatCard` tone) are unchanged and kept separate from the
+  brand palette, per the spec.
 
 ## RoboThink brand palette
 

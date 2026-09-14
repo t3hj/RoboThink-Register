@@ -224,3 +224,18 @@ export interface StudentRequiringAction {
   action: string
   remediation_lessons_completed: number | null
 }
+
+export type FeedbackStatus = 'not_written' | 'written_not_taken' | 'given'
+
+export interface FeedbackSheet {
+  id: string
+  lesson_record_id: string
+  student_id: string
+  status: FeedbackStatus
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+  // joined
+  lesson_records?: { date: string; lesson_number: number; level_id: number; levels?: { name: string } | null } | null
+}
