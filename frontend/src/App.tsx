@@ -23,6 +23,9 @@ function Layout() {
   const { profile, signOut } = useAuth()
   return (
     <div className="min-h-screen bg-[color:var(--rt-paper)] text-[color:var(--rt-ink)]">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn-primary">
+        Skip to content
+      </a>
       <div className="brand-stripe" aria-hidden />
       <div className="max-w-7xl mx-auto px-4 py-4 lg:py-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
         <aside className="lg:col-span-1">
@@ -61,7 +64,7 @@ function Layout() {
           </button>
         </aside>
 
-        <main className="lg:col-span-4 min-w-0">
+        <main id="main-content" className="lg:col-span-4 min-w-0">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/register" element={<Register />} />

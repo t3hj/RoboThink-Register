@@ -1,7 +1,9 @@
 import React from 'react'
 import type { AttendanceStatus } from '../types'
+import { friendlyMessage } from '../lib/errors'
 
-/** Coloured status badge for attendance states. */
+/** Coloured status badge for attendance states. Colour is never the only
+ *  signal — the status word itself is always shown. */
 export function StatusBadge({ status }: { status: AttendanceStatus }) {
   const styles: Record<AttendanceStatus, string> = {
     'Not Arrived': 'bg-slate-100 text-slate-600',
@@ -24,12 +26,21 @@ export function SubscriptionBadge({ subscriptionId }: { subscriptionId: number |
   )
 }
 
-/** Full-width inline error panel. */
+/** Full-width inline error panel. Never shows the raw database error as the
+ *  headline — instructors get a plain-language message; the technical
+ *  detail is tucked away for anyone who needs to report it. */
 export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const friendly = friendlyMessage(message)
   return (
-    <div className="card p-6 text-center border-rose-200 bg-rose-50">
+    <div className="card p-6 text-center border-rose-200 bg-rose-50" role="alert">
       <div className="text-rose-700 font-medium mb-1">Something went wrong</div>
-      <div className="text-sm text-rose-600 mb-3">{message}</div>
+      <div className="text-sm text-rose-600 mb-3">{friendly}</div>
+      {friendly !== message && (
+        <details className="text-xs text-rose-400 mb-3">
+          <summary className="cursor-pointer select-none">Technical details</summary>
+          <div className="mt-1 font-mono">{message}</div>
+        </details>
+      )}
       {onRetry && (
         <button onClick={onRetry} className="btn-ghost">
           Try again
@@ -41,7 +52,7 @@ export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: ()
 
 export function LoadingPanel({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div className="card p-8 text-center text-slate-500">
+    <div className="card p-8 text-center text-slate-500" role="status" aria-live="polite">
       <div className="inline-block w-6 h-6 border-2 border-slate-300 border-t-[color:var(--rt-primary)] rounded-full animate-spin mb-3" />
       <div className="text-sm">{label}</div>
     </div>
@@ -67,7 +78,8 @@ const ACCENT_VAR: Record<BrandAccent, string> = {
 
 /** Page header with title, subtitle and optional actions. `accent` is a
  *  purely decorative brand-colour touch (see .accent-bar) — it carries no
- *  status meaning. */
+ *  status meaning. Renders an <h1> — each route is a distinct page and this
+ *  is its one main heading. */
 export function PageHeader({
   title,
   subtitle,
@@ -85,7 +97,7 @@ export function PageHeader({
       style={{ '--accent-color': ACCENT_VAR[accent] } as React.CSSProperties}
     >
       <div>
-        <h2 className="text-2xl font-semibold">{title}</h2>
+        <h1 className="text-2xl font-semibold">{title}</h1>
         {subtitle && <div className="text-sm text-slate-500 mt-0.5">{subtitle}</div>}
       </div>
       {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}

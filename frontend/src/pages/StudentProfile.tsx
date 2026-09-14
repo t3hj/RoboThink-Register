@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, StatusBadge, StatCard } from '../components/ui'
 import ChangeLessonControl from '../components/ChangeLessonControl'
 import AssessmentPanel from '../components/AssessmentPanel'
+import FeedbackControl from '../components/FeedbackControl'
 import StudentForm from '../components/StudentForm'
 import { loadCurriculum } from '../lib/curriculumData'
 import { levelLabel } from '../lib/curriculum'
@@ -12,9 +13,11 @@ import { formatShortDate, formatDisplayDate } from '../lib/dates'
 import type {
   Assessment,
   Attendance,
+  FeedbackSheet,
   Level,
   Lesson,
   LessonRecord,
+  ProgressOverride,
   RemediationLesson,
   RemediationPlan,
   Student,
@@ -31,6 +34,8 @@ export default function StudentProfile() {
   const [remediationLessons, setRemediationLessons] = useState<RemediationLesson[]>([])
   const [assessments, setAssessments] = useState<Assessment[]>([])
   const [attendance, setAttendance] = useState<Attendance[]>([])
+  const [feedback, setFeedback] = useState<FeedbackSheet[]>([])
+  const [lastOverride, setLastOverride] = useState<ProgressOverride | null>(null)
   const [levels, setLevels] = useState<Level[]>([])
   const [curriculumLessons, setCurriculumLessons] = useState<Lesson[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,7 +46,7 @@ export default function StudentProfile() {
     if (!id) return
     setLoading(true)
     setError(null)
-    const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, curriculum] = await Promise.all([
+    const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, fRes, ovRes, curriculum] = await Promise.all([
       supabase.from('students').select('*, levels(name), subscriptions(name)').eq('id', id).maybeSingle(),
       supabase.from('student_progress').select('*').eq('student_id', id).maybeSingle(),
       supabase
@@ -67,9 +72,21 @@ export default function StudentProfile() {
         .eq('student_id', id)
         .order('date', { ascending: false }),
       supabase.from('attendance').select('*').eq('student_id', id).order('date', { ascending: false }),
+      supabase
+        .from('feedback_sheets')
+        .select('*, lesson_records(date, lesson_number, level_id, levels(name))')
+        .eq('student_id', id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('progress_overrides')
+        .select('*, profiles(name)')
+        .eq('student_id', id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       loadCurriculum(),
     ])
-    if (sRes.error || pRes.error || lRes.error || rRes.error || aRes.error || attRes.error) {
+    if (sRes.error || pRes.error || lRes.error || rRes.error || aRes.error || attRes.error || fRes.error) {
       setError(
         sRes.error?.message ??
           pRes.error?.message ??
@@ -77,12 +94,14 @@ export default function StudentProfile() {
           rRes.error?.message ??
           aRes.error?.message ??
           attRes.error?.message ??
+          fRes.error?.message ??
           'Unknown error',
       )
       setLoading(false)
       return
     }
-    setStudent((sRes.data ?? null) as Student | null)
+    const studentData = (sRes.data ?? null) as Student | null
+    setStudent(studentData)
     setProgress((pRes.data ?? null) as StudentProgress | null)
     setPlan(
       planRes.data && ['required', 'in_progress', 'ready_for_reassessment', 'intervention_required'].includes((planRes.data as RemediationPlan).status)
@@ -93,6 +112,11 @@ export default function StudentProfile() {
     setRemediationLessons((rRes.data ?? []) as RemediationLesson[])
     setAssessments((aRes.data ?? []) as Assessment[])
     setAttendance((attRes.data ?? []) as Attendance[])
+    setFeedback((fRes.data ?? []) as FeedbackSheet[])
+    // Only treat it as "the reason the student is where they are" if nothing
+    // has completed since (i.e. it set the lesson the student is still on).
+    const override = (ovRes.data ?? null) as ProgressOverride | null
+    setLastOverride(override && studentData && override.new_lesson_id === studentData.current_lesson_id ? override : null)
     setLevels(curriculum.levels)
     setCurriculumLessons(curriculum.lessons)
     setLoading(false)
@@ -114,6 +138,8 @@ export default function StudentProfile() {
   const relevant = attended + absent
   const attendancePct = relevant ? Math.round((attended / relevant) * 100) : null
   const needsAction = progress && progress.current_kind !== 'normal' && progress.current_kind !== 'complete'
+  const outstandingFeedback = feedback.filter((f) => f.status !== 'given')
+  const notFinishedCount = lessons.filter((l) => l.status === 'not_completed').length
 
   return (
     <div>
@@ -137,41 +163,39 @@ export default function StudentProfile() {
       />
       <Link to="/students" className="text-sm text-slate-500 hover:underline">← Back to students</Link>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 my-5">
-        <StatCard value={completed} label="Lessons completed" />
-        <StatCard
-          value={progress?.current_lesson_number ?? '—'}
-          label="Current lesson"
-        />
-        <StatCard
-          value={attendancePct == null ? '—' : `${attendancePct}%`}
-          label="Attendance"
-          tone={attendancePct != null && attendancePct < 80 ? 'warn' : 'good'}
-        />
-        <StatCard value={absent} label="Absences" tone={absent > 2 ? 'bad' : undefined} />
-      </div>
-
-      <div className="card p-4 mb-5">
-        <div className="grid sm:grid-cols-2 gap-4">
+      {/* Current lesson hero — the single most important fact on this page */}
+      <section className="card card-accent-top p-5 my-5" style={{ ['--accent-color' as string]: 'var(--rt-blue)' }}>
+        <div className="grid sm:grid-cols-2 gap-5">
           <div>
             <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Current lesson</div>
-            <div className="font-semibold">
+            <div className="text-xl font-bold text-[color:var(--rt-ink)]">
               {progress?.current_lesson_number != null
-                ? `${levelLabel({ name: progress.level_name ?? '' })} — Lesson ${progress.current_lesson_number}${progress.current_lesson_title ? `: ${progress.current_lesson_title}` : ''}`
+                ? `${levelLabel({ name: progress.level_name ?? '' })} — Lesson ${progress.current_lesson_number}`
                 : 'Curriculum complete'}
             </div>
+            {progress?.current_lesson_title && (
+              <div className="text-sm text-slate-500 mt-0.5">{progress.current_lesson_title}</div>
+            )}
+            {lastOverride && (
+              <div className="mt-2 inline-flex items-center gap-1.5 text-xs bg-[color:var(--rt-blue-tint)] text-[color:var(--rt-blue)] rounded-full px-2.5 py-1">
+                <span aria-hidden>✎</span>
+                Manually set by {lastOverride.profiles?.name ?? 'an admin'} on {formatShortDate(lastOverride.created_at)}
+                {lastOverride.reason ? `: "${lastOverride.reason}"` : ''}
+              </div>
+            )}
           </div>
           <div>
             <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Next lesson</div>
-            <div className="font-semibold">
+            <div className="text-xl font-semibold text-slate-600">
               {progress?.next_lesson_number != null
-                ? `${levelLabel({ name: progress.level_name ?? '' })} — Lesson ${progress.next_lesson_number}${progress.next_lesson_title ? `: ${progress.next_lesson_title}` : ''}`
+                ? `${levelLabel({ name: progress.level_name ?? '' })} — Lesson ${progress.next_lesson_number}`
                 : '—'}
             </div>
+            {progress?.next_lesson_title && <div className="text-sm text-slate-500 mt-0.5">{progress.next_lesson_title}</div>}
           </div>
         </div>
         {role === 'admin' && (
-          <div className="mt-4">
+          <div className="mt-4 pt-4 border-t border-slate-100">
             <ChangeLessonControl
               studentId={student.id}
               levels={levels}
@@ -181,7 +205,7 @@ export default function StudentProfile() {
             />
           </div>
         )}
-      </div>
+      </section>
 
       {needsAction && (
         <div className="mb-5">
@@ -195,6 +219,31 @@ export default function StudentProfile() {
           />
         </div>
       )}
+
+      {outstandingFeedback.length > 0 && (
+        <div className="mb-5 flex flex-col gap-2">
+          {outstandingFeedback.map((f) => (
+            <div key={f.id} className="card card-accent-top p-3 flex items-center justify-between gap-3 flex-wrap" style={{ ['--accent-color' as string]: 'var(--rt-red)' }}>
+              <span className="text-sm">
+                <span aria-hidden>📝</span> Outstanding feedback for Lesson {f.lesson_records?.lesson_number ?? '—'}
+                {f.lesson_records?.date ? ` (${formatShortDate(f.lesson_records.date)})` : ''}
+              </span>
+              <FeedbackControl feedbackId={f.id} status={f.status} studentName={student.full_name} onChanged={() => void load()} variant="full" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        <StatCard value={completed} label="Lessons completed" />
+        <StatCard value={notFinishedCount} label="Not-finished attempts" />
+        <StatCard
+          value={attendancePct == null ? '—' : `${attendancePct}%`}
+          label="Attendance"
+          tone={attendancePct != null && attendancePct < 80 ? 'warn' : 'good'}
+        />
+        <StatCard value={absent} label="Absences" tone={absent > 2 ? 'bad' : undefined} />
+      </div>
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="card p-4">
@@ -214,7 +263,7 @@ export default function StudentProfile() {
         <div className="card p-4 md:col-span-2">
           <h3 className="font-semibold mb-3">Lesson history</h3>
           {lessons.length === 0 ? (
-            <EmptyState title="No lessons recorded" />
+            <EmptyState title="No lessons recorded yet" hint="Completed and not-finished lessons will appear here." />
           ) : (
             <ul className="divide-y divide-slate-100">
               {lessons.map((l) => (
@@ -222,7 +271,7 @@ export default function StudentProfile() {
                   <div>
                     <span className="font-medium">Lesson {l.lesson_number}{l.lessons?.title ? `: ${l.lessons.title}` : ''}</span>
                     <span className="text-slate-500"> · {l.levels?.name ?? `Level ${l.level_id}`}</span>
-                    {l.status !== 'completed' && <span className="badge ml-2">{l.status}</span>}
+                    {l.status !== 'completed' && <span className="badge ml-2">Not finished</span>}
                   </div>
                   <div className="text-slate-500 text-xs whitespace-nowrap">
                     {formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}
@@ -264,9 +313,32 @@ export default function StudentProfile() {
             </>
           )}
 
+          <h3 className="font-semibold mt-5 mb-3">Feedback sheets</h3>
+          {feedback.length === 0 ? (
+            <EmptyState title="No feedback sheets yet" hint="A feedback sheet is created automatically each time a lesson is completed." />
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {feedback.map((f) => (
+                <li key={f.id} className="py-2 flex items-center justify-between gap-3 text-sm flex-wrap">
+                  <div>
+                    <span className="font-medium">
+                      {f.lesson_records ? `Lesson ${f.lesson_records.lesson_number}` : 'Lesson'}
+                    </span>
+                    {f.lesson_records?.date && <span className="text-slate-500 text-xs"> · {formatShortDate(f.lesson_records.date)}</span>}
+                  </div>
+                  {f.status === 'given' ? (
+                    <span className="badge">Given</span>
+                  ) : (
+                    <FeedbackControl feedbackId={f.id} status={f.status} studentName={student.full_name} onChanged={() => void load()} variant="full" />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
           <h3 className="font-semibold mt-5 mb-3">Attendance</h3>
           {attendance.length === 0 ? (
-            <EmptyState title="No attendance recorded" />
+            <EmptyState title="No attendance recorded yet" />
           ) : (
             <ul className="divide-y divide-slate-100">
               {attendance.map((a) => (

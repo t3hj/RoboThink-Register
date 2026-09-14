@@ -68,14 +68,18 @@ export default function Curriculum() {
                   const open = openLevel === level.id
                   const { term } = parseLevelName(level.name)
                   return (
-                    <div key={level.id} className="card overflow-hidden">
+                    <div
+                      key={level.id}
+                      className={`card overflow-hidden ${open ? 'card-accent-top' : ''}`}
+                      style={open ? ({ ['--accent-color' as string]: 'var(--rt-blue)' }) : undefined}
+                    >
                       <button
                         className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-slate-50"
                         onClick={() => setOpenLevel(open ? null : level.id)}
                         aria-expanded={open}
                       >
                         <div>
-                          <h3 className="font-semibold">{term ? `Term ${term}` : level.name}</h3>
+                          <h3 className={`font-semibold ${open ? 'text-[color:var(--rt-blue)]' : ''}`}>{term ? `Term ${term}` : level.name}</h3>
                           <div className="text-xs text-slate-500">{level.lessons.length} lessons</div>
                         </div>
                         <span className="text-slate-400" aria-hidden>{open ? '▾' : '▸'}</span>
