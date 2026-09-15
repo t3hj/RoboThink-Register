@@ -2,7 +2,7 @@
 // These match the LIVE Supabase schema (public.*), not the older SQL files
 // in db/ — see db/README_SCHEMA_DRIFT.md for details.
 
-export type Role = 'admin' | 'instructor'
+export type Role = 'admin' | 'instructor' | 'management'
 
 export interface Profile {
   id: string
@@ -108,6 +108,8 @@ export interface LessonRecord {
   lessons?: { title: string } | null
 }
 
+export type AttendanceSessionType = 'regular' | 'catch_up' | 'special'
+
 export interface Attendance {
   id: string
   student_id: string
@@ -119,6 +121,7 @@ export interface Attendance {
   status: AttendanceStatus
   instructor_id: string | null
   catch_up: boolean
+  session_type: AttendanceSessionType
   created_at: string
 }
 
@@ -238,4 +241,20 @@ export interface FeedbackSheet {
   updated_at: string
   // joined
   lesson_records?: { date: string; lesson_number: number; level_id: number; levels?: { name: string } | null } | null
+}
+
+export type TermTimeFollowupStatus = 'needs_follow_up' | 'contacted' | 'extended' | 'not_continuing' | 'snoozed'
+
+export interface TermTimeFollowup {
+  id: string
+  student_id: string
+  lesson_record_id: string
+  lessons_completed_in_block: number
+  status: TermTimeFollowupStatus
+  notes: string | null
+  created_at: string
+  updated_at: string
+  updated_by: string | null
+  // joined
+  students?: { full_name: string } | null
 }

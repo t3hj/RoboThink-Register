@@ -1,0 +1,30 @@
+-- Grants management read-only SELECT on every table instructors can
+-- already read. Write policies on all of these are untouched.
+DROP POLICY assessment_points_select_staff ON public.assessment_points;
+CREATE POLICY assessment_points_select_staff ON public.assessment_points FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY assessments_select_staff ON public.assessments;
+CREATE POLICY assessments_select_staff ON public.assessments FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY attendance_select_staff ON public.attendance;
+CREATE POLICY attendance_select_staff ON public.attendance FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY curriculum_progression_log_select_staff ON public.curriculum_progression_log;
+CREATE POLICY curriculum_progression_log_select_staff ON public.curriculum_progression_log FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY daily_awards_select_staff ON public.daily_awards;
+CREATE POLICY daily_awards_select_staff ON public.daily_awards FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY feedback_sheets_select_staff ON public.feedback_sheets;
+CREATE POLICY feedback_sheets_select_staff ON public.feedback_sheets FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY lesson_records_select_staff ON public.lesson_records;
+CREATE POLICY lesson_records_select_staff ON public.lesson_records FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY lessons_select_staff ON public.lessons;
+CREATE POLICY lessons_select_staff ON public.lessons FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY levels_select_staff ON public.levels;
+CREATE POLICY levels_select_staff ON public.levels FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY remediation_lessons_select_staff ON public.remediation_lessons;
+CREATE POLICY remediation_lessons_select_staff ON public.remediation_lessons FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY remediation_plans_select_staff ON public.remediation_plans;
+CREATE POLICY remediation_plans_select_staff ON public.remediation_plans FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY student_schedules_select_staff ON public.student_schedules;
+CREATE POLICY student_schedules_select_staff ON public.student_schedules FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY students_read_instructors ON public.students;
+CREATE POLICY students_read_instructors ON public.students FOR SELECT USING (is_admin() OR is_instructor() OR is_management());
+DROP POLICY subscriptions_select_staff ON public.subscriptions;
+CREATE POLICY subscriptions_select_staff ON public.subscriptions FOR SELECT USING (is_admin() OR is_instructor() OR is_management());

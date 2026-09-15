@@ -194,7 +194,7 @@ export default function StudentProfile() {
             {progress?.next_lesson_title && <div className="text-sm text-slate-500 mt-0.5">{progress.next_lesson_title}</div>}
           </div>
         </div>
-        {role === 'admin' && (
+        {(role === 'admin' || role === 'instructor') && (
           <div className="mt-4 pt-4 border-t border-slate-100">
             <ChangeLessonControl
               studentId={student.id}
