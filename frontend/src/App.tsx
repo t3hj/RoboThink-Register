@@ -9,18 +9,44 @@ import Students from './pages/Students'
 import StudentProfile from './pages/StudentProfile'
 import Curriculum from './pages/Curriculum'
 import Reports from './pages/Reports'
+import InstructorAnalytics from './pages/InstructorAnalytics'
+import ManagementDashboard from './pages/ManagementDashboard'
+import StaffManagement from './pages/StaffManagement'
 import NotFound from './pages/NotFound'
+import type { Role } from './types'
 
-const NAV = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/register', label: "Today's Register" },
-  { to: '/students', label: 'Students' },
-  { to: '/curriculum', label: 'Curriculum' },
-  { to: '/reports', label: 'Reports' },
+/** Each route lists which roles can see it. Management gets its own,
+ *  separate, read-only area rather than the day-to-day operational pages —
+ *  RLS enforces the read-only part server-side; this just keeps their UI
+ *  clean and on-topic. */
+const NAV: { to: string; label: string; end?: boolean; roles: Role[] }[] = [
+  { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'instructor'] },
+  { to: '/register', label: "Today's Register", roles: ['admin', 'instructor'] },
+  { to: '/students', label: 'Students', roles: ['admin', 'instructor'] },
+  { to: '/curriculum', label: 'Curriculum', roles: ['admin', 'instructor'] },
+  { to: '/reports', label: 'Reports', roles: ['admin', 'instructor'] },
+  { to: '/analytics', label: 'Analytics', roles: ['admin', 'instructor'] },
+  { to: '/management', label: 'Management dashboard', roles: ['admin', 'management'] },
+  { to: '/staff', label: 'Staff', roles: ['admin'] },
 ]
 
+function homeFor(role: Role | null): string {
+  if (role === 'management') return '/management'
+  return '/'
+}
+
+/** Redirects away from a route the current role isn't allowed on, straight
+ *  to that role's home. A safety net alongside RLS, not a replacement for
+ *  it — RLS is what actually stops management from writing data. */
+function RoleRoute({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
+  const { role } = useAuth()
+  if (role && !roles.includes(role)) return <Navigate to={homeFor(role)} replace />
+  return <>{children}</>
+}
+
 function Layout() {
-  const { profile, signOut } = useAuth()
+  const { profile, role, signOut } = useAuth()
+  const items = NAV.filter((item) => !role || item.roles.includes(role))
   return (
     <div className="min-h-screen bg-[color:var(--rt-paper)] text-[color:var(--rt-ink)]">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn-primary">
@@ -38,7 +64,7 @@ function Layout() {
               </div>
             </div>
             <nav className="flex lg:flex-col gap-1 overflow-x-auto -mx-1 px-1 pb-1" aria-label="Main navigation">
-              {NAV.map((item) => (
+              {items.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -66,12 +92,15 @@ function Layout() {
 
         <main id="main-content" className="lg:col-span-4 min-w-0">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/students" element={<Students />} />
-            <Route path="/students/:id" element={<StudentProfile />} />
-            <Route path="/curriculum" element={<Curriculum />} />
-            <Route path="/reports" element={<Reports />} />
+            <Route path="/" element={<RoleRoute roles={['admin', 'instructor']}><Dashboard /></RoleRoute>} />
+            <Route path="/register" element={<RoleRoute roles={['admin', 'instructor']}><Register /></RoleRoute>} />
+            <Route path="/students" element={<RoleRoute roles={['admin', 'instructor']}><Students /></RoleRoute>} />
+            <Route path="/students/:id" element={<RoleRoute roles={['admin', 'instructor']}><StudentProfile /></RoleRoute>} />
+            <Route path="/curriculum" element={<RoleRoute roles={['admin', 'instructor']}><Curriculum /></RoleRoute>} />
+            <Route path="/reports" element={<RoleRoute roles={['admin', 'instructor']}><Reports /></RoleRoute>} />
+            <Route path="/analytics" element={<RoleRoute roles={['admin', 'instructor']}><InstructorAnalytics /></RoleRoute>} />
+            <Route path="/management" element={<RoleRoute roles={['admin', 'management']}><ManagementDashboard /></RoleRoute>} />
+            <Route path="/staff" element={<RoleRoute roles={['admin']}><StaffManagement /></RoleRoute>} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

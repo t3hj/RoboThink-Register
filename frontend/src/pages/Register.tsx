@@ -15,6 +15,7 @@ import {
 import AssessmentPanel from '../components/AssessmentPanel'
 import LessonsToday from '../components/LessonsToday'
 import FeedbackControl from '../components/FeedbackControl'
+import AddToRegister from '../components/AddToRegister'
 import { todayISO, dayName, nowHM, formatDisplayDate, addDays } from '../lib/dates'
 import { levelLabel } from '../lib/curriculum'
 import { loadCurriculum } from '../lib/curriculumData'
@@ -38,6 +39,7 @@ export default function Register() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<RosterEntry | null>(null)
   const [levels, setLevels] = useState<Level[]>([])
+  const [showAdd, setShowAdd] = useState(false)
 
   useEffect(() => {
     void loadCurriculum().then(({ levels: lv }) => setLevels(lv))
@@ -313,6 +315,9 @@ export default function Register() {
                 Today
               </button>
             )}
+            <button className="btn-primary" onClick={() => setShowAdd(true)}>
+              + Add to register
+            </button>
           </>
         }
       />
@@ -376,7 +381,9 @@ export default function Register() {
                     <div className="min-w-0">
                       <div className="font-medium flex items-center gap-2 flex-wrap">
                         <Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link>
-                        {s.preferred_day !== dayName(date) && <span className="badge">Catch-up</span>}
+                        {att?.session_type === 'catch_up' && <span className="badge">Catch-up</span>}
+                        {att?.session_type === 'special' && <span className="badge">Special session</span>}
+                        {!att && s.preferred_day !== dayName(date) && <span className="badge">Catch-up</span>}
                         {!s.active && <span className="badge badge-absent">Inactive</span>}
                       </div>
                       <div className="text-xs text-slate-500 flex flex-wrap gap-x-2">
@@ -489,6 +496,19 @@ export default function Register() {
         onConfirm={() => confirmTarget && void completeLesson(confirmTarget)}
         onCancel={() => setConfirmTarget(null)}
       />
+
+      {showAdd && (
+        <AddToRegister
+          date={date}
+          dayLabel={dayName(date)}
+          excludeIds={new Set(roster.map((r) => r.id))}
+          onAdded={() => {
+            setShowAdd(false)
+            void loadRoster(date)
+          }}
+          onClose={() => setShowAdd(false)}
+        />
+      )}
     </div>
   )
 }

@@ -13,9 +13,9 @@ interface Props {
   onDone: () => void
 }
 
-/** The "Change Current Lesson" workflow from the spec: an admin picks a
- *  programme/term/lesson, gives a reason, and the change is applied via the
- *  set_student_current_lesson RPC — which is admin-checked and audited
+/** The "Change Current Lesson" workflow: staff (admin or instructor) pick a
+ *  programme/term/lesson, give a reason, and the change is applied via the
+ *  set_student_current_lesson RPC — which is staff-checked and audited
  *  server-side, not just hidden in the UI. */
 export default function ChangeLessonControl({ studentId, levels, lessons, currentLevelId, onDone }: Props) {
   const { notify } = useToast()

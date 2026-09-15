@@ -10,32 +10,40 @@ reassessment → intervention workflow.
 > the schema and are kept for history only. The live database (Supabase project
 > `RoboThink-Register`) has moved well beyond them via migrations applied directly
 > to the project (`curriculum_seed`, `persistent_progress`, `staff_curriculum_access`,
-> plus everything under `db/migrations_applied_2026-09-13/` and
-> `db/migrations_applied_2026-09-14/`). Treat the live database, not these files, as
+> plus everything under `db/migrations_applied_2026-09-13/`, `db/migrations_applied_2026-09-14/`
+> and `db/migrations_applied_2026-09-15/`). Treat the live database, not these files, as
 > the source of truth, and run `supabase db pull` (or inspect via the dashboard/SQL
 > editor) before assuming the schema matches what's committed here.
 > A `student_schedules` table also now exists in the live DB (day/time/week-pattern
 > per student) but isn't wired into the frontend yet — the Register still schedules
 > off `students.preferred_day`/`preferred_time`, unchanged from before.
+> A few pre-existing seed/dummy `profiles` rows (no `auth_id`) remain in the database from
+> earlier setup — left untouched per this task's instruction not to force-delete
+> potentially-referenced historical records.
 
 ## Features
 
-- **Magic-link authentication** via Supabase Auth, mapped to staff profiles with `admin` / `instructor` roles
+- **Magic-link authentication** via Supabase Auth, mapped to staff profiles with `admin` / `instructor` / `management` roles (see [Roles & permissions](#roles--permissions))
 - **Dashboard** — who's expected today, who's in the centre, absences, lessons completed today, recent completions, and everyone currently needing an assessment/remediation/intervention follow-up
-- **Daily register** — date navigation, a compact **feedback reminders** panel, a
-  prominent **"Lessons to be done today"** panel (grouped by programme → term → lesson
-  number, so instructors can pull the right lesson folders before the session starts),
-  per-student status, automatic arrival/time-out times, lesson completion via the real
-  curriculum (with term-boundary rollover), a **"Not Finished / Repeat"** action for
-  lessons that don't get finished in a session, inline PASS/FAIL and "complete
-  remediation lesson" actions when a student has an assessment or remediation pending,
-  inline feedback-sheet reminders per student row, catch-up attendees shown alongside
-  the scheduled day
-- **Students** — searchable/filterable/sortable list with programme/term, preferred day/time, subscription and progress; admin-only **Add student** with an age-based default programme (Engineer at 7+, Junior Engineer under 7 — corrected before saving if needed)
-- **Student profile** — current lesson and next lesson shown explicitly (not just a lesson number), lesson/assessment/remediation/attendance history, admin-only **Change current lesson** control (reason required, audited server-side) and **Edit details**
-- **Curriculum** — every programme (Junior/Engineer/Advanced/Expert/Master Engineer, Coding), grouped by programme with terms nested underneath, straight from the database, with assessment checkpoints flagged
+- **Daily register** — date navigation, an **"Add to today's register"** action to bring in
+  an existing student for a regular/catch-up/special session without touching their normal
+  schedule, a compact **feedback reminders** panel, a prominent **"Lessons to be done
+  today"** panel (grouped by programme → term → lesson number, so instructors can pull the
+  right lesson folders before the session starts), per-student status, automatic
+  arrival/time-out times, lesson completion via the real curriculum (with term-boundary
+  rollover), a **"Not Finished / Repeat"** action for lessons that don't get finished in a
+  session, inline PASS/FAIL and "complete remediation lesson" actions when a student has an
+  assessment or remediation pending, inline feedback-sheet reminders per student row,
+  catch-up/special attendees clearly labelled alongside the scheduled day
+- **Students** — searchable/filterable (day, programme, active) /sortable list with progress bars; admin-only **Add student** with a minimal required form (name, subscription, level, day/time — see [Student creation](#student-creation))
+- **Student profile** — a current/next-lesson hero section, manual-override badge when applicable, lesson/assessment/remediation/attendance/feedback history, staff (admin or instructor) **Change current lesson** control (reason required, audited server-side), admin-only **Edit details**
+- **Curriculum** — every programme (Junior/Engineer/Advanced/Expert/Master Engineer, Coding), grouped by programme with terms nested underneath, straight from the database, with assessment checkpoints flagged, current selection highlighted
 - **Reports** — attendance, lesson-completion, and assessment/remediation statistics over any date range, per student/instructor/level
-- **404 handling** and authenticated-route protection throughout
+- **Instructor analytics** (`/analytics`) — today/this-week attendance, a student overview, and a per-student attendance lookup with sensible "missed recently" style flags
+- **Management dashboard** (`/management`) — read-only today/week/month attendance stats with week/month-over-week comparisons, student movement (new / declining / long-absent), and Term Time follow-ups
+- **Term Time follow-up reminders** — automatically flagged when a Term Time student completes a 12-lesson block; admin records the outcome (contacted/extended/not continuing/snoozed)
+- **Staff** (`/staff`, admin-only) — assign roles to existing staff accounts
+- **404 handling** and role-aware, authenticated-route protection throughout
 
 ## Architecture & tech stack
 
@@ -194,6 +202,58 @@ blue instead of the old teal. These colours are **not** used to mean anything �
 indicate status. The actual status colours (attendance Arrived/Absent/Completed, the tone on
 `StatCard`, `StatusBadge`) are a separate, pre-existing system and were left as they were.
 
+## Roles & permissions
+
+Three roles, enforced by RLS server-side (never just hidden in the UI):
+
+| | Admin | Instructor | Management |
+|---|---|---|---|
+| View students/curriculum/register | ✅ | ✅ | ✅ (own dashboard, not the day-to-day pages) |
+| Mark attendance, complete/repeat lessons | ✅ | ✅ | ❌ |
+| Change a student's current lesson | ✅ | ✅ | ❌ |
+| Add a student to today's register | ✅ | ✅ | ❌ |
+| Create / edit / archive students | ✅ | ❌ | ❌ |
+| Manage curriculum content | ✅ | ❌ | ❌ |
+| Assign staff roles | ✅ | ❌ | ❌ |
+| Record Term Time follow-up outcomes | ✅ | ❌ | ❌ |
+| View analytics | Both | Instructor analytics | Management dashboard |
+
+`handle_new_user()` (the trigger that creates a `profiles` row for every new Supabase Auth
+user) still defaults new accounts to `instructor` — nobody is ever auto-admin. An admin can
+change anyone's role from `/staff`; `prevent_profile_privilege_escalation()` (pre-existing)
+still stops a user from changing their own role. `is_admin()` / `is_instructor()` /
+`is_management()` are the RLS building blocks; the frontend's `RoleRoute` in `App.tsx` is a
+UX-level safety net on top of that, not the actual enforcement.
+
+## Student creation
+
+Deliberately minimal — RoboThink Register only needs what it takes to run the register:
+name, subscription (Elite/Term Time), level, normal day/time, and (on create) a starting
+lesson. Date of birth and parent name/contact are **not** part of this workflow at all —
+they're not shown on create or edit. Any historical values already in the database are left
+untouched; the app just never asks for or displays them going forward. Admin-only, per the
+role table above.
+
+## Adding a student to today's register
+
+`components/AddToRegister.tsx` searches active students and writes a single `attendance`
+row for today's date with a `session_type` of `regular`, `catch_up`, or `special` — the
+student's own `preferred_day`/`preferred_time` are never touched. The existing
+`UNIQUE(student_id, date)` constraint means this can never create a duplicate: adding
+someone already on the register just updates their existing row. Catch-up/special sessions
+still count as real attendance (same `status` values, same progression) — they're just
+labelled differently in the roster.
+
+## Term Time follow-ups
+
+`complete_current_lesson` already creates a `term_time_followups` row (`status =
+'needs_follow_up'`) whenever a student on the Term Time subscription completes a multiple
+of 12 lessons — one row per triggering `lesson_records` id, so it never re-fires for the
+same completion and past blocks stay in history. It does **not** touch the student's
+subscription. Admin resolves it from the Management dashboard (`contacted` / `extended` /
+`not_continuing` / `snoozed` / back to `needs_follow_up`); management can see it but not
+change it.
+
 ## Development commands
 
 ```bash
@@ -247,3 +307,12 @@ Add the deployed URL to Supabase → Authentication → URL Configuration
 - Magic-link sign-in requires email delivery to be configured in your Supabase project.
 - Reports are computed client-side over the selected date range; for very large datasets
   these aggregations would be better served by SQL views/RPCs.
+- "Student movement" on the Management dashboard covers new / declining / long-absent
+  students; it does not attempt to detect "returning" students (someone who was flagged
+  long-absent and has since come back) — a reasonable follow-up if needed.
+- Instructor/management "Trends" are shown as this-week-vs-last-week and
+  this-month-vs-last-month numeric comparisons rather than charts, to avoid adding a
+  charting dependency that wasn't already in the project.
+- The three seed/dummy `profiles` rows (no `auth_id`) show up in `/staff`'s list; they're
+  harmless (can't sign in) but could be tidied up later if desired — left alone here since
+  they may be referenced by historical `lesson_records`.
