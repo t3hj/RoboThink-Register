@@ -9,7 +9,8 @@ import FeedbackControl from '../components/FeedbackControl'
 import StudentForm from '../components/StudentForm'
 import { loadCurriculum } from '../lib/curriculumData'
 import { levelLabel } from '../lib/curriculum'
-import { formatShortDate, formatDisplayDate } from '../lib/dates'
+import { formatShortDate, formatDisplayDate, formatTime12h } from '../lib/dates'
+import { attendancePercentage, groupAttendanceByMonth } from '../lib/attendanceStats'
 import type {
   Assessment,
   Attendance,
@@ -129,7 +130,7 @@ export default function StudentProfile() {
   if (loading) return <LoadingPanel label="Loading student…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
   if (!student) {
-    return <EmptyState title="Student not found" hint="They may have been removed, or you don't have access." />
+    return <EmptyState title="Student not found" hint="They may have been removed, or you don't have access." robot />
   }
 
   const completed = lessons.filter((l) => l.status === 'completed').length
@@ -340,20 +341,32 @@ export default function StudentProfile() {
           {attendance.length === 0 ? (
             <EmptyState title="No attendance recorded yet" />
           ) : (
-            <ul className="divide-y divide-slate-100">
-              {attendance.map((a) => (
-                <li key={a.id} className="py-2 flex items-center justify-between gap-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    {formatShortDate(a.date)}
-                    {a.catch_up && <span className="badge">Catch-up</span>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500">{a.time_in ?? '–'} → {a.time_out ?? '–'}</span>
-                    <StatusBadge status={a.status} />
-                  </div>
-                </li>
+            <>
+              <p className="text-sm text-slate-500 mb-3">
+                Scheduled: {student.preferred_day ?? '—'} {student.preferred_time ? formatTime12h(student.preferred_time) : ''}
+                {attendancePercentage(attendance) != null && <> · {attendancePercentage(attendance)}% attendance</>}
+              </p>
+              {groupAttendanceByMonth(attendance).map(({ month, rows }) => (
+                <div key={month} className="mb-4">
+                  <div className="text-xs uppercase tracking-wide text-slate-400 mb-1.5">{month}</div>
+                  <ul className="divide-y divide-slate-100">
+                    {rows.map((a) => (
+                      <li key={a.id} className="py-2 flex items-center justify-between gap-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          {formatShortDate(a.date)}
+                          {a.session_type === 'catch_up' && <span className="badge">Catch-up</span>}
+                          {a.session_type === 'special' && <span className="badge">Special session</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500">{a.time_in ?? '–'} → {a.time_out ?? '–'}</span>
+                          <StatusBadge status={a.status} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
-            </ul>
+            </>
           )}
         </div>
       </div>

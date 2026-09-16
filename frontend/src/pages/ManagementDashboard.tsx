@@ -4,8 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
 import { useToast } from '../components/Toast'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState } from '../components/ui'
-import { todayISO, dayName, addDays, formatShortDate } from '../lib/dates'
-import { attendancePercentage, attendanceFlag } from '../lib/attendanceStats'
+import { todayISO, dayName, addDays, formatShortDate, formatTime12h } from '../lib/dates'
+import { attendancePercentage, attendanceFlag, sessionTimeBreakdown } from '../lib/attendanceStats'
 import type { Attendance, Student, TermTimeFollowup, TermTimeFollowupStatus } from '../types'
 
 const FOLLOWUP_OPTIONS: { value: TermTimeFollowupStatus; label: string }[] = [
@@ -116,12 +116,23 @@ export default function ManagementDashboard() {
     const dow = dayName(today)
     const expected = active.filter((s) => s.preferred_day === dow)
     const attMap = new Map(todayAtt.map((a) => [a.student_id, a]))
-    const notArrived = expected.filter((s) => (attMap.get(s.id)?.status ?? 'Not Arrived') === 'Not Arrived').length
+    const studentMap = new Map(active.map((s) => [s.id, s]))
+    const notArrivedStudents = expected.filter((s) => (attMap.get(s.id)?.status ?? 'Not Arrived') === 'Not Arrived')
+    const notArrived = notArrivedStudents.length
     const attended = todayAtt.filter((a) => a.status === 'Arrived' || a.status === 'Completed').length
-    const absent = todayAtt.filter((a) => a.status === 'Absent').length
+    const absentToday = todayAtt.filter((a) => a.status === 'Absent')
+    const absent = absentToday.length
+    const catchUpToday = todayAtt.filter((a) => a.session_type === 'catch_up' || a.session_type === 'special')
     const catchUp = todayAtt.filter((a) => a.session_type === 'catch_up').length
     const special = todayAtt.filter((a) => a.session_type === 'special').length
     const newToday = active.filter((s) => s.date_joined === today)
+    // "Did not attend" = expected but marked Absent, plus expected but still
+    // Not Arrived (i.e. hasn't shown up yet / didn't come in) — both are
+    // genuinely useful to a manager checking who to follow up with.
+    const didNotAttend = [
+      ...absentToday.filter((a) => expected.some((s) => s.id === a.student_id)).map((a) => studentMap.get(a.student_id)).filter((s): s is Student => Boolean(s)),
+      ...notArrivedStudents,
+    ]
     return {
       expected: expected.length,
       attended,
@@ -131,6 +142,8 @@ export default function ManagementDashboard() {
       catchUp,
       special,
       newToday,
+      didNotAttend,
+      catchUpStudents: catchUpToday.map((a) => studentMap.get(a.student_id)).filter((s): s is Student => Boolean(s)),
     }
   }, [active, todayAtt, today])
 
@@ -166,6 +179,7 @@ export default function ManagementDashboard() {
   }, [allAtt, active, today])
 
   const outstandingFollowups = followups.filter((f) => f.status === 'needs_follow_up')
+  const sessionBreakdown = useMemo(() => sessionTimeBreakdown(active), [active])
 
   if (loading) return <LoadingPanel label="Loading management dashboard…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
@@ -196,6 +210,71 @@ export default function ManagementDashboard() {
           First time today: {todayStats.newToday.map((s) => s.full_name).join(', ')}
         </p>
       )}
+
+      <div className="grid md:grid-cols-2 gap-6 mb-6">
+        <section className="card p-4">
+          <h3 className="font-semibold mb-3">Did not attend today</h3>
+          {todayStats.didNotAttend.length === 0 ? (
+            <p className="text-sm text-slate-400">Everyone expected today has arrived.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {todayStats.didNotAttend.map((s) => (
+                <li key={s.id} className="py-1.5 text-sm">
+                  <Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="card p-4">
+          <h3 className="font-semibold mb-3">Catch-up / special sessions today</h3>
+          {todayStats.catchUpStudents.length === 0 ? (
+            <p className="text-sm text-slate-400">None today.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {todayStats.catchUpStudents.map((s) => (
+                <li key={s.id} className="py-1.5 text-sm">
+                  <Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      <h2 className="text-lg font-semibold mb-3">Scheduled by session time</h2>
+      <div className="grid md:grid-cols-2 gap-6 mb-6">
+        <section className="card p-4">
+          <h3 className="font-semibold mb-3 text-sm text-slate-500 uppercase tracking-wide">Weekday</h3>
+          {sessionBreakdown.weekday.length === 0 ? (
+            <p className="text-sm text-slate-400">No weekday schedules set.</p>
+          ) : (
+            <ul className="space-y-2">
+              {sessionBreakdown.weekday.map((b) => (
+                <li key={b.label} className="flex items-center justify-between text-sm">
+                  <span>{formatTime12h(b.label)}</span>
+                  <span className="font-semibold">{b.count} student{b.count === 1 ? '' : 's'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="card p-4">
+          <h3 className="font-semibold mb-3 text-sm text-slate-500 uppercase tracking-wide">Weekend</h3>
+          {sessionBreakdown.weekend.length === 0 ? (
+            <p className="text-sm text-slate-400">No weekend schedules set.</p>
+          ) : (
+            <ul className="space-y-2">
+              {sessionBreakdown.weekend.map((b) => (
+                <li key={b.label} className="flex items-center justify-between text-sm">
+                  <span>{formatTime12h(b.label)}</span>
+                  <span className="font-semibold">{b.count} student{b.count === 1 ? '' : 's'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-6 mb-6">
         <section className="card p-4">

@@ -16,7 +16,8 @@ import AssessmentPanel from '../components/AssessmentPanel'
 import LessonsToday from '../components/LessonsToday'
 import FeedbackControl from '../components/FeedbackControl'
 import AddToRegister from '../components/AddToRegister'
-import { todayISO, dayName, nowHM, formatDisplayDate, addDays } from '../lib/dates'
+import { RobotBadge } from '../components/RobotArt'
+import { todayISO, dayName, nowHM, formatDisplayDate, addDays, formatTime12h } from '../lib/dates'
 import { levelLabel } from '../lib/curriculum'
 import { loadCurriculum } from '../lib/curriculumData'
 import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
@@ -40,6 +41,7 @@ export default function Register() {
   const [confirmTarget, setConfirmTarget] = useState<RosterEntry | null>(null)
   const [levels, setLevels] = useState<Level[]>([])
   const [showAdd, setShowAdd] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
     void loadCurriculum().then(({ levels: lv }) => setLevels(lv))
@@ -273,6 +275,30 @@ export default function Register() {
     }
   }
 
+  /** Corrects an already-entered attendance record — e.g. fixing a
+   *  historical mistake while backfilling September. This only ever
+   *  touches the attendance row itself (status/time), never
+   *  lesson_records or the student's current_lesson_id — correcting a
+   *  progression mistake (a wrongly-completed lesson) is a separate,
+   *  existing tool (Change current lesson on the student's profile). */
+  async function correctAttendance(student: RosterEntry, status: Attendance['status']) {
+    setBusyId(student.id)
+    const values: Partial<Attendance> & { status: Attendance['status'] } = { status }
+    if (status === 'Absent' || status === 'Not Arrived') {
+      values.time_in = null
+      values.time_out = null
+    } else if (status === 'Arrived' && !student.attendance?.time_in) {
+      values.time_in = nowHM()
+    }
+    const ok = await upsertAttendance(student, values)
+    setBusyId(null)
+    setEditingId(null)
+    if (ok) {
+      notify(`Attendance corrected for ${student.full_name}`, 'success')
+      void loadRoster(date)
+    }
+  }
+
   const summary = useMemo(() => {
     const counts = { arrived: 0, absent: 0, completed: 0, unmarked: 0 }
     for (const s of roster) {
@@ -286,6 +312,17 @@ export default function Register() {
   }, [roster])
 
   const feedbackOutstanding = useMemo(() => roster.filter((s) => s.feedback != null), [roster])
+  const isHistorical = date < todayISO()
+  const isFuture = date > todayISO()
+
+  const timeGroups = useMemo(() => {
+    const groups = new Map<string, RosterEntry[]>()
+    for (const s of roster) {
+      const key = s.preferred_time ?? ''
+      groups.set(key, [...(groups.get(key) ?? []), s])
+    }
+    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
+  }, [roster])
 
   if (loading) return <LoadingPanel label="Loading register…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void loadRoster(date)} />
@@ -294,7 +331,7 @@ export default function Register() {
     <div>
       <PageHeader
         title="Register"
-        subtitle={`${formatDisplayDate(date)} · ${dayName(date)}`}
+        subtitle={`${formatDisplayDate(date)} · ${dayName(date)}${isHistorical ? ' · Historical' : isFuture ? ' · Upcoming' : ''}`}
         accent="green"
         actions={
           <>
@@ -332,7 +369,7 @@ export default function Register() {
       {feedbackOutstanding.length > 0 && (
         <section className="card card-accent-top p-3 mb-4" style={{ ['--accent-color' as string]: 'var(--rt-red)' }} aria-label="Feedback reminders">
           <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
-            <span aria-hidden>📝</span> Feedback reminders — {feedbackOutstanding.length}
+            <RobotBadge className="w-6 h-6" /> Feedback reminders — {feedbackOutstanding.length}
           </h3>
           <ul className="flex flex-col gap-1.5">
             {feedbackOutstanding.map((s) => (
@@ -361,10 +398,15 @@ export default function Register() {
         <EmptyState
           title="No students scheduled or attending"
           hint={`Nobody has ${dayName(date)} as their preferred day and there are no attendance records for this date.`}
+          robot
         />
       ) : (
-        <div className="card divide-y divide-slate-100">
-          {roster.map((s) => {
+        <div className="flex flex-col gap-4">
+          {timeGroups.map(([time, entries]) => (
+            <div key={time || 'no-time'}>
+              <h3 className="text-sm font-semibold text-slate-500 mb-2 px-1">{formatTime12h(time)} <span className="text-slate-400 font-normal">· {entries.length} student{entries.length === 1 ? '' : 's'}</span></h3>
+              <div className="card divide-y divide-slate-100">
+                {entries.map((s) => {
             const att = s.attendance
             const busy = busyId === s.id
             const prog = s.progress
@@ -455,8 +497,39 @@ export default function Register() {
                         </button>
                       ) : null}
                     </div>
+                    {att && (
+                      <button
+                        className="text-xs text-slate-400 hover:text-slate-600 hover:underline shrink-0"
+                        onClick={() => setEditingId(editingId === s.id ? null : s.id)}
+                      >
+                        {editingId === s.id ? 'Cancel' : 'Edit'}
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {att && editingId === s.id && (
+                  <div className="bg-slate-50 rounded-lg p-2.5 flex items-center gap-2 flex-wrap text-sm">
+                    <label htmlFor={`fix-${s.id}`} className="text-slate-500">Correct attendance:</label>
+                    <select
+                      id={`fix-${s.id}`}
+                      className="p-1.5 border border-slate-200 rounded-lg text-sm"
+                      value={att.status}
+                      disabled={busy}
+                      onChange={(e) => void correctAttendance(s, e.target.value as Attendance['status'])}
+                    >
+                      <option value="Not Arrived">Not Arrived</option>
+                      <option value="Arrived">Arrived</option>
+                      <option value="Absent">Absent</option>
+                      {att.status === 'Completed' && <option value="Completed">Completed (current)</option>}
+                    </select>
+                    {att.status === 'Completed' && (
+                      <span className="text-xs text-slate-400">
+                        Only changes the attendance record — lesson progress is separate (use "Change current lesson" on their profile if that also needs fixing).
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {needsAction && (
                   <AssessmentPanel
@@ -481,6 +554,9 @@ export default function Register() {
               </div>
             )
           })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

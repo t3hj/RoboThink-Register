@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState, StatusBadge } from '../components/ui'
+import { RobotWave } from '../components/RobotArt'
 import { todayISO, dayName, formatDisplayDate } from '../lib/dates'
 import type { Attendance, Student, LessonRecord, StudentProgress, StudentRequiringAction } from '../types'
 
@@ -105,7 +106,8 @@ export default function Dashboard() {
           </Link>
         }
       />
-      <p className="text-sm text-slate-500 -mt-3 mb-4">
+      <p className="text-sm text-slate-500 -mt-3 mb-4 flex items-center gap-2">
+        <RobotWave className="w-9 h-9 -ml-1" />
         Signed in as <span className="font-medium">{profile?.name ?? 'staff'}</span>
       </p>
 
@@ -130,7 +132,7 @@ export default function Dashboard() {
             <span className="badge">{notMarked} not marked</span>
           </div>
           {upcoming.length === 0 ? (
-            <EmptyState title="No sessions remaining today" hint="Everyone is marked in, done, or absent." />
+            <EmptyState title="No sessions remaining today" hint="Everyone is marked in, done, or absent." robot />
           ) : (
             <ul className="divide-y divide-slate-100">
               {upcoming.map((s) => {

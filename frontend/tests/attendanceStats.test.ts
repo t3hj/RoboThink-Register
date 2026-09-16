@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { attendancePercentage, attendanceFlag, isExpectedOn, countByStatus } from '../src/lib/attendanceStats'
+import { attendancePercentage, attendanceFlag, isExpectedOn, countByStatus, sessionTimeBreakdown, groupAttendanceByMonth } from '../src/lib/attendanceStats'
 
 describe('attendancePercentage', () => {
   it('counts only Arrived/Completed as attended and Absent as missed', () => {
@@ -63,5 +63,52 @@ describe('countByStatus', () => {
       Absent: 1,
       Completed: 0,
     })
+  })
+})
+
+describe('groupAttendanceByMonth', () => {
+  it('buckets by calendar month, newest month first, newest date first within a month', () => {
+    const rows = [
+      { date: '2026-09-01' },
+      { date: '2026-09-15' },
+      { date: '2026-08-25' },
+    ]
+    const result = groupAttendanceByMonth(rows)
+    expect(result.map((g) => g.month)).toEqual(['September 2026', 'August 2026'])
+    expect(result[0].rows.map((r) => r.date)).toEqual(['2026-09-15', '2026-09-01'])
+  })
+
+  it('handles an empty list', () => {
+    expect(groupAttendanceByMonth([])).toEqual([])
+  })
+})
+
+describe('sessionTimeBreakdown — computed from actual schedule data, never hard-coded', () => {
+  it('splits weekday vs weekend by preferred_day, grouping by preferred_time', () => {
+    const students = [
+      { preferred_day: 'Monday', preferred_time: '16:00' },
+      { preferred_day: 'Tuesday', preferred_time: '16:00' },
+      { preferred_day: 'Wednesday', preferred_time: '17:00' },
+      { preferred_day: 'Saturday', preferred_time: '09:00' },
+      { preferred_day: 'Saturday', preferred_time: '10:00' },
+      { preferred_day: 'Sunday', preferred_time: '10:00' },
+    ]
+    const result = sessionTimeBreakdown(students)
+    expect(result.weekday).toEqual([{ label: '16:00', count: 2 }, { label: '17:00', count: 1 }])
+    expect(result.weekend).toEqual([{ label: '09:00', count: 1 }, { label: '10:00', count: 2 }])
+  })
+
+  it('ignores students with no day or no time set', () => {
+    const result = sessionTimeBreakdown([
+      { preferred_day: null, preferred_time: '16:00' },
+      { preferred_day: 'Monday', preferred_time: null },
+    ])
+    expect(result.weekday).toEqual([])
+    expect(result.weekend).toEqual([])
+  })
+
+  it('reflects new times as soon as they appear in the data, with no hard-coded list', () => {
+    const result = sessionTimeBreakdown([{ preferred_day: 'Monday', preferred_time: '18:30' }])
+    expect(result.weekday).toEqual([{ label: '18:30', count: 1 }])
   })
 })
