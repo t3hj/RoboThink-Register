@@ -1,6 +1,7 @@
 import React from 'react'
 import type { AttendanceStatus } from '../types'
 import { friendlyMessage } from '../lib/errors'
+import { RobotIdle } from './RobotArt'
 
 /** Coloured status badge for attendance states. Colour is never the only
  *  signal — the status word itself is always shown. */
@@ -59,9 +60,14 @@ export function LoadingPanel({ label = 'Loading…' }: { label?: string }) {
   )
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
+export function EmptyState({ title, hint, robot }: { title: string; hint?: string; robot?: boolean }) {
   return (
     <div className="card p-8 text-center">
+      {robot && (
+        <div className="flex justify-center mb-3">
+          <RobotIdle className="w-14 h-14" />
+        </div>
+      )}
       <div className="font-medium text-slate-700 mb-1">{title}</div>
       {hint && <div className="text-sm text-slate-500">{hint}</div>}
     </div>

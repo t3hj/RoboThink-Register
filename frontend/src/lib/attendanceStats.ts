@@ -57,8 +57,58 @@ export function isExpectedOn(preferredDay: string | null, dayOfWeek: string): bo
   return preferredDay === dayOfWeek
 }
 
+export interface SessionTimeBucket {
+  label: string
+  count: number
+}
+
+export interface SessionTimeBreakdown {
+  weekday: SessionTimeBucket[]
+  weekend: SessionTimeBucket[]
+}
+
+const WEEKEND_DAYS = new Set(['Saturday', 'Sunday'])
+
+/** Number of students scheduled at each session time, split into weekday
+ *  vs weekend — computed entirely from actual student.preferred_day /
+ *  preferred_time values, never hard-coded. Times within each bucket are
+ *  sorted chronologically. */
+export function sessionTimeBreakdown(
+  students: { preferred_day: string | null; preferred_time: string | null }[],
+): SessionTimeBreakdown {
+  const weekdayCounts = new Map<string, number>()
+  const weekendCounts = new Map<string, number>()
+  for (const s of students) {
+    if (!s.preferred_day || !s.preferred_time) continue
+    const bucket = WEEKEND_DAYS.has(s.preferred_day) ? weekendCounts : weekdayCounts
+    bucket.set(s.preferred_time, (bucket.get(s.preferred_time) ?? 0) + 1)
+  }
+  const toSorted = (m: Map<string, number>): SessionTimeBucket[] =>
+    [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([label, count]) => ({ label, count }))
+  return { weekday: toSorted(weekdayCounts), weekend: toSorted(weekendCounts) }
+}
+
 export function countByStatus(rows: Pick<Attendance, 'status'>[]): Record<AttendanceStatus, number> {
   const out: Record<AttendanceStatus, number> = { 'Not Arrived': 0, Arrived: 0, Absent: 0, Completed: 0 }
   for (const r of rows) out[r.status]++
   return out
+}
+
+/** Groups attendance rows (most-recent-first is fine, any order in) into
+ *  month buckets, e.g. "September 2026", each bucket sorted newest-first —
+ *  used for the Student page's attendance history. */
+export function groupAttendanceByMonth<T extends { date: string }>(rows: T[]): { month: string; rows: T[] }[] {
+  const order: string[] = []
+  const byMonth = new Map<string, T[]>()
+  const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date))
+  for (const r of sorted) {
+    const [y, m] = r.date.split('-')
+    const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+    if (!byMonth.has(label)) {
+      byMonth.set(label, [])
+      order.push(label)
+    }
+    byMonth.get(label)!.push(r)
+  }
+  return order.map((month) => ({ month, rows: byMonth.get(month)! }))
 }

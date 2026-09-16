@@ -60,3 +60,24 @@ export function addDays(iso: string, n: number): string {
   d.setDate(d.getDate() + n)
   return toLocalISODate(d)
 }
+
+/** 'HH:MM' (24h, as stored) -> '4:00 PM'. Returns the input unchanged if it
+ *  doesn't look like a time, so callers can pass possibly-null/odd values
+ *  through safely. */
+export function formatTime12h(hm: string | null | undefined): string {
+  if (!hm) return 'No time set'
+  const m = /^(\d{1,2}):(\d{2})/.exec(hm)
+  if (!m) return hm
+  let h = Number(m[1])
+  const min = m[2]
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  h = h % 12
+  if (h === 0) h = 12
+  return `${h}:${min} ${suffix}`
+}
+
+/** Weekday sessions run afternoons, weekend sessions run mornings — used to
+ *  bucket the session-time analytics without hard-coding specific times. */
+export function isWeekendDay(dayName: string): boolean {
+  return dayName === 'Saturday' || dayName === 'Sunday'
+}
