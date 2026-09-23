@@ -151,6 +151,7 @@ export interface Assessment {
   remediation_plan_id: string | null
   level_id: number | null
   assessment_point_id: string | null
+  attended_session_id: string | null
   created_at: string
   // joined
   profiles?: { name: string } | null
@@ -164,6 +165,8 @@ export type RemediationStatus =
   | 'completed'
   | 'intervention_required'
 
+export type RemediationPath = 'repeat_next_lesson' | 'remediation_lessons'
+
 export interface RemediationPlan {
   id: string
   student_id: string
@@ -174,6 +177,7 @@ export interface RemediationPlan {
   lessons_required: number
   lessons_completed: number
   status: RemediationStatus
+  remediation_path: RemediationPath
   created_at: string
   completed_at: string | null
 }
@@ -189,6 +193,7 @@ export interface RemediationLesson {
   notes: string | null
   instructor_id: string | null
   status: LessonStatus
+  attended_session_id: string | null
   created_at: string
   profiles?: { name: string } | null
 }
@@ -232,7 +237,8 @@ export type FeedbackStatus = 'not_written' | 'written_not_taken' | 'given'
 
 export interface FeedbackSheet {
   id: string
-  lesson_record_id: string
+  lesson_record_id: string | null
+  attended_session_id: string | null
   student_id: string
   status: FeedbackStatus
   created_by: string | null
@@ -241,6 +247,43 @@ export interface FeedbackSheet {
   updated_at: string
   // joined
   lesson_records?: { date: string; lesson_number: number; level_id: number; levels?: { name: string } | null } | null
+  attended_sessions?: { date: string; session_number: number; outcome: string; lessons?: { title: string; lesson_number: number } | null } | null
+}
+
+export type SessionOutcome = 'completed' | 'not_finished'
+export type LeftAsideReason =
+  | 'motors_not_working'
+  | 'sensor_issue'
+  | 'missing_pieces'
+  | 'build_incomplete'
+  | 'coding_incomplete'
+  | 'ran_out_of_time'
+  | 'needed_help'
+  | 'other'
+
+/** One row per attended occurrence — mirrors public.attended_sessions.
+ *  Multiple rows can exist for the same student/lesson (a repeat, or two
+ *  sessions in one day); each gets its own feedback sheet. Recording a
+ *  session never advances progression on its own — only
+ *  complete_current_lesson's underlying call to record_attended_session
+ *  does that, and only when the actual lesson taught matches the
+ *  student's current progression lesson. */
+export interface AttendedSession {
+  id: string
+  student_id: string
+  date: string
+  session_number: number
+  actual_lesson_id: string
+  outcome: SessionOutcome
+  lesson_record_id: string | null
+  instructor_id: string | null
+  created_at: string
+  left_aside: boolean
+  left_aside_identifier: string | null
+  left_aside_reason: LeftAsideReason | null
+  left_aside_note: string | null
+  // joined
+  lessons?: { lesson_number: number; title: string; level_id: number } | null
 }
 
 export type TermTimeFollowupStatus = 'needs_follow_up' | 'contacted' | 'extended' | 'not_continuing' | 'snoozed'

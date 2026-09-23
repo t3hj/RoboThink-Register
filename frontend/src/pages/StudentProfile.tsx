@@ -39,6 +39,7 @@ export default function StudentProfile() {
   const [lastOverride, setLastOverride] = useState<ProgressOverride | null>(null)
   const [levels, setLevels] = useState<Level[]>([])
   const [curriculumLessons, setCurriculumLessons] = useState<Lesson[]>([])
+  const [latestSessionId, setLatestSessionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
@@ -47,7 +48,7 @@ export default function StudentProfile() {
     if (!id) return
     setLoading(true)
     setError(null)
-    const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, fRes, ovRes, curriculum] = await Promise.all([
+    const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, fRes, ovRes, latestSessionRes, curriculum] = await Promise.all([
       supabase.from('students').select('*, levels(name), subscriptions(name)').eq('id', id).maybeSingle(),
       supabase.from('student_progress').select('*').eq('student_id', id).maybeSingle(),
       supabase
@@ -75,7 +76,7 @@ export default function StudentProfile() {
       supabase.from('attendance').select('*').eq('student_id', id).order('date', { ascending: false }),
       supabase
         .from('feedback_sheets')
-        .select('*, lesson_records(date, lesson_number, level_id, levels(name))')
+        .select('*, lesson_records(date, lesson_number, level_id, levels(name)), attended_sessions(date, session_number, outcome, lessons(title, lesson_number))')
         .eq('student_id', id)
         .order('created_at', { ascending: false }),
       supabase
@@ -83,6 +84,14 @@ export default function StudentProfile() {
         .select('*, profiles(name)')
         .eq('student_id', id)
         .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('attended_sessions')
+        .select('id, date, session_number')
+        .eq('student_id', id)
+        .order('date', { ascending: false })
+        .order('session_number', { ascending: false })
         .limit(1)
         .maybeSingle(),
       loadCurriculum(),
@@ -120,6 +129,7 @@ export default function StudentProfile() {
     setLastOverride(override && studentData && override.new_lesson_id === studentData.current_lesson_id ? override : null)
     setLevels(curriculum.levels)
     setCurriculumLessons(curriculum.lessons)
+    setLatestSessionId((latestSessionRes.data as { id: string } | null)?.id ?? null)
     setLoading(false)
   }, [id])
 
@@ -216,6 +226,7 @@ export default function StudentProfile() {
             pendingAssessmentPointId={student.pending_assessment_point_id}
             focusTopic={progress?.focus_topic ?? null}
             plan={plan}
+            sessionId={latestSessionId}
             onDone={() => void load()}
           />
         </div>
@@ -285,6 +296,10 @@ export default function StudentProfile() {
           {(assessments.length > 0 || remediationLessons.length > 0) && (
             <>
               <h3 className="font-semibold mt-5 mb-3">Assessments & remediation</h3>
+              <p className="text-xs text-slate-400 mb-2">
+                Assessment results are historical and can't be edited here — an incorrect result needs a manual
+                fix to progression via "Change current lesson" above, not a reversal of the assessment record itself.
+              </p>
               <ul className="divide-y divide-slate-100">
                 {assessments.map((a) => (
                   <li key={a.id} className="py-2 flex items-center justify-between gap-3 text-sm">
@@ -316,24 +331,30 @@ export default function StudentProfile() {
 
           <h3 className="font-semibold mt-5 mb-3">Feedback sheets</h3>
           {feedback.length === 0 ? (
-            <EmptyState title="No feedback sheets yet" hint="A feedback sheet is created automatically each time a lesson is completed." />
+            <EmptyState title="No feedback sheets yet" hint="A feedback sheet is created automatically for every attended session." />
           ) : (
             <ul className="divide-y divide-slate-100">
-              {feedback.map((f) => (
-                <li key={f.id} className="py-2 flex items-center justify-between gap-3 text-sm flex-wrap">
-                  <div>
-                    <span className="font-medium">
-                      {f.lesson_records ? `Lesson ${f.lesson_records.lesson_number}` : 'Lesson'}
-                    </span>
-                    {f.lesson_records?.date && <span className="text-slate-500 text-xs"> · {formatShortDate(f.lesson_records.date)}</span>}
-                  </div>
-                  {f.status === 'given' ? (
-                    <span className="badge">Given</span>
-                  ) : (
-                    <FeedbackControl feedbackId={f.id} status={f.status} studentName={student.full_name} onChanged={() => void load()} variant="full" />
-                  )}
-                </li>
-              ))}
+              {feedback.map((f) => {
+                const lessonNum = f.attended_sessions?.lessons?.lesson_number ?? f.lesson_records?.lesson_number
+                const sessionDate = f.attended_sessions?.date ?? f.lesson_records?.date
+                return (
+                  <li key={f.id} className="py-2 flex items-center justify-between gap-3 text-sm flex-wrap">
+                    <div>
+                      <span className="font-medium">{lessonNum != null ? `Lesson ${lessonNum}` : 'Lesson'}</span>
+                      {f.attended_sessions && f.attended_sessions.session_number > 1 && (
+                        <span className="text-slate-400"> · session {f.attended_sessions.session_number}</span>
+                      )}
+                      {f.attended_sessions?.outcome === 'not_finished' && <span className="badge ml-1">Not finished</span>}
+                      {sessionDate && <span className="text-slate-500 text-xs"> · {formatShortDate(sessionDate)}</span>}
+                    </div>
+                    {f.status === 'given' ? (
+                      <span className="badge">Given</span>
+                    ) : (
+                      <FeedbackControl feedbackId={f.id} status={f.status} studentName={student.full_name} onChanged={() => void load()} variant="full" />
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           )}
 
