@@ -11,7 +11,7 @@ reassessment → intervention workflow.
 > `RoboThink-Register`) has moved well beyond them via migrations applied directly
 > to the project (`curriculum_seed`, `persistent_progress`, `staff_curriculum_access`,
 > plus everything under `db/migrations_applied_2026-09-13/`, `db/migrations_applied_2026-09-14/`
-> and `db/migrations_applied_2026-09-15/`). Treat the live database, not these files, as
+> and `db/migrations_applied_2026-09-15/`, `db/migrations_applied_2026-09-20/`). Treat the live database, not these files, as
 > the source of truth, and run `supabase db pull` (or inspect via the dashboard/SQL
 > editor) before assuming the schema matches what's committed here.
 > A `student_schedules` table also now exists in the live DB (day/time/week-pattern
@@ -122,21 +122,44 @@ is governed by RLS. **Never** put the service-role key in the frontend, and neve
 
 ## How assessment / remediation works
 
-- `record_assessment_result(student_id, 'PASS'|'FAIL', date, notes)`:
+- `record_assessment_result(student_id, 'PASS'|'FAIL', date, notes, attended_session_id, remediation_path)`:
   - **PASS** → student continues normally.
-  - **FAIL** → a `remediation_plans` row is created requiring 3 remediation lessons.
-- `complete_remediation_lesson(...)` logs each remediation lesson; after the 3rd, the plan
-  moves to `ready_for_reassessment`.
-- Recording a result while `ready_for_reassessment`:
-  - **PASS** → normal progression resumes.
-  - **FAIL** → the plan moves to `intervention_required` — the UI shows a red banner and
-    stops offering further automatic actions; a human decides what happens next.
+  - **FAIL** → the instructor must choose a remediation path (enforced — a FAIL can't be saved
+    without one):
+    - **Path A: repeat next lesson** — `remediation_plans` goes straight to `ready_for_reassessment`
+      with `lessons_required = 0`; the very next attempt is the reassessment, no remediation
+      lessons in between.
+    - **Path B: 3 remediation lessons** — the original behaviour, unchanged: `status='required'`,
+      `lessons_required = 3`.
+  - Every assessment event is linked to the specific `attended_sessions` row it happened in
+    (`assessments.attended_session_id`) — required for a student with two same-day sessions to
+    keep their results distinct.
+- `complete_remediation_lesson(...)` (Path B only) logs each remediation lesson — also linked to
+  its own session (`remediation_lessons.attended_session_id`) — showing "Remediation 1 of 3",
+  "2 of 3", "3 of 3"; after the 3rd, the plan moves to `ready_for_reassessment`.
+- Recording a result while `ready_for_reassessment` (the reassessment):
+  - **PASS** → normal progression resumes, plan marked `completed`.
+  - **FAIL** → the plan moves to `intervention_required` regardless of which path was originally
+    chosen — the UI shows a red banner and stops offering further automatic actions; a human
+    decides what happens next. The failed assessment and every remediation lesson stay in history.
+- Assessment/remediation state is completely separate from "which actual lesson was taught" on a
+  session — recording an off-progression actual lesson never touches `pending_assessment_point_id`
+  or any `remediation_plans` row.
+- Assessment results can't be edited after the fact (no update path exists, deliberately — see
+  `pages/StudentProfile.tsx`'s note in the assessment history): reversing a PASS/FAIL safely would
+  mean reversing progression too, which the existing architecture has no safe way to do. A genuine
+  mistake is corrected via the existing "Change current lesson" tool instead, on `students`
+  directly — the historical assessment record itself is preserved either way.
 - The Register and Student Profile both surface this via `AssessmentPanel`, driven by the
-  `student_progress` view (`current_kind`: `normal` / `assessment` / `remediation` / `complete`).
+  `student_progress` view (`current_kind`: `normal` / `assessment` / `remediation` / `complete`)
+  and `lib/assessment.ts#remediationStatusLabel` for the exact wording shown ("Remediation 2 of 3",
+  "Repeat assessment due", "Ready for reassessment", "Intervention required" — text, not colour
+  alone). Deliberately **not** available as a bulk action — assessment/remediation state is too
+  student-specific for a mixed group to apply safely in one step.
 
 Unit tests mirroring this logic live in `frontend/tests/progression.test.ts`,
-`frontend/tests/repeatLesson.test.ts`, `frontend/tests/feedback.test.ts` and
-`frontend/tests/curriculum.test.ts`.
+`frontend/tests/repeatLesson.test.ts`, `frontend/tests/feedback.test.ts`,
+`frontend/tests/assessmentRemediation.test.ts` and `frontend/tests/curriculum.test.ts`.
 
 ## "Lessons to be done today"
 
@@ -149,14 +172,109 @@ curriculum `sort_order`) → term (where the programme has terms) → lesson num
 name. It uses the same roster the rest of the Register uses, so catch-up students are
 included automatically, and it updates whenever the selected date changes.
 
+## The attended-session model
+
+A session is an actual, distinct occurrence of a student attending one class on one date —
+independent of whether the lesson was completed. This is `public.attended_sessions`
+(added alongside the existing `lesson_records`, not instead of it):
+
+- **`lesson_records`** is unchanged: still `UNIQUE(student_id, level_id, lesson_number)`,
+  still the ledger progression math reads from, still what the Student page's lesson
+  history shows. It answers "what's the current state of this lesson for this student".
+- **`attended_sessions`** is new: one row per attended occurrence, unlimited per lesson,
+  `UNIQUE(student_id, date, session_number)`. It answers "what actually happened, session
+  by session" — two sessions on the same date are two distinct rows (`session_number` 1, 2,
+  ...), and a repeat of an already-completed lesson is a new row, never blocked.
+
+Both are written by a single function, `record_attended_session(student_id, actual_lesson_id,
+outcome, date)`:
+1. Always inserts a new `attended_sessions` row.
+2. Always upserts `lesson_records` for the **actual** lesson taught (not necessarily the
+   student's current one) — so history stays accurate even for an off-progression repeat.
+3. Always creates exactly one `feedback_sheets` row for that session.
+4. Only advances `students.current_lesson_id` when `outcome = 'completed'` **and** the
+   actual lesson taught is genuinely the student's current progression lesson — recording
+   a different actual lesson, or a `not_finished` outcome, never touches progression.
+
+`complete_current_lesson(student_id, date)` — the function the existing Register "Mark
+Done" button already calls — is now a thin, backward-compatible wrapper: it looks up the
+student's current lesson and calls `record_attended_session(..., 'completed', ...)`. Same
+signature, same return value, so the existing frontend flow needed no changes. The
+"Not Finished / Repeat" button now calls `record_attended_session` directly with
+`outcome = 'not_finished'` (previously a raw client-side `lesson_records` upsert).
+
+### The Register's per-session workflow
+
+Each active student's row has three states — **Not entered** (no attendance row, or one
+still at `Not Arrived`), **Attended**, **Absent** — driven by `lib/attendedSessionsUi.ts#attendanceState`.
+Only Attended exposes session controls (`components/SessionEntryRow.tsx`): an actual-lesson
+picker (Recommended / Nearby / All, always "Lesson N: Title", never a bare number), an
+Completed/Not Finished outcome, feedback (once the session exists), and Save. Recording a
+different actual lesson than the student's current one, or a Not Finished outcome, never
+advances progression — only completing the student's actual current lesson does, exactly as
+`record_attended_session` enforces server-side. Choosing an already-completed lesson shows a
+non-blocking "this will count as a repeat" note; it never blocks Save.
+
+Reopening a date loads existing `attended_sessions` rows for that date and displays them —
+nothing is created just by opening or refreshing the page. Editing an existing session goes
+through `update_attended_session` (new in this pass), which corrects that same row rather
+than inserting a new one, and — deliberately — never touches progression either way. A
+second session on the same date is a genuinely new row (`session_number` 2, 3, ...), shown
+separately in the row, never merged with the first.
+
+**Not Finished / build-left-aside**: `attended_sessions` gained `left_aside`,
+`left_aside_identifier`, `left_aside_reason` (one of 8 fixed values, `other` requires
+`left_aside_note`), enforced by both a DB `CHECK` and a matching client-side validator
+(`validateLeftAside`) so mistakes are caught instantly, not after a round trip. When a
+student's most recent session (any date) was `not_finished` with a build left aside, the
+Register shows a "use build B12 to finish the lesson" reminder — looked up the same way as
+feedback reminders (by `student_id`, not date/schedule), so it follows the student to
+whatever day they next appear on.
+
+A completeness indicator ("18 / 22 recorded") counts only active students whose attendance
+is explicitly Attended or Absent; inactive students never appear in the normal Register or
+its counts at all (`.eq('active', true)` on the roster query).
+
+### Bulk actions
+
+Checkboxes per row (plus a "Select all" toggle) drive a selection-count bar
+(`components/BulkActionBar.tsx`) with five actions, each with its own review/confirm modal —
+nothing applies silently:
+
+- **Mark Attended / Mark Absent** (`BulkAttendanceModal.tsx`) — pure attendance-table writes,
+  exactly like the individual Attended/Absent buttons; Absent never touches or removes an
+  existing session.
+- **Lesson/Outcome** and **Not Finished** (`BulkSessionModal.tsx`, shared) — always creates a
+  **new** session per eligible (Attended) student via `record_attended_session`; it never
+  edits an existing one, so a student who already has a session that date keeps it untouched
+  unless the instructor edits it individually. The lesson picker keeps the same
+  Recommended/Nearby/All structure as the individual row, with "Recommended" now meaning the
+  most common current lesson among the selected group. Not Finished's build/laptop identifier
+  is entered per student in a list — never forced to one shared value — while the reason (and
+  Other's note) is shared across the batch.
+- **Feedback** (`BulkFeedbackModal.tsx`) — targets each student's specific session for the
+  selected date (`lib/bulkActions.ts#resolveFeedbackTarget` — their most recent session that
+  date), never their whole feedback history, so a Session 1 / Session 2 same-day student only
+  has the intended one touched.
+
+Every modal shows an eligible/skipped breakdown before applying (e.g. "5 will be updated, 2
+skipped because they're already Absent") and applies via `Promise.allSettled`, reporting
+partial failures honestly rather than claiming full success (`lib/bulkActions.ts#summarizeBulkResults`).
+No new database functions were needed — every bulk action reuses the existing
+`record_attended_session`/`update_attended_session` RPCs or plain table writes; each
+student's update is independent, so a per-item `Promise.allSettled` loop is sufficient rather
+than a bespoke atomic bulk RPC.
+
 ## Feedback sheets
 
-Every completed lesson automatically gets a `feedback_sheets` row (`status='not_written'`),
-created inside `complete_current_lesson` itself — not a separate step, so it can never be
-forgotten. It's linked to the specific `lesson_records` row (`lesson_record_id`, unique),
-not to the student's timetable, and it never duplicates the student/lesson/date already on
-that record. "Not Finished / Repeat" attempts never create one (feedback only tracks
-completed sessions).
+Feedback is tied to the **session**, not to lesson completion — every attended session
+(completed or not finished) gets its own `feedback_sheets` row (`status='not_written'`),
+created inside `record_attended_session` itself, keyed uniquely to `attended_session_id`
+(a partial unique index, since `lesson_record_id` alone can't be unique here — two sessions
+can legitimately point at the same `lesson_records` row, e.g. two same-day sessions that
+are both "Lesson 5"). `lesson_record_id` is still populated on new rows for convenient
+joins, but is no longer `NOT NULL`/unique — that historical data and column stay intact,
+they just aren't the uniqueness anchor any more.
 
 Outstanding feedback (`not_written` or `written_not_taken`) is looked up **by student_id
 only** — never by date, schedule, or day-of-week — so the reminder follows the student to
@@ -165,11 +283,11 @@ shows up:
 - In the Register's compact **"Feedback reminders"** panel near the top, for every
   attending student with an outstanding sheet.
 - Inline in that student's Register row.
-- On the Student page, with the full history.
+- On the Student page, with the full history (grouped by session where available).
 
 Attendance never changes a feedback status — only an explicit instructor action does
 (`components/FeedbackControl.tsx`). Logic lives in `lib/feedback.ts` (tested in
-`tests/feedback.test.ts`, including the catch-up scenario described in the spec).
+`tests/feedback.test.ts`) and the session model itself in `tests/attendedSessions.test.ts`.
 
 ## UI/UX polish
 
