@@ -13,6 +13,19 @@ export interface Profile {
   created_at: string
 }
 
+export interface Centre {
+  id: string
+  name: string
+  active: boolean
+  created_at: string
+}
+
+export interface StaffCentre {
+  staff_id: string
+  centre_id: string
+  created_at: string
+}
+
 export interface Subscription {
   id: number
   name: string
@@ -45,6 +58,7 @@ export interface Lesson {
 export interface Student {
   id: string
   full_name: string
+  centre_id: string | null
   preferred_day: string | null
   preferred_time: string | null
   subscription_id: number | null
@@ -62,6 +76,7 @@ export interface Student {
   // Joined relations (when requested via select with foreign key hints)
   levels?: { name: string; slug: string; sort_order: number } | null
   subscriptions?: { name: string } | null
+  centres?: { name: string } | null
 }
 
 /** Mirrors the public.student_progress view — the single source of truth for

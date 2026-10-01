@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
+import { CentreProvider, useCentres } from './lib/centres'
 import { ToastProvider } from './components/Toast'
 import { LoadingPanel } from './components/ui'
 import Auth from './pages/Auth'
@@ -46,6 +47,7 @@ function RoleRoute({ roles, children }: { roles: Role[]; children: React.ReactNo
 
 function Layout() {
   const { profile, role, signOut } = useAuth()
+  const { activeCentres, assignedCentres, selectedCentreId, selectedCentre, isAllCentres, loading: centresLoading, error: centresError, setSelectedCentreId } = useCentres()
   const items = NAV.filter((item) => !role || item.roles.includes(role))
   return (
     <div className="min-h-screen bg-[color:var(--rt-paper)] text-[color:var(--rt-ink)]">
@@ -82,6 +84,23 @@ function Layout() {
             <div className="mt-4 pt-3 border-t border-slate-100 hidden lg:block">
               <div className="text-sm font-medium truncate">{profile?.name ?? 'Signed in'}</div>
               <div className="text-xs text-slate-500 capitalize mb-2">{profile?.role ?? 'staff'}</div>
+              {!centresLoading && !centresError && (activeCentres.length > 0 || assignedCentres.length > 0) && (
+                <label className="block mb-2">
+                  <span className="text-xs text-slate-500">Working centre</span>
+                  <select
+                    className="mt-1 w-full p-1.5 border border-slate-200 rounded-lg text-xs"
+                    value={isAllCentres ? '' : selectedCentreId ?? ''}
+                    onChange={(event) => setSelectedCentreId(event.target.value || null)}
+                    aria-label="Working centre"
+                  >
+                    {role === 'admin' && <option value="">All centres</option>}
+                    {(role === 'admin' ? activeCentres : assignedCentres.filter((centre) => centre.active)).map((centre) => (
+                      <option key={centre.id} value={centre.id}>{centre.name}</option>
+                    ))}
+                  </select>
+                  {selectedCentre && <span className="sr-only">Selected centre: {selectedCentre.name}</span>}
+                </label>
+              )}
               <button onClick={() => void signOut()} className="btn-ghost w-full text-sm">Sign out</button>
             </div>
           </div>
@@ -129,7 +148,9 @@ export default function App() {
     <ToastProvider>
       <AuthProvider>
         <BrowserRouter>
-          <Protected />
+          <CentreProvider>
+            <Protected />
+          </CentreProvider>
         </BrowserRouter>
       </AuthProvider>
     </ToastProvider>
