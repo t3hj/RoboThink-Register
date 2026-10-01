@@ -1,3 +1,4 @@
+import { useCentres } from '../lib/centres'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
@@ -15,6 +16,7 @@ interface Row extends Student {
 
 export default function Students() {
   const { role } = useAuth()
+  const { selectedCentreId, selectedCentre, isAllCentres } = useCentres()
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -28,8 +30,10 @@ export default function Students() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    let studentsQuery = supabase.from('students').select('*, levels(name), subscriptions(name), centres(name)').order('full_name')
+    if (selectedCentreId) studentsQuery = studentsQuery.eq('centre_id', selectedCentreId)
     const [studentsRes, progressRes] = await Promise.all([
-      supabase.from('students').select('*, levels(name), subscriptions(name)').order('full_name'),
+      studentsQuery,
       supabase.from('student_progress').select('*'),
     ])
     if (studentsRes.error || progressRes.error) {
@@ -40,7 +44,7 @@ export default function Students() {
     const progMap = new Map(((progressRes.data ?? []) as StudentProgress[]).map((p) => [p.student_id, p]))
     setRows(((studentsRes.data ?? []) as Student[]).map((s) => ({ ...s, progress: progMap.get(s.id) ?? null })))
     setLoading(false)
-  }, [])
+  }, [selectedCentreId])
 
   useEffect(() => {
     void load()
@@ -86,7 +90,7 @@ export default function Students() {
     <div>
       <PageHeader
         title="Students"
-        subtitle={`${visible.length} of ${rows.length} shown`}
+        subtitle={`${visible.length} of ${rows.length} shown · ${isAllCentres ? 'All centres' : selectedCentre?.name ?? 'Centre unavailable'}`}
         accent="green"
         actions={
           role === 'admin' ? (
@@ -146,6 +150,7 @@ export default function Students() {
                   <span className={`badge ${s.active ? 'badge-arrived' : 'badge-absent'}`}>{s.active ? 'Active' : 'Inactive'}</span>
                 </div>
                 <div className="text-sm text-slate-500">
+                  {s.centres?.name ?? 'Centre unavailable'} ·{' '}
                   {s.progress ? levelLabel({ name: s.progress.level_name ?? '' }) : s.levels?.name ?? '—'}
                   {s.progress?.current_lesson_number != null ? ` · Lesson ${s.progress.current_lesson_number}` : ''}
                   {s.progress?.total_lessons ? ` of ${s.progress.total_lessons}` : ''}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
+import { useCentres } from '../lib/centres'
 import { useToast } from './Toast'
 import { BusyButton } from './ui'
 import type { AttendanceSessionType, Student } from '../types'
@@ -27,6 +28,7 @@ const REASONS: { value: AttendanceSessionType; label: string; hint: string }[] =
  *  existing row. */
 export default function AddToRegister({ date, dayLabel, excludeIds, onAdded, onClose }: Props) {
   const { profile } = useAuth()
+  const { selectedCentreId } = useCentres()
   const { notify } = useToast()
   const [query, setQuery] = useState('')
   const [students, setStudents] = useState<Student[]>([])
@@ -37,12 +39,13 @@ export default function AddToRegister({ date, dayLabel, excludeIds, onAdded, onC
 
   useEffect(() => {
     let cancelled = false
-    supabase
+    let studentsQuery = supabase
       .from('students')
       .select('*')
       .eq('active', true)
       .order('full_name')
-      .then(({ data, error }) => {
+    if (selectedCentreId) studentsQuery = studentsQuery.eq('centre_id', selectedCentreId)
+    studentsQuery.then(({ data, error }) => {
         if (cancelled) return
         if (error) notify(error.message, 'error')
         else setStudents((data ?? []) as Student[])
@@ -51,8 +54,7 @@ export default function AddToRegister({ date, dayLabel, excludeIds, onAdded, onC
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [selectedCentreId])
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()

@@ -5,6 +5,7 @@ import { BusyButton } from './ui'
 import LevelLessonPicker from './LevelLessonPicker'
 import { loadCurriculum } from '../lib/curriculumData'
 import { todayISO } from '../lib/dates'
+import { useCentres } from '../lib/centres'
 import type { Level, Lesson, Student, Subscription } from '../types'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -23,6 +24,7 @@ interface Props {
  *  shows them, on create or edit. */
 export default function StudentForm({ student, onClose, onSaved }: Props) {
   const { notify } = useToast()
+  const { activeCentres, selectedCentreId } = useCentres()
   const isEdit = Boolean(student)
 
   const [fullName, setFullName] = useState(student?.full_name ?? '')
@@ -32,6 +34,7 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
   const [subscriptionId, setSubscriptionId] = useState<number | ''>(student?.subscription_id ?? '')
   const [notes, setNotes] = useState(student?.notes ?? '')
   const [active, setActive] = useState(student?.active ?? true)
+  const [centreId, setCentreId] = useState<string | null>(student?.centre_id ?? selectedCentreId)
 
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [levels, setLevels] = useState<Level[]>([])
@@ -40,6 +43,10 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
   const [lessonNumber, setLessonNumber] = useState<number | null>(1)
   const [busy, setBusy] = useState(false)
   const [loadingCurriculum, setLoadingCurriculum] = useState(true)
+
+  useEffect(() => {
+    if (!isEdit && !centreId && selectedCentreId) setCentreId(selectedCentreId)
+  }, [centreId, isEdit, selectedCentreId])
 
   useEffect(() => {
     let cancelled = false
@@ -103,6 +110,11 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
       notify('Choose a subscription type.', 'error')
       return
     }
+    if (!centreId) {
+      setBusy(false)
+      notify('Choose a centre.', 'error')
+      return
+    }
     const { error } = await supabase.from('students').insert({
       full_name: fullName.trim(),
       date_joined: joined || null,
@@ -111,6 +123,7 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
       subscription_id: subscriptionId,
       current_level_id: levelId,
       current_lesson_id: lesson.id,
+      centre_id: centreId,
       active: true,
     })
     setBusy(false)
@@ -146,6 +159,26 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
+          </label>
+
+          <label className="text-sm block">
+            <span className="block text-slate-500 mb-1">Centre</span>
+            {isEdit ? (
+              <div className="p-2 bg-slate-50 rounded-lg text-slate-700">{student?.centres?.name ?? 'Centre unavailable'}</div>
+            ) : (
+              <select
+                className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                value={centreId ?? ''}
+                onChange={(e) => setCentreId(e.target.value || null)}
+                disabled={busy}
+                required
+              >
+                <option value="">— Choose a centre —</option>
+                {activeCentres.map((centre) => (
+                  <option key={centre.id} value={centre.id}>{centre.name}</option>
+                ))}
+              </select>
+            )}
           </label>
 
           <div className="grid grid-cols-2 gap-3">

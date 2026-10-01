@@ -18,6 +18,7 @@ import { loadCurriculum } from '../lib/curriculumData'
 import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
 import { registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
 import { resolveFeedbackTarget } from '../lib/bulkActions'
+import { useCentres } from '../lib/centres'
 import type {
   Attendance,
   AttendedSession,
@@ -41,6 +42,7 @@ interface RosterEntry extends Student {
 }
 
 export default function Register() {
+    const { selectedCentreId, selectedCentre, isAllCentres } = useCentres()
   const [date, setDate] = useState(todayISO())
   const [roster, setRoster] = useState<RosterEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,12 +68,14 @@ export default function Register() {
 
     // Active students only — inactive students never appear in the normal
     // Register or its completeness counts.
-    const { data: scheduled, error: schedErr } = await supabase
+    let scheduledQuery = supabase
       .from('students')
       .select('*, levels(name), subscriptions(name)')
       .eq('preferred_day', dow)
       .eq('active', true)
       .order('preferred_time')
+    if (selectedCentreId) scheduledQuery = scheduledQuery.eq('centre_id', selectedCentreId)
+    const { data: scheduled, error: schedErr } = await scheduledQuery
 
     if (schedErr) {
       setError(schedErr.message)
@@ -79,7 +83,9 @@ export default function Register() {
       return
     }
 
-    const { data: att, error: attErr } = await supabase.from('attendance').select('*').eq('date', forDate)
+    let attendanceQuery = supabase.from('attendance').select('*').eq('date', forDate)
+    if (selectedCentreId) attendanceQuery = attendanceQuery.eq('centre_id', selectedCentreId)
+    const { data: att, error: attErr } = await attendanceQuery
     if (attErr) {
       setError(attErr.message)
       setLoading(false)
@@ -94,11 +100,13 @@ export default function Register() {
     const extraIds = [...new Set(attendance.map((a) => a.student_id))].filter((id) => !scheduledIds.has(id))
     let extras: Student[] = []
     if (extraIds.length) {
-      const { data: extraData, error: extraErr } = await supabase
+      let extrasQuery = supabase
         .from('students')
         .select('*, levels(name), subscriptions(name)')
         .in('id', extraIds)
         .eq('active', true)
+      if (selectedCentreId) extrasQuery = extrasQuery.eq('centre_id', selectedCentreId)
+      const { data: extraData, error: extraErr } = await extrasQuery
       if (extraErr) {
         setError(extraErr.message)
         setLoading(false)
@@ -200,7 +208,7 @@ export default function Register() {
     })
     setRoster(entries)
     setLoading(false)
-  }, [])
+  }, [selectedCentreId])
 
   useEffect(() => {
     void loadRoster(date)
@@ -275,7 +283,7 @@ export default function Register() {
     <div>
       <PageHeader
         title="Register"
-        subtitle={`${formatDisplayDate(date)} · ${dayName(date)}${isHistorical ? ' · Historical' : isFuture ? ' · Upcoming' : ''}`}
+        subtitle={`${formatDisplayDate(date)} · ${dayName(date)} · ${isAllCentres ? 'All centres' : selectedCentre?.name ?? 'Centre unavailable'}${isHistorical ? ' · Historical' : isFuture ? ' · Upcoming' : ''}`}
         accent="green"
         actions={
           <>

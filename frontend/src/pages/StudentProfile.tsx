@@ -10,6 +10,9 @@ import StudentForm from '../components/StudentForm'
 import { loadCurriculum } from '../lib/curriculumData'
 import { levelLabel } from '../lib/curriculum'
 import { formatShortDate, formatDisplayDate, formatTime12h } from '../lib/dates'
+import { todayISO } from '../lib/dates'
+import { useCentres } from '../lib/centres'
+import { useToast } from '../components/Toast'
 import { attendancePercentage, groupAttendanceByMonth } from '../lib/attendanceStats'
 import type {
   Assessment,
@@ -28,6 +31,8 @@ import type {
 export default function StudentProfile() {
   const { id } = useParams<{ id: string }>()
   const { role } = useAuth()
+  const { activeCentres } = useCentres()
+  const { notify } = useToast()
   const [student, setStudent] = useState<Student | null>(null)
   const [progress, setProgress] = useState<StudentProgress | null>(null)
   const [plan, setPlan] = useState<RemediationPlan | null>(null)
@@ -43,13 +48,17 @@ export default function StudentProfile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [transferCentreId, setTransferCentreId] = useState('')
+  const [transferDate, setTransferDate] = useState(todayISO())
+  const [transferBusy, setTransferBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
     setLoading(true)
     setError(null)
     const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, fRes, ovRes, latestSessionRes, curriculum] = await Promise.all([
-      supabase.from('students').select('*, levels(name), subscriptions(name)').eq('id', id).maybeSingle(),
+      supabase.from('students').select('*, levels(name), subscriptions(name), centres(name)').eq('id', id).maybeSingle(),
       supabase.from('student_progress').select('*').eq('student_id', id).maybeSingle(),
       supabase
         .from('remediation_plans')
@@ -137,6 +146,30 @@ export default function StudentProfile() {
     void load()
   }, [load])
 
+  function openTransfer() {
+    setTransferCentreId('')
+    setTransferDate(todayISO())
+    setTransferOpen(true)
+  }
+
+  async function transferStudent() {
+    if (!student || !transferCentreId || !transferDate) return
+    setTransferBusy(true)
+    const { error: transferError } = await supabase.rpc('transfer_student_to_centre', {
+      in_student_id: student.id,
+      in_centre_id: transferCentreId,
+      in_effective_date: transferDate,
+    })
+    setTransferBusy(false)
+    if (transferError) {
+      notify(transferError.message, 'error')
+      return
+    }
+    setTransferOpen(false)
+    notify('Student transferred', 'success')
+    await load()
+  }
+
   if (loading) return <LoadingPanel label="Loading student…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
   if (!student) {
@@ -166,9 +199,10 @@ export default function StudentProfile() {
         accent="blue"
         actions={
           role === 'admin' ? (
-            <button className="btn-ghost" onClick={() => setEditing(true)}>
-              Edit details
-            </button>
+            <>
+              <button className="btn-ghost" onClick={() => setEditing(true)}>Edit details</button>
+              <button className="btn-primary" onClick={openTransfer}>Transfer centre</button>
+            </>
           ) : undefined
         }
       />
@@ -261,6 +295,7 @@ export default function StudentProfile() {
         <div className="card p-4">
           <h3 className="font-semibold mb-3">Details</h3>
           <dl className="text-sm space-y-2">
+            <div><dt className="text-slate-500">Centre</dt><dd>{student.centres?.name ?? 'Centre unavailable'}</dd></div>
             <div><dt className="text-slate-500">Date of birth</dt><dd>{student.date_of_birth ? formatDisplayDate(student.date_of_birth) : '—'}</dd></div>
             <div><dt className="text-slate-500">Parent</dt><dd>{student.parent_name ?? '—'}</dd></div>
             <div><dt className="text-slate-500">Contact</dt><dd>{student.parent_contact ?? '—'}</dd></div>
@@ -401,6 +436,38 @@ export default function StudentProfile() {
             void load()
           }}
         />
+      )}
+
+      {transferOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => !transferBusy && setTransferOpen(false)}>
+          <div className="card p-5 max-w-md w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Transfer student to another centre">
+            <h3 className="font-semibold mb-2">Transfer {student.full_name}</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              Historical attendance and session records remain associated with their original centre.
+            </p>
+            <div className="space-y-3">
+              <label className="block text-sm">
+                <span className="block text-slate-500 mb-1">Destination centre</span>
+                <select className="w-full p-2 border border-slate-200 rounded-lg" value={transferCentreId} onChange={(event) => setTransferCentreId(event.target.value)} disabled={transferBusy}>
+                  <option value="">— Choose an active centre —</option>
+                  {activeCentres.filter((centre) => centre.id !== student.centre_id).map((centre) => (
+                    <option key={centre.id} value={centre.id}>{centre.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="block text-slate-500 mb-1">Effective date</span>
+                <input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={transferDate} onChange={(event) => setTransferDate(event.target.value)} disabled={transferBusy} required />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button className="btn-ghost" onClick={() => setTransferOpen(false)} disabled={transferBusy}>Cancel</button>
+              <button className="btn-primary" onClick={() => void transferStudent()} disabled={transferBusy || !transferCentreId || !transferDate}>
+                {transferBusy ? 'Transferring…' : 'Transfer student'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
