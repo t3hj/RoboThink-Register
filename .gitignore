@@ -30,3 +30,9 @@ dist-ssr
 # Dependencies / build output
 node_modules/
 dist/
+
+# Internal curriculum exports and local diagnostics
+/cmap.txt
+/C-map.pdf
+/dev.log
+/dev.err.log
