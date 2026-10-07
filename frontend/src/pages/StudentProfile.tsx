@@ -7,6 +7,7 @@ import ChangeLessonControl from '../components/ChangeLessonControl'
 import AssessmentPanel from '../components/AssessmentPanel'
 import FeedbackControl from '../components/FeedbackControl'
 import StudentForm from '../components/StudentForm'
+import StudentProjectsPanel from '../components/StudentProjectsPanel'
 import { loadCurriculum } from '../lib/curriculumData'
 import { levelLabel } from '../lib/curriculum'
 import { formatShortDate, formatDisplayDate, formatTime12h } from '../lib/dates'
@@ -25,6 +26,7 @@ import type {
   RemediationLesson,
   RemediationPlan,
   Student,
+  StudentProject,
   StudentProgress,
 } from '../types'
 
@@ -41,6 +43,7 @@ export default function StudentProfile() {
   const [assessments, setAssessments] = useState<Assessment[]>([])
   const [attendance, setAttendance] = useState<Attendance[]>([])
   const [feedback, setFeedback] = useState<FeedbackSheet[]>([])
+  const [projects, setProjects] = useState<StudentProject[]>([])
   const [lastOverride, setLastOverride] = useState<ProgressOverride | null>(null)
   const [levels, setLevels] = useState<Level[]>([])
   const [curriculumLessons, setCurriculumLessons] = useState<Lesson[]>([])
@@ -57,7 +60,7 @@ export default function StudentProfile() {
     if (!id) return
     setLoading(true)
     setError(null)
-    const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, fRes, ovRes, latestSessionRes, curriculum] = await Promise.all([
+    const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, fRes, projectRes, ovRes, latestSessionRes, curriculum] = await Promise.all([
       supabase.from('students').select('*, levels(name), subscriptions(name), centres(name)').eq('id', id).maybeSingle(),
       supabase.from('student_progress').select('*').eq('student_id', id).maybeSingle(),
       supabase
@@ -89,6 +92,11 @@ export default function StudentProfile() {
         .eq('student_id', id)
         .order('created_at', { ascending: false }),
       supabase
+        .from('student_project_durations')
+        .select('*')
+        .eq('student_id', id)
+        .order('start_date', { ascending: false }),
+      supabase
         .from('progress_overrides')
         .select('*, profiles(name)')
         .eq('student_id', id)
@@ -105,7 +113,7 @@ export default function StudentProfile() {
         .maybeSingle(),
       loadCurriculum(),
     ])
-    if (sRes.error || pRes.error || lRes.error || rRes.error || aRes.error || attRes.error || fRes.error) {
+    if (sRes.error || pRes.error || lRes.error || rRes.error || aRes.error || attRes.error || fRes.error || projectRes.error) {
       setError(
         sRes.error?.message ??
           pRes.error?.message ??
@@ -114,6 +122,7 @@ export default function StudentProfile() {
           aRes.error?.message ??
           attRes.error?.message ??
           fRes.error?.message ??
+          projectRes.error?.message ??
           'Unknown error',
       )
       setLoading(false)
@@ -132,6 +141,7 @@ export default function StudentProfile() {
     setAssessments((aRes.data ?? []) as Assessment[])
     setAttendance((attRes.data ?? []) as Attendance[])
     setFeedback((fRes.data ?? []) as FeedbackSheet[])
+    setProjects((projectRes.data ?? []) as StudentProject[])
     // Only treat it as "the reason the student is where they are" if nothing
     // has completed since (i.e. it set the lesson the student is still on).
     const override = (ovRes.data ?? null) as ProgressOverride | null
@@ -290,6 +300,8 @@ export default function StudentProfile() {
         />
         <StatCard value={absent} label="Absences" tone={absent > 2 ? 'bad' : undefined} />
       </div>
+
+      <StudentProjectsPanel studentId={student.id} projects={projects} onChanged={() => void load()} />
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="card p-4">

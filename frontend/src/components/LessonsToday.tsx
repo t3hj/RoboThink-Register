@@ -36,7 +36,9 @@ export default function LessonsToday({ roster, levels }: { roster: RosterLike[];
                   <div key={`${g.levelId}-${g.lessonNumber}`} className="mt-1.5">
                     {showTermHeader && <div className="text-xs text-slate-400 mt-1.5 first:mt-0">Term {term}</div>}
                     <div className="flex items-baseline gap-2">
-                      <span className="text-sm font-medium">Lesson {g.lessonNumber}</span>
+                      <span className="text-sm font-medium">
+                        Lesson {g.lessonNumber}{g.lessonTitle ? ` — ${g.lessonTitle}` : ''}
+                      </span>
                       <span className="text-xs text-slate-400">· {g.students.length} student{g.students.length === 1 ? '' : 's'}</span>
                     </div>
                     <ul className="ml-1 text-sm text-slate-600">

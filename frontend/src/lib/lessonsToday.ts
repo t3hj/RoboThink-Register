@@ -4,13 +4,14 @@ import { parseLevelName } from './curriculum'
 export interface LessonsTodayRosterEntry {
   id: string
   full_name: string
-  progress: Pick<StudentProgress, 'current_level_id' | 'current_lesson_number' | 'level_name'> | null
+  progress: Pick<StudentProgress, 'current_level_id' | 'current_lesson_number' | 'current_lesson_title' | 'level_name'> | null
 }
 
 export interface LessonGroup {
   levelId: number
   levelName: string
   lessonNumber: number
+  lessonTitle: string | null
   students: { id: string; full_name: string }[]
 }
 
@@ -41,6 +42,7 @@ export function groupLessonsToday(
         levelId: p.current_level_id,
         levelName: p.level_name ?? levelById.get(p.current_level_id)?.name ?? '',
         lessonNumber: p.current_lesson_number,
+        lessonTitle: p.current_lesson_title?.trim() || null,
         students: [],
       }
       byKey.set(key, g)

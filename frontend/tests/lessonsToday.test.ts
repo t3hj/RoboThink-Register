@@ -8,14 +8,19 @@ const levels = [
   { id: 17, name: 'Expert Engineer', sort_order: 170 },
 ]
 
-function entry(id: string, name: string, levelId: number | null, lessonNumber: number | null): LessonsTodayRosterEntry {
+function entry(id: string, name: string, levelId: number | null, lessonNumber: number | null, lessonTitle: string | null = null): LessonsTodayRosterEntry {
   return {
     id,
     full_name: name,
     progress:
       levelId == null || lessonNumber == null
         ? null
-        : { current_level_id: levelId, current_lesson_number: lessonNumber, level_name: levels.find((l) => l.id === levelId)?.name ?? '' },
+        : {
+            current_level_id: levelId,
+            current_lesson_number: lessonNumber,
+            current_lesson_title: lessonTitle,
+            level_name: levels.find((l) => l.id === levelId)?.name ?? '',
+          },
   }
 }
 
@@ -26,6 +31,18 @@ describe('groupLessonsToday', () => {
     const engineer = result.find((p) => p.programme === 'Engineer')!
     const lesson3 = engineer.groups.find((g) => g.lessonNumber === 3)!
     expect(lesson3.students.map((s) => s.full_name)).toEqual(['Student A', 'Student B'])
+  })
+
+  it('keeps the lesson title supplied by student progress for the grouped display', () => {
+    const roster = [entry('1', 'Student A', 7, 3, 'IR Distance Light')]
+    const result = groupLessonsToday(roster, levels)
+    expect(result[0].groups[0].lessonTitle).toBe('IR Distance Light')
+  })
+
+  it('uses a null title when the curriculum title is unavailable', () => {
+    const roster = [entry('1', 'Student A', 7, 3, '   ')]
+    const result = groupLessonsToday(roster, levels)
+    expect(result[0].groups[0].lessonTitle).toBeNull()
   })
 
   it('sorts students within a lesson group alphabetically by name', () => {

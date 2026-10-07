@@ -79,6 +79,24 @@ export interface Student {
   centres?: { name: string } | null
 }
 
+export type StudentProjectStatus = 'active' | 'completed' | 'on_hold' | 'cancelled'
+
+/** Mirrors public.student_project_durations. duration_days is calculated in
+ * Supabase so active projects advance automatically without a client update. */
+export interface StudentProject {
+  id: string
+  student_id: string
+  name: string
+  description: string | null
+  start_date: string
+  target_end_date: string | null
+  completed_date: string | null
+  status: StudentProjectStatus
+  duration_days: number | null
+  created_at: string
+  updated_at: string
+}
+
 /** Mirrors the public.student_progress view — the single source of truth for
  *  "what is this student doing right now" across Register/Dashboard/Profile. */
 export type ProgressKind = 'normal' | 'assessment' | 'remediation' | 'complete'
