@@ -109,6 +109,31 @@ describe('groupLessonsToday — prefers the history-derived expected lesson', ()
     expect(engineer.groups.map((g) => `${g.levelName}:${g.lessonNumber}:${g.lessonTitle}`)).toEqual(['Engineer - Term 2:6:T2 L6'])
   })
 
+  it('uses the expected lesson level after a term boundary, not the stored level label', () => {
+    const roster: LessonsTodayRosterEntry[] = [
+      {
+        id: '1',
+        full_name: 'Student A',
+        progress: { current_level_id: 8, current_lesson_number: 12, current_lesson_title: 'T2 L12', level_name: 'Engineer - Term 2' },
+        expectedLesson: { level_id: 17, lesson_number: 1, title: 'Expert L1' },
+      },
+    ]
+    const result = groupLessonsToday(roster, levels)
+    expect(result[0].groups.map((g) => `${g.levelName}:${g.lessonNumber}:${g.lessonTitle}`)).toEqual(['Expert Engineer:1:Expert L1'])
+  })
+
+  it('does not fall back to a stale pointer when history has no resolvable next lesson', () => {
+    const roster: LessonsTodayRosterEntry[] = [
+      {
+        id: '1',
+        full_name: 'Student A',
+        progress: { current_level_id: 8, current_lesson_number: 12, current_lesson_title: 'T2 L12', level_name: 'Engineer - Term 2' },
+        expectedLesson: null,
+      },
+    ]
+    expect(groupLessonsToday(roster, levels)).toEqual([])
+  })
+
   it('falls back to the stored current lesson when no expected lesson is supplied', () => {
     const roster = [entry('1', 'Student A', 7, 3, 'T1 L3')]
     const result = groupLessonsToday(roster, levels)

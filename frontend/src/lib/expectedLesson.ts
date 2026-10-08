@@ -37,6 +37,10 @@ export interface ExpectedLessonInput {
   completed: CompletedLesson[]
 }
 
+export type ExpectedLessonResolution<L> =
+  | { source: 'stored' }
+  | { source: 'history'; lesson: L | null }
+
 type LevelRef = Pick<Level, 'id' | 'slug' | 'sort_order'>
 type LessonRef = Pick<Lesson, 'id' | 'level_id' | 'lesson_number' | 'title'>
 
@@ -72,9 +76,9 @@ export function nextLessonAfter<L extends LessonRef>(
   return null
 }
 
-/** The lesson to show for the student's next session, or null to keep the
- *  stored current lesson (no history yet, non-normal progression state, or the
- *  end of the curriculum). */
+/** Derive the next curriculum lesson from current-level completion history.
+ *  Use resolveExpectedLesson when callers must distinguish "use the stored
+ *  pointer" from "history is authoritative but has no resolvable next step." */
 export function deriveExpectedLesson<L extends LessonRef>(
   input: ExpectedLessonInput,
   levels: LevelRef[],
@@ -96,4 +100,19 @@ export function deriveExpectedLesson<L extends LessonRef>(
   }
 
   return nextLessonAfter(input.currentLevelId, latest.lesson_number, levels, lessons)
+}
+
+/** Resolve whether recorded history should replace the stored pointer. A null
+ *  history result is authoritative: it means the student has completed
+ *  relevant lessons but the curriculum currently has no resolvable next step.
+ *  This also prevents a temporarily unavailable curriculum list from making
+ *  the UI fall back to a stale pointer. */
+export function resolveExpectedLesson<L extends LessonRef>(
+  input: ExpectedLessonInput,
+  levels: LevelRef[],
+  lessons: L[],
+): ExpectedLessonResolution<L> {
+  if (input.currentKind !== 'normal' || input.currentLevelId == null) return { source: 'stored' }
+  if (!input.completed.some((c) => c.level_id === input.currentLevelId)) return { source: 'stored' }
+  return { source: 'history', lesson: deriveExpectedLesson(input, levels, lessons) }
 }

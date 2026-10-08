@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveExpectedLesson, nextLessonAfter, type CompletedLesson } from '../src/lib/expectedLesson'
+import { deriveExpectedLesson, nextLessonAfter, resolveExpectedLesson, type CompletedLesson } from '../src/lib/expectedLesson'
 
 // Curriculum shape mirrors the live levels/lessons naming convention.
 const levels = [
@@ -107,6 +107,33 @@ describe('deriveExpectedLesson — derived from the recorded history, not the st
     expect(expected?.lesson_number).toBe(1)
   })
 
+  it('reproduces a stale pointer after a backfill: completed Lesson 12 means the next term, Lesson 1', () => {
+    // This mirrors the live history shape: the stored pointer still names
+    // Lesson 12, but that level's completed record proves it is already done.
+    const expected = deriveExpectedLesson(
+      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 12) },
+      levels,
+      lessons,
+    )
+    expect([expected?.level_id, expected?.lesson_number]).toEqual([9, 1])
+  })
+
+  it('recommends Lesson 12 after Lesson 11, then advances past Lesson 12 once it is completed', () => {
+    const afterLesson11 = deriveExpectedLesson(
+      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 11) },
+      levels,
+      lessons,
+    )
+    const afterLesson12 = deriveExpectedLesson(
+      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 12) },
+      levels,
+      lessons,
+    )
+
+    expect([afterLesson11?.level_id, afterLesson11?.lesson_number]).toEqual([8, 12])
+    expect([afterLesson12?.level_id, afterLesson12?.lesson_number]).toEqual([9, 1])
+  })
+
   it('keeps the stored current lesson while an assessment or remediation is pending', () => {
     for (const kind of ['assessment', 'remediation', 'complete'] as const) {
       expect(
@@ -186,6 +213,35 @@ describe('deriveExpectedLesson — several students with different progression h
       } else {
         expect([expected?.level_id, expected?.lesson_number], student.name).toEqual(student.want)
       }
+    }
+  })
+})
+
+describe('resolveExpectedLesson — explicit history vs stored-pointer fallback', () => {
+  it('does not fall back to a stale completed pointer while curriculum data is unavailable', () => {
+    const resolution = resolveExpectedLesson(
+      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 12) },
+      [],
+      [],
+    )
+    expect(resolution).toEqual({ source: 'history', lesson: null })
+  })
+
+  it('uses the stored pointer for a normal student with no relevant completed history', () => {
+    expect(
+      resolveExpectedLesson(
+        { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(7, 12) },
+        levels,
+        lessons,
+      ),
+    ).toEqual({ source: 'stored' })
+  })
+
+  it('preserves stored-pointer behavior while assessment or remediation is active', () => {
+    for (const currentKind of ['assessment', 'remediation', 'complete'] as const) {
+      expect(
+        resolveExpectedLesson({ currentLevelId: 8, currentKind, overrideNextLesson: null, completed: completed(8, 12) }, levels, lessons),
+      ).toEqual({ source: 'stored' })
     }
   })
 })

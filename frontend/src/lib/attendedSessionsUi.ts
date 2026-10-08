@@ -85,12 +85,13 @@ export function validateLeftAside(input: LeftAsideInput): string | null {
  *  existing session — not for that same session's own original lesson
  *  (editing a session shouldn't warn about the very thing it already is). */
 export function previouslyCompletedWarningDate(
+  levelId: number,
   lessonNumber: number,
-  previouslyCompleted: Map<number, string>,
+  previouslyCompleted: Map<number, Map<number, string>>,
   isUnchangedFromExistingSession: boolean,
 ): string | null {
   if (isUnchangedFromExistingSession) return null
-  return previouslyCompleted.get(lessonNumber) ?? null
+  return previouslyCompleted.get(levelId)?.get(lessonNumber) ?? null
 }
 
 /** Reopening an existing session must update it, never insert a new one —

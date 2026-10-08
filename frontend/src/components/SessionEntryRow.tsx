@@ -26,15 +26,12 @@ interface Props {
   attendance: Attendance | null
   sessionsToday: AttendedSession[]
   feedbackBySessionId: Map<string, FeedbackSheet>
-  /** Lesson derived from the student's actual recorded history (their latest
-   *  completed lesson plus the next step in their curriculum). When present it
-   *  is the default "Recommended" lesson, in preference to the stored current
-   *  lesson — which is not advanced by backfilled/imported session history. */
+  /** `undefined` keeps the stored lesson; `null` means recorded history is
+   *  authoritative but no next lesson can be resolved. A lesson value is the
+   *  history-derived default, including across a term boundary. */
   expectedLesson?: Lesson | null
-  /** Lesson numbers within the student's current level already completed
-   *  before today, with the date — drives the "previously completed"
-   *  warning. Keyed by lesson_number. */
-  previouslyCompleted: Map<number, string>
+  /** Completed lessons by level and lesson number, with the date. */
+  previouslyCompleted: Map<number, Map<number, string>>
   onChanged: () => void
 }
 
@@ -75,14 +72,16 @@ export default function SessionEntryRow({
   const lessonById = useMemo(() => new Map(lessons.map((l) => [l.id, l])), [lessons])
   // The lesson this session should default to: the history-derived expected
   // lesson when the register supplies one, otherwise the stored current lesson.
-  const recommendedLesson = expectedLesson ?? (student.current_lesson_id ? lessonById.get(student.current_lesson_id) ?? null : null)
+  const recommendedLesson = expectedLesson === undefined
+    ? (student.current_lesson_id ? lessonById.get(student.current_lesson_id) ?? null : null)
+    : expectedLesson
   const currentLevelId = recommendedLesson?.level_id ?? student.current_level_id
   const currentLevel = levels.find((l) => l.id === currentLevelId) ?? null
   const lessonsInLevel = useMemo(
     () => lessons.filter((l) => l.level_id === currentLevelId && l.lesson_kind === 'normal').sort((a, b) => a.lesson_number - b.lesson_number),
     [lessons, currentLevelId],
   )
-  const defaultLessonId = recommendedLesson?.id ?? lessonsInLevel[0]?.id ?? ''
+  const defaultLessonId = recommendedLesson?.id ?? (expectedLesson === undefined ? lessonsInLevel[0]?.id ?? '' : '')
 
   const showBlankFormAutomatically = state === 'attended' && sessionsToday.length === 0 && !editingSessionId
   const formOpen = draft != null || showBlankFormAutomatically
@@ -148,7 +147,7 @@ export default function SessionEntryRow({
   }
 
   async function save() {
-    if (!activeDraft) return
+    if (!activeDraft?.lessonId) return
     const validationError = validateLeftAside(activeDraft)
     if (validationError) {
       notify(validationError, 'error')
@@ -183,7 +182,7 @@ export default function SessionEntryRow({
   const editingSameLessonAsBefore =
     editingSessionId != null && sessionsToday.find((s) => s.id === editingSessionId)?.actual_lesson_id === activeDraft?.lessonId
   const completedDate = selectedLesson
-    ? previouslyCompletedWarningDate(selectedLesson.lesson_number, previouslyCompleted, editingSameLessonAsBefore)
+    ? previouslyCompletedWarningDate(selectedLesson.level_id, selectedLesson.lesson_number, previouslyCompleted, editingSameLessonAsBefore)
     : null
   const showRepeatWarning = completedDate != null
 
@@ -274,6 +273,10 @@ export default function SessionEntryRow({
                 Lesson {recommendedLesson.lesson_number}: {recommendedLesson.title}
                 <span className="block text-xs text-slate-500">Student's current expected lesson</span>
               </button>
+            )}
+
+            {lessonScope === 'recommended' && !recommendedLesson && expectedLesson === null && (
+              <p className="text-xs text-slate-500">No next curriculum lesson is available from the recorded history. Choose All lessons to record a catch-up or correction.</p>
             )}
 
             {lessonScope === 'nearby' && (
@@ -410,7 +413,7 @@ export default function SessionEntryRow({
             >
               Cancel
             </button>
-            <BusyButton busy={busy} onClick={() => void save()} className="btn-primary text-sm">
+            <BusyButton busy={busy} disabled={!activeDraft.lessonId} onClick={() => void save()} className="btn-primary text-sm">
               Save
             </BusyButton>
           </div>

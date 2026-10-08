@@ -5,10 +5,9 @@ export interface LessonsTodayRosterEntry {
   id: string
   full_name: string
   progress: Pick<StudentProgress, 'current_level_id' | 'current_lesson_number' | 'current_lesson_title' | 'level_name'> | null
-  /** The lesson derived from the student's actual recorded history (see
-   *  lib/expectedLesson.ts). Preferred over the stored current lesson when
-   *  present, because the stored pointer is not advanced by backfilled or
-   *  imported session history. */
+  /** The lesson derived from actual history. `undefined` means history does
+   *  not override the stored pointer; `null` means history is authoritative but
+   *  there is no resolvable next lesson. */
   expectedLesson?: Pick<Lesson, 'level_id' | 'lesson_number' | 'title'> | null
 }
 
@@ -41,11 +40,14 @@ export function groupLessonsToday(
   for (const s of roster) {
     const p = s.progress
     const e = s.expectedLesson
-    const levelId = e?.level_id ?? p?.current_level_id ?? null
-    const lessonNumber = e?.lesson_number ?? p?.current_lesson_number ?? null
+    const hasHistoryDerivedLesson = s.expectedLesson !== undefined
+    const levelId = hasHistoryDerivedLesson ? e?.level_id ?? null : p?.current_level_id ?? null
+    const lessonNumber = hasHistoryDerivedLesson ? e?.lesson_number ?? null : p?.current_lesson_number ?? null
     if (levelId == null || lessonNumber == null) continue
     const lessonTitle = e ? e.title?.trim() || null : p?.current_lesson_title?.trim() || null
-    const levelName = p?.level_name ?? levelById.get(levelId)?.name ?? ''
+    const levelName = e
+      ? levelById.get(levelId)?.name ?? p?.level_name ?? ''
+      : p?.level_name ?? levelById.get(levelId)?.name ?? ''
     const key = `${levelId}:${lessonNumber}`
     let g = byKey.get(key)
     if (!g) {

@@ -115,19 +115,22 @@ describe('validateLeftAside — Not Finished build/laptop identifier + reason va
 })
 
 describe('previouslyCompletedWarningDate — non-blocking repeat warning', () => {
-  const completed = new Map([[5, '2026-09-01']])
+  const completed = new Map([[8, new Map([[5, '2026-09-01']])]])
 
   it('returns the completion date when the chosen lesson was already completed', () => {
-    expect(previouslyCompletedWarningDate(5, completed, false)).toBe('2026-09-01')
+    expect(previouslyCompletedWarningDate(8, 5, completed, false)).toBe('2026-09-01')
   })
   it('returns null for a lesson never completed before', () => {
-    expect(previouslyCompletedWarningDate(6, completed, false)).toBeNull()
+    expect(previouslyCompletedWarningDate(8, 6, completed, false)).toBeNull()
+  })
+  it('does not mistake the same lesson number in another term for a repeat', () => {
+    expect(previouslyCompletedWarningDate(9, 5, completed, false)).toBeNull()
   })
   it('does not warn when editing a session for the exact lesson it already was', () => {
-    expect(previouslyCompletedWarningDate(5, completed, true)).toBeNull()
+    expect(previouslyCompletedWarningDate(8, 5, completed, true)).toBeNull()
   })
   it('the warning never blocks saving — it is purely informational (no exception, just a value)', () => {
-    expect(() => previouslyCompletedWarningDate(5, completed, false)).not.toThrow()
+    expect(() => previouslyCompletedWarningDate(8, 5, completed, false)).not.toThrow()
   })
 })
 

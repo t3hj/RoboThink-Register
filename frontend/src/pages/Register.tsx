@@ -19,7 +19,7 @@ import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
 import { registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
 import { resolveFeedbackTarget } from '../lib/bulkActions'
 import { useCentres } from '../lib/centres'
-import { deriveExpectedLesson, type CompletedLesson } from '../lib/expectedLesson'
+import { resolveExpectedLesson, type CompletedLesson } from '../lib/expectedLesson'
 import type {
   Attendance,
   AttendedSession,
@@ -39,7 +39,7 @@ interface RosterEntry extends Student {
   feedback: FeedbackSheet | null
   sessionsToday: AttendedSession[]
   mostRecentSession: AttendedSession | null
-  previouslyCompleted: Map<number, string>
+  previouslyCompleted: Map<number, Map<number, string>>
   /** Every COMPLETED lesson the student has a lesson_records row for — the
    *  recorded history the expected lesson is derived from. */
   completedHistory: CompletedLesson[]
@@ -162,6 +162,11 @@ export default function Register() {
         setLoading(false)
         return
       }
+      if (completedRes.error) {
+        setError(completedRes.error.message)
+        setLoading(false)
+        return
+      }
       progress = (progRes.data ?? []) as StudentProgress[]
       plans = (planRes.data ?? []) as RemediationPlan[]
       feedbackSheets = (feedbackRes.data ?? []) as FeedbackSheet[]
@@ -186,11 +191,13 @@ export default function Register() {
     for (const s of recentSessions) {
       if (!mostRecentByStudent.has(s.student_id)) mostRecentByStudent.set(s.student_id, s)
     }
-    const completedByStudent = new Map<string, Map<number, string>>()
+    const completedByStudent = new Map<string, Map<number, Map<number, string>>>()
     const completedHistoryByStudent = new Map<string, CompletedLesson[]>()
     for (const lr of completedLessons) {
-      const m = completedByStudent.get(lr.student_id) ?? new Map<number, string>()
-      m.set(lr.lesson_number, lr.date)
+      const m = completedByStudent.get(lr.student_id) ?? new Map<number, Map<number, string>>()
+      const byLevel = m.get(lr.level_id) ?? new Map<number, string>()
+      byLevel.set(lr.lesson_number, lr.date)
+      m.set(lr.level_id, byLevel)
       completedByStudent.set(lr.student_id, m)
       completedHistoryByStudent.set(lr.student_id, [
         ...(completedHistoryByStudent.get(lr.student_id) ?? []),
@@ -242,12 +249,14 @@ export default function Register() {
   // The lesson each student is expected to do next, derived from their recorded
   // history rather than the stored current-lesson pointer (which backfilled or
   // imported session history never advanced). Computed here, not in the roster
-  // query, because it needs the curriculum — loaded separately. An empty map
-  // value simply means "keep the stored current lesson".
+  // query, because it needs the curriculum — loaded separately. A missing map
+  // entry means to keep the stored current lesson (special state or no relevant
+  // history); a null entry means history is authoritative but no next lesson
+  // could be resolved, so the stale stored pointer must not be reused.
   const expectedLessons = useMemo(() => {
-    const byStudent = new Map<string, Lesson>()
+    const byStudent = new Map<string, Lesson | null>()
     for (const s of roster) {
-      const lesson = deriveExpectedLesson(
+      const resolution = resolveExpectedLesson(
         {
           currentLevelId: s.current_level_id,
           currentKind: s.progress?.current_kind ?? null,
@@ -257,7 +266,7 @@ export default function Register() {
         levels,
         lessons,
       )
-      if (lesson) byStudent.set(s.id, lesson)
+      if (resolution.source === 'history') byStudent.set(s.id, resolution.lesson)
     }
     return byStudent
   }, [roster, levels, lessons])
@@ -273,8 +282,8 @@ export default function Register() {
         full_name: s.full_name,
         status: s.attendance?.status,
         sessionCount: s.sessionsToday.length,
-        currentLessonId: expectedLessons.get(s.id)?.id ?? s.current_lesson_id,
-        currentLevelId: expectedLessons.get(s.id)?.level_id ?? s.current_level_id,
+        currentLessonId: expectedLessons.has(s.id) ? expectedLessons.get(s.id)?.id ?? null : s.current_lesson_id,
+        currentLevelId: expectedLessons.has(s.id) ? expectedLessons.get(s.id)?.level_id ?? s.current_level_id : s.current_level_id,
       })),
     [selectedRoster, expectedLessons],
   )
@@ -425,7 +434,7 @@ export default function Register() {
         </div>
       )}
 
-      <LessonsToday roster={roster.map((s) => ({ ...s, expectedLesson: expectedLessons.get(s.id) ?? null }))} levels={levels} />
+      <LessonsToday roster={roster.map((s) => ({ ...s, expectedLesson: expectedLessons.get(s.id) }))} levels={levels} />
 
       {roster.length === 0 ? (
         <EmptyState
@@ -447,7 +456,7 @@ export default function Register() {
                       .filter((f) => f.attended_session_id)
                       .map((f) => [f.attended_session_id as string, f]),
                   )
-                  const expected = expectedLessons.get(s.id) ?? null
+                  const expected = expectedLessons.get(s.id)
                   return (
                     <div key={s.id} className="p-3 sm:p-4 flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-start gap-3">
