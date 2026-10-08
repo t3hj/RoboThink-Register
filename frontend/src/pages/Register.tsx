@@ -19,7 +19,13 @@ import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
 import { registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
 import { resolveFeedbackTarget } from '../lib/bulkActions'
 import { useCentres } from '../lib/centres'
-import { resolveExpectedLesson, type CompletedLesson } from '../lib/expectedLesson'
+import {
+  buildProgressionAttempts,
+  completedLessonDates,
+  resolveExpectedLesson,
+  type ProgressionOverrideCheckpoint,
+  type ProgressionAttempt,
+} from '../lib/expectedLesson'
 import type {
   Attendance,
   AttendedSession,
@@ -39,10 +45,10 @@ interface RosterEntry extends Student {
   feedback: FeedbackSheet | null
   sessionsToday: AttendedSession[]
   mostRecentSession: AttendedSession | null
-  previouslyCompleted: Map<number, Map<number, string>>
-  /** Every COMPLETED lesson the student has a lesson_records row for — the
-   *  recorded history the expected lesson is derived from. */
-  completedHistory: CompletedLesson[]
+  /** All attempts from the session ledger and unlinked legacy lesson records. */
+  lessonRecords: LessonRecord[]
+  sessionHistory: AttendedSession[]
+  progressionOverrides: ProgressionOverrideCheckpoint[]
 }
 
 export default function Register() {
@@ -127,10 +133,11 @@ export default function Register() {
     let feedbackSheets: FeedbackSheet[] = []
     let sessionsForDate: AttendedSession[] = []
     let recentSessions: AttendedSession[] = []
-    let completedLessons: LessonRecord[] = []
+    let lessonRecords: LessonRecord[] = []
+    let progressionOverrides: (ProgressionOverrideCheckpoint & { student_id: string })[] = []
 
     if (ids.length) {
-      const [progRes, planRes, feedbackRes, sessionsRes, recentRes, completedRes] = await Promise.all([
+      const [progRes, planRes, feedbackRes, sessionsRes, recentRes, lessonRecordsRes, overridesRes] = await Promise.all([
         supabase.from('student_progress').select('*').in('student_id', ids),
         supabase
           .from('remediation_plans')
@@ -146,24 +153,33 @@ export default function Register() {
         // register must reflect what's already saved, never create new
         // ones just by opening the page.
         supabase.from('attended_sessions').select('*').eq('date', forDate).in('student_id', ids),
-        // Each student's most recent session overall (any date), to drive
-        // the "build left aside" reminder regardless of which day they
-        // next appear on.
+        // All sessions, across all dates, are the per-occurrence progression
+        // ledger. The selected Register date must never limit lesson history.
         supabase
           .from('attended_sessions')
           .select('*')
           .in('student_id', ids)
           .order('date', { ascending: false })
           .order('session_number', { ascending: false }),
-        supabase.from('lesson_records').select('*').in('student_id', ids).eq('status', 'completed'),
+        // lesson_records is unique per student/level/lesson, not an attempt
+        // ledger. Load both statuses for legacy SQL-backfilled attempts which
+        // have no corresponding attended_sessions row.
+        supabase.from('lesson_records').select('*').in('student_id', ids),
+        // Explicit staff progression changes are history checkpoints.
+        supabase
+          .from('progress_overrides')
+          .select('student_id,new_level_id,new_lesson,created_at')
+          .in('student_id', ids)
+          .order('created_at', { ascending: false }),
       ])
       if (progRes.error) {
         setError(progRes.error.message)
         setLoading(false)
         return
       }
-      if (completedRes.error) {
-        setError(completedRes.error.message)
+      const progressionError = recentRes.error ?? lessonRecordsRes.error ?? overridesRes.error
+      if (progressionError) {
+        setError(progressionError.message)
         setLoading(false)
         return
       }
@@ -172,7 +188,8 @@ export default function Register() {
       feedbackSheets = (feedbackRes.data ?? []) as FeedbackSheet[]
       sessionsForDate = (sessionsRes.data ?? []) as AttendedSession[]
       recentSessions = (recentRes.data ?? []) as AttendedSession[]
-      completedLessons = (completedRes.data ?? []) as LessonRecord[]
+      lessonRecords = (lessonRecordsRes.data ?? []) as LessonRecord[]
+      progressionOverrides = (overridesRes.data ?? []) as (ProgressionOverrideCheckpoint & { student_id: string })[]
     }
 
     const progMap = new Map(progress.map((p) => [p.student_id, p]))
@@ -191,17 +208,15 @@ export default function Register() {
     for (const s of recentSessions) {
       if (!mostRecentByStudent.has(s.student_id)) mostRecentByStudent.set(s.student_id, s)
     }
-    const completedByStudent = new Map<string, Map<number, Map<number, string>>>()
-    const completedHistoryByStudent = new Map<string, CompletedLesson[]>()
-    for (const lr of completedLessons) {
-      const m = completedByStudent.get(lr.student_id) ?? new Map<number, Map<number, string>>()
-      const byLevel = m.get(lr.level_id) ?? new Map<number, string>()
-      byLevel.set(lr.lesson_number, lr.date)
-      m.set(lr.level_id, byLevel)
-      completedByStudent.set(lr.student_id, m)
-      completedHistoryByStudent.set(lr.student_id, [
-        ...(completedHistoryByStudent.get(lr.student_id) ?? []),
-        { level_id: lr.level_id, lesson_number: lr.lesson_number },
+    const lessonRecordsByStudent = new Map<string, LessonRecord[]>()
+    for (const lr of lessonRecords) {
+      lessonRecordsByStudent.set(lr.student_id, [...(lessonRecordsByStudent.get(lr.student_id) ?? []), lr])
+    }
+    const overridesByStudent = new Map<string, ProgressionOverrideCheckpoint[]>()
+    for (const override of progressionOverrides) {
+      overridesByStudent.set(override.student_id, [
+        ...(overridesByStudent.get(override.student_id) ?? []),
+        { new_level_id: override.new_level_id, new_lesson: override.new_lesson, created_at: override.created_at },
       ])
     }
 
@@ -213,8 +228,9 @@ export default function Register() {
       feedback: findOutstandingFeedback(feedbackByStudentMap.get(s.id) ?? []),
       sessionsToday: sessionsByStudent.get(s.id) ?? [],
       mostRecentSession: mostRecentByStudent.get(s.id) ?? null,
-      previouslyCompleted: completedByStudent.get(s.id) ?? new Map(),
-      completedHistory: completedHistoryByStudent.get(s.id) ?? [],
+      lessonRecords: lessonRecordsByStudent.get(s.id) ?? [],
+      sessionHistory: recentSessions.filter((session) => session.student_id === s.id),
+      progressionOverrides: overridesByStudent.get(s.id) ?? [],
     }))
 
     entries.sort((a, b) => {
@@ -246,30 +262,46 @@ export default function Register() {
 
   const selectedRoster = useMemo(() => roster.filter((s) => selected.has(s.id)), [roster, selected])
 
-  // The lesson each student is expected to do next, derived from their recorded
-  // history rather than the stored current-lesson pointer (which backfilled or
-  // imported session history never advanced). Computed here, not in the roster
-  // query, because it needs the curriculum — loaded separately. A missing map
-  // entry means to keep the stored current lesson (special state or no relevant
-  // history); a null entry means history is authoritative but no next lesson
-  // could be resolved, so the stale stored pointer must not be reused.
+  // Derive one recommendation from the full dated attempt history, independent
+  // of the selected Register date, then pass that same value to the summary and
+  // session row. History replaces the stored pointer for normal progression;
+  // all other states use that same stored pointer in both sections.
+  const progressionAttemptsByStudent = useMemo(() => {
+    const byStudent = new Map<string, ProgressionAttempt[]>()
+    for (const s of roster) {
+      byStudent.set(s.id, buildProgressionAttempts(s.sessionHistory, s.lessonRecords, lessons))
+    }
+    return byStudent
+  }, [roster, lessons])
+
+  const previouslyCompletedByStudent = useMemo(() => {
+    const byStudent = new Map<string, Map<number, Map<number, string>>>()
+    for (const [studentId, attempts] of progressionAttemptsByStudent) {
+      byStudent.set(studentId, completedLessonDates(attempts))
+    }
+    return byStudent
+  }, [progressionAttemptsByStudent])
+
   const expectedLessons = useMemo(() => {
     const byStudent = new Map<string, Lesson | null>()
+    const lessonById = new Map(lessons.map((lesson) => [lesson.id, lesson]))
     for (const s of roster) {
       const resolution = resolveExpectedLesson(
         {
           currentLevelId: s.current_level_id,
           currentKind: s.progress?.current_kind ?? null,
           overrideNextLesson: s.override_next_lesson,
-          completed: s.completedHistory,
+          attempts: progressionAttemptsByStudent.get(s.id) ?? [],
+          progressionOverrides: s.progressionOverrides,
         },
         levels,
         lessons,
       )
-      if (resolution.source === 'history') byStudent.set(s.id, resolution.lesson)
+      const storedLesson = s.current_lesson_id ? lessonById.get(s.current_lesson_id) ?? null : null
+      byStudent.set(s.id, resolution.source === 'history' ? resolution.lesson : storedLesson)
     }
     return byStudent
-  }, [roster, levels, lessons])
+  }, [roster, levels, lessons, progressionAttemptsByStudent])
 
   const attendanceCandidates = useMemo(
     () => selectedRoster.map((s) => ({ id: s.id, full_name: s.full_name, status: s.attendance?.status, sessionCount: s.sessionsToday.length })),
@@ -497,7 +529,7 @@ export default function Register() {
                         sessionsToday={s.sessionsToday}
                         feedbackBySessionId={sessionFeedbackMap}
                         expectedLesson={expected}
-                        previouslyCompleted={s.previouslyCompleted}
+                        previouslyCompleted={previouslyCompletedByStudent.get(s.id) ?? new Map()}
                         onChanged={() => void loadRoster(date)}
                       />
 

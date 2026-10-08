@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { deriveExpectedLesson, nextLessonAfter, resolveExpectedLesson, type CompletedLesson } from '../src/lib/expectedLesson'
+import {
+  buildProgressionAttempts,
+  completedLessonDates,
+  deriveExpectedLesson,
+  nextLessonAfter,
+  resolveExpectedLesson,
+  sessionRecommendedLesson,
+  type ExpectedLessonInput,
+  type ProgressionAttempt,
+} from '../src/lib/expectedLesson'
+import { groupLessonsToday } from '../src/lib/lessonsToday'
+import type { AttendedSession, LessonRecord } from '../src/types'
 
-// Curriculum shape mirrors the live levels/lessons naming convention.
 const levels = [
   { id: 1, slug: 'junior-term-1', name: 'Junior Engineer - Term 1', sort_order: 10 },
   { id: 7, slug: 'engineer-term-1', name: 'Engineer - Term 1', sort_order: 70 },
@@ -13,235 +23,332 @@ const levels = [
 
 function lessonsFor(levelId: number, count: number) {
   return Array.from({ length: count }, (_, i) => ({
-    id: `L${levelId}-${i + 1}`,
+    id: 'L' + levelId + '-' + (i + 1),
     level_id: levelId,
     lesson_number: i + 1,
-    title: `Level ${levelId} Lesson ${i + 1}`,
+    title: 'Level ' + levelId + ' Lesson ' + (i + 1),
+    lesson_kind: 'normal' as const,
   }))
 }
 
 const lessons = [...lessonsFor(1, 12), ...lessonsFor(7, 12), ...lessonsFor(8, 12), ...lessonsFor(9, 12), ...lessonsFor(17, 12), ...lessonsFor(30, 4)]
 
-function completed(levelId: number, upTo: number): CompletedLesson[] {
-  return Array.from({ length: upTo }, (_, i) => ({ level_id: levelId, lesson_number: i + 1 }))
+function attempt(
+  level_id: number,
+  lesson_number: number,
+  outcome: 'completed' | 'not_finished',
+  date: string,
+  session_number = 1,
+  source_id = level_id + '-' + lesson_number + '-' + date + '-' + session_number,
+): ProgressionAttempt {
+  return { level_id, lesson_number, outcome, date, session_number, created_at: date + 'T10:00:00Z', source_id }
 }
 
-describe('nextLessonAfter — term-aware curriculum progression', () => {
-  it('advances within the same level', () => {
+function input(attempts: ProgressionAttempt[], extra: Partial<ExpectedLessonInput> = {}): ExpectedLessonInput {
+  return {
+    currentLevelId: 8,
+    currentKind: 'normal',
+    overrideNextLesson: null,
+    attempts,
+    ...extra,
+  }
+}
+
+function wanted(expected: { level_id: number; lesson_number: number } | null) {
+  return expected ? [expected.level_id, expected.lesson_number] : null
+}
+
+describe('nextLessonAfter — curriculum boundaries and tracks', () => {
+  it('advances within a level', () => {
     expect(nextLessonAfter(8, 5, levels, lessons)?.lesson_number).toBe(6)
   })
-  it('rolls over to lesson 1 of the next term at the end of a term', () => {
-    const next = nextLessonAfter(8, 12, levels, lessons)
-    expect(next?.level_id).toBe(9)
-    expect(next?.lesson_number).toBe(1)
+
+  it('rolls the final term lesson into the next term Lesson 1', () => {
+    expect(wanted(nextLessonAfter(8, 12, levels, lessons))).toEqual([9, 1])
   })
-  it('keeps the coding track separate from the main programme', () => {
-    const next = nextLessonAfter(30, 2, levels, lessons)
-    expect(next?.level_id).toBe(30)
-    expect(next?.lesson_number).toBe(3)
+
+  it('keeps coding separate from the main curriculum', () => {
+    expect(nextLessonAfter(30, 2, levels, lessons)?.level_id).toBe(30)
+    expect(nextLessonAfter(30, 2, levels, lessons)?.lesson_number).toBe(3)
   })
-  it('returns null after the last lesson of the last level', () => {
+
+  it('returns null after the last curriculum lesson', () => {
     expect(nextLessonAfter(17, 12, levels, lessons)).toBeNull()
   })
 })
 
-describe('deriveExpectedLesson — derived from the recorded history, not the stored pointer', () => {
-  it('backfilled history: Lesson 5 completed, so the next session defaults to Lesson 6', () => {
-    // The stored pointer was never advanced past 5 by the backfill.
-    const expected = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 5) },
-      levels,
-      lessons,
-    )
-    expect(expected?.level_id).toBe(8)
-    expect(expected?.lesson_number).toBe(6)
-  })
+describe('buildProgressionAttempts — combines the history sources without double counting', () => {
+  const sessions: AttendedSession[] = [
+    {
+      id: 'session-linked', student_id: 'student', date: '2026-01-02', session_number: 1,
+      actual_lesson_id: 'L8-6', outcome: 'not_finished', lesson_record_id: 'record-linked',
+      instructor_id: null, created_at: '2026-01-02T10:00:00Z', left_aside: false,
+      left_aside_identifier: null, left_aside_reason: null, left_aside_note: null,
+    },
+    {
+      id: 'session-unlinked', student_id: 'student', date: '2026-01-03', session_number: 1,
+      actual_lesson_id: 'L8-6', outcome: 'completed', lesson_record_id: null,
+      instructor_id: null, created_at: '2026-01-03T10:00:00Z', left_aside: false,
+      left_aside_identifier: null, left_aside_reason: null, left_aside_note: null,
+    },
+    {
+      id: 'assessment-session', student_id: 'student', date: '2026-01-04', session_number: 1,
+      actual_lesson_id: 'A8-1', outcome: 'completed', lesson_record_id: null,
+      instructor_id: null, created_at: '2026-01-04T10:00:00Z', left_aside: false,
+      left_aside_identifier: null, left_aside_reason: null, left_aside_note: null,
+    },
+  ]
+  const records: LessonRecord[] = [
+    {
+      id: 'record-linked', student_id: 'student', level_id: 8, lesson_number: 5, lesson_id: 'L8-5',
+      date: '2026-01-02', instructor_id: null, status: 'completed', notes: null,
+      assessment_result: null, created_at: '2026-01-02T10:00:00Z',
+    },
+    {
+      id: 'record-orphan', student_id: 'student', level_id: 8, lesson_number: 7, lesson_id: 'L8-7',
+      date: '2026-01-05', instructor_id: null, status: 'not_completed', notes: null,
+      assessment_result: null, created_at: '2026-01-05T10:00:00Z',
+    },
+  ]
+  const curriculum = [
+    ...lessons,
+    { id: 'A8-1', level_id: 8, lesson_number: 99, title: 'Assessment', lesson_kind: 'assessment' as const },
+  ]
 
-  it('is not limited to one lesson — a longer backfill lands on the lesson after the latest completed one', () => {
-    const expected = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 9) },
-      levels,
-      lessons,
-    )
-    expect(expected?.lesson_number).toBe(10)
-  })
-
-  it('a repeated lesson does not advance (repeats share the one completed row)', () => {
-    // Repeating lesson 5 leaves exactly one completed row for lesson 5.
-    const expected = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 5) },
-      levels,
-      lessons,
-    )
-    expect(expected?.lesson_number).toBe(6)
-  })
-
-  it('a "not finished" lesson never advances — only COMPLETED records count', () => {
-    // Lesson 5 was attempted and left not-finished, so it is not part of the
-    // completed history and stays the lesson the student is expected to do.
-    const expected = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 4) },
-      levels,
-      lessons,
-    )
-    expect(expected?.lesson_number).toBe(5)
-  })
-
-  it('a catch-up session on an earlier lesson does not skip forward', () => {
-    // Completed 1..7, then a catch-up re-did lesson 3 (same row, still one entry).
-    const expected = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 7) },
-      levels,
-      lessons,
-    )
-    expect(expected?.lesson_number).toBe(8)
-  })
-
-  it('rolls into the next term when the last lesson of a term is the latest completed one', () => {
-    const expected = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 12) },
-      levels,
-      lessons,
-    )
-    expect(expected?.level_id).toBe(9)
-    expect(expected?.lesson_number).toBe(1)
-  })
-
-  it('reproduces a stale pointer after a backfill: completed Lesson 12 means the next term, Lesson 1', () => {
-    // This mirrors the live history shape: the stored pointer still names
-    // Lesson 12, but that level's completed record proves it is already done.
-    const expected = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 12) },
-      levels,
-      lessons,
-    )
-    expect([expected?.level_id, expected?.lesson_number]).toEqual([9, 1])
-  })
-
-  it('recommends Lesson 12 after Lesson 11, then advances past Lesson 12 once it is completed', () => {
-    const afterLesson11 = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 11) },
-      levels,
-      lessons,
-    )
-    const afterLesson12 = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 12) },
-      levels,
-      lessons,
-    )
-
-    expect([afterLesson11?.level_id, afterLesson11?.lesson_number]).toEqual([8, 12])
-    expect([afterLesson12?.level_id, afterLesson12?.lesson_number]).toEqual([9, 1])
-  })
-
-  it('keeps the stored current lesson while an assessment or remediation is pending', () => {
-    for (const kind of ['assessment', 'remediation', 'complete'] as const) {
-      expect(
-        deriveExpectedLesson(
-          { currentLevelId: 8, currentKind: kind, overrideNextLesson: null, completed: completed(8, 5) },
-          levels,
-          lessons,
-        ),
-      ).toBeNull()
-    }
-  })
-
-  it('honours an explicit override that is ahead of the history', () => {
-    const expected = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: 9, completed: completed(8, 5) },
-      levels,
-      lessons,
-    )
-    expect(expected?.lesson_number).toBe(9)
-  })
-
-  it('ignores an override that is not ahead of the history', () => {
-    const expected = deriveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: 3, completed: completed(8, 5) },
-      levels,
-      lessons,
-    )
-    expect(expected?.lesson_number).toBe(6)
-  })
-
-  it('falls back to the stored current lesson when there is no completed history in the level', () => {
-    expect(
-      deriveExpectedLesson(
-        { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: [] },
-        levels,
-        lessons,
-      ),
-    ).toBeNull()
-  })
-
-  it('ignores completed history from a different level', () => {
-    expect(
-      deriveExpectedLesson(
-        { currentLevelId: 9, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 12) },
-        levels,
-        lessons,
-      ),
-    ).toBeNull()
-  })
-
-  it('returns null with no current level', () => {
-    expect(
-      deriveExpectedLesson(
-        { currentLevelId: null, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 5) },
-        levels,
-        lessons,
-      ),
-    ).toBeNull()
+  it('uses the linked session occurrence (actual lesson and outcome), includes unlinked legacy attempts, and excludes assessment lessons', () => {
+    const attempts = buildProgressionAttempts(sessions, records, curriculum)
+    expect(attempts.map((row) => [row.level_id, row.lesson_number, row.outcome])).toEqual([
+      [8, 6, 'not_finished'],
+      [8, 6, 'completed'],
+      [8, 7, 'not_finished'],
+    ])
   })
 })
 
-describe('deriveExpectedLesson — several students with different progression histories', () => {
-  it('each next scheduled session shows the lesson following that student\'s latest completed lesson', () => {
-    const roster = [
-      { name: 'Backfilled to L5', input: { currentLevelId: 8, currentKind: 'normal' as const, overrideNextLesson: null, completed: completed(8, 5) }, want: [8, 6] },
-      { name: 'Backfilled across a term boundary', input: { currentLevelId: 8, currentKind: 'normal' as const, overrideNextLesson: null, completed: completed(8, 12) }, want: [9, 1] },
-      { name: 'Fresh student, no history', input: { currentLevelId: 7, currentKind: 'normal' as const, overrideNextLesson: null, completed: [] }, want: null },
-      { name: 'Up to date, mid-term', input: { currentLevelId: 7, currentKind: 'normal' as const, overrideNextLesson: null, completed: completed(7, 4) }, want: [7, 5] },
-      { name: 'Repeat in progress', input: { currentLevelId: 8, currentKind: 'normal' as const, overrideNextLesson: null, completed: completed(8, 6) }, want: [8, 7] },
-      { name: 'Assessment pending', input: { currentLevelId: 9, currentKind: 'assessment' as const, overrideNextLesson: null, completed: completed(9, 3) }, want: null },
+describe('completedLessonDates — session-row repeat warning follows occurrence history', () => {
+  it('retains an earlier completion when the unique lesson_records row was overwritten by not-finished', () => {
+    const dates = completedLessonDates([
+      attempt(8, 11, 'completed', '2026-01-01'),
+      attempt(8, 11, 'not_finished', '2026-01-08'),
+    ])
+    expect(dates.get(8)?.get(11)).toBe('2026-01-01')
+  })
+})
+
+describe('deriveExpectedLesson — ordered progression from actual session history', () => {
+  it('Lesson 11 completed recommends Lesson 12', () => {
+    expect(wanted(deriveExpectedLesson(input([attempt(8, 11, 'completed', '2026-01-01')]), levels, lessons))).toEqual([8, 12])
+  })
+
+  it('Lesson 12 completed recommends the next curriculum lesson', () => {
+    const longLevelLessons = [...lessons, ...lessonsFor(8, 13).slice(12)]
+    expect(wanted(deriveExpectedLesson(input([attempt(8, 12, 'completed', '2026-01-01')]), levels, longLevelLessons))).toEqual([8, 13])
+  })
+
+  it('Lesson 12 completed at the actual term boundary recommends next term Lesson 1', () => {
+    expect(wanted(deriveExpectedLesson(input([attempt(8, 12, 'completed', '2026-01-01')]), levels, lessons))).toEqual([9, 1])
+  })
+
+  it('Lesson 11 not finished repeats Lesson 11 after completed Lesson 10', () => {
+    const history = [
+      attempt(8, 10, 'completed', '2026-01-01'),
+      attempt(8, 11, 'not_finished', '2026-01-08'),
     ]
+    expect(wanted(deriveExpectedLesson(input(history), levels, lessons))).toEqual([8, 11])
+  })
 
-    for (const student of roster) {
-      const expected = deriveExpectedLesson(student.input, levels, lessons)
-      if (student.want == null) {
-        expect(expected, student.name).toBeNull()
-      } else {
-        expect([expected?.level_id, expected?.lesson_number], student.name).toEqual(student.want)
-      }
+  it('a completed repeat of Lesson 11 does not regress a student already due Lesson 12', () => {
+    const history = [
+      attempt(8, 11, 'completed', '2026-01-01'),
+      attempt(8, 11, 'completed', '2026-01-08'),
+    ]
+    expect(wanted(deriveExpectedLesson(input(history), levels, lessons))).toEqual([8, 12])
+  })
+
+  it('catch-up completion of the lesson currently due advances exactly one lesson', () => {
+    const history = [
+      attempt(8, 11, 'completed', '2026-01-01'),
+      attempt(8, 12, 'completed', '2026-01-08'),
+    ]
+    expect(wanted(deriveExpectedLesson(input(history), levels, lessons))).toEqual([9, 1])
+  })
+
+  it('an earlier catch-up or repeat cannot advance or rewind progression', () => {
+    const history = [
+      attempt(8, 11, 'completed', '2026-01-01'),
+      attempt(8, 10, 'completed', '2026-01-08'),
+    ]
+    expect(wanted(deriveExpectedLesson(input(history), levels, lessons))).toEqual([8, 12])
+  })
+
+  it('matches the progression RPC when a completed lesson at or beyond the cursor is recorded', () => {
+    const longLevelLessons = [...lessons, ...lessonsFor(8, 13).slice(12), ...lessonsFor(8, 14).slice(13)]
+    const history = [
+      attempt(8, 11, 'completed', '2026-01-01'),
+      attempt(8, 13, 'completed', '2026-01-08'),
+    ]
+    expect(wanted(deriveExpectedLesson(input(history), levels, longLevelLessons))).toEqual([8, 14])
+  })
+
+  it('uses the most recent outcome and ignores the selected future Register date', () => {
+    const history = [
+      attempt(8, 11, 'completed', '2026-01-05'),
+      attempt(8, 12, 'not_finished', '2026-01-06'),
+    ]
+    const futureRegisterRecommendation = deriveExpectedLesson(input(history), levels, lessons)
+    const laterFutureRegisterRecommendation = deriveExpectedLesson(input(history), levels, lessons)
+    expect(wanted(futureRegisterRecommendation)).toEqual([8, 12])
+    expect(wanted(laterFutureRegisterRecommendation)).toEqual([8, 12])
+  })
+
+  it('completion on the next attendance advances the following recommendation', () => {
+    const after11 = deriveExpectedLesson(input([attempt(8, 11, 'completed', '2026-01-05')]), levels, lessons)
+    const after12 = deriveExpectedLesson(
+      input([
+        attempt(8, 11, 'completed', '2026-01-05'),
+        attempt(8, 12, 'completed', '2026-01-12'),
+      ]),
+      levels,
+      lessons,
+    )
+    expect(wanted(after11)).toEqual([8, 12])
+    expect(wanted(after12)).toEqual([9, 1])
+  })
+
+  it('does not trust a stale stored current lesson when session history advances further', () => {
+    const staleStoredLesson = lessons.find((lesson) => lesson.id === 'L8-11')
+    const resolution = resolveExpectedLesson(input([attempt(8, 11, 'completed', '2026-01-01')]), levels, lessons)
+    expect(staleStoredLesson?.lesson_number).toBe(11)
+    expect(resolution.source).toBe('history')
+    expect(wanted(resolution.lesson)).toEqual([8, 12])
+  })
+
+  it('uses a manual progression override as a checkpoint and applies later attempts from that point', () => {
+    const history = [
+      attempt(8, 5, 'completed', '2026-01-01'),
+      { ...attempt(8, 8, 'completed', '2026-01-10'), created_at: '2026-01-10T10:00:00Z' },
+    ]
+    const resolution = resolveExpectedLesson(
+      input(history, {
+        progressionOverrides: [{ new_level_id: 8, new_lesson: 8, created_at: '2026-01-05T10:00:00Z' }],
+      }),
+      levels,
+      lessons,
+    )
+    expect(wanted(resolution.source === 'history' ? resolution.lesson : null)).toEqual([8, 9])
+  })
+
+  it('uses the numeric explicit override when history is absent', () => {
+    const resolution = resolveExpectedLesson(input([], { overrideNextLesson: 9 }), levels, lessons)
+    expect(wanted(resolution.source === 'history' ? resolution.lesson : null)).toEqual([8, 9])
+  })
+
+  it('does not let completed history from coding advance the main curriculum', () => {
+    expect(wanted(deriveExpectedLesson(input([attempt(30, 3, 'completed', '2026-01-01')]), levels, lessons))).toBeNull()
+  })
+
+  it('preserves the stored progression state for assessment, remediation, and completed students', () => {
+    for (const kind of ['assessment', 'remediation', 'complete'] as const) {
+      expect(resolveExpectedLesson(input([attempt(8, 11, 'completed', '2026-01-01')], { currentKind: kind }), levels, lessons))
+        .toEqual({ source: 'stored' })
     }
+  })
+
+  it('falls back to the stored current lesson when there is no relevant history or override', () => {
+    expect(resolveExpectedLesson(input([]), levels, lessons)).toEqual({ source: 'stored' })
+  })
+
+  it('keeps history authoritative when curriculum data cannot resolve its next step', () => {
+    expect(resolveExpectedLesson(input([attempt(17, 12, 'completed', '2026-01-01')], { currentLevelId: 17 }), levels, lessons))
+      .toEqual({ source: 'history', lesson: null })
   })
 })
 
-describe('resolveExpectedLesson — explicit history vs stored-pointer fallback', () => {
-  it('does not fall back to a stale completed pointer while curriculum data is unavailable', () => {
-    const resolution = resolveExpectedLesson(
-      { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(8, 12) },
-      [],
-      [],
+describe('Register recommendation consistency', () => {
+  it('shows the same history-derived lesson in LessonsToday and SessionEntryRow defaults', () => {
+    const result = resolveExpectedLesson(input([attempt(8, 11, 'completed', '2026-01-01')]), levels, lessons)
+    expect(result.source).toBe('history')
+    if (result.source !== 'history') return
+
+    const topSection = groupLessonsToday(
+      [{
+        id: 'student',
+        full_name: 'Student',
+        progress: { current_level_id: 8, current_lesson_number: 11, current_lesson_title: 'Old pointer', level_name: 'Engineer - Term 2' },
+        expectedLesson: result.lesson,
+      }],
+      levels,
     )
-    expect(resolution).toEqual({ source: 'history', lesson: null })
+    const sessionRowDefault = sessionRecommendedLesson(result.lesson, lessons.find((lesson) => lesson.id === 'L8-11') ?? null)
+    expect(topSection[0].groups[0].lessonNumber).toBe(12)
+    expect(sessionRowDefault?.lesson_number).toBe(topSection[0].groups[0].lessonNumber)
   })
 
-  it('uses the stored pointer for a normal student with no relevant completed history', () => {
-    expect(
-      resolveExpectedLesson(
-        { currentLevelId: 8, currentKind: 'normal', overrideNextLesson: null, completed: completed(7, 12) },
-        levels,
-        lessons,
-      ),
-    ).toEqual({ source: 'stored' })
+  it('shows the same repeat lesson after a not-finished session', () => {
+    const result = resolveExpectedLesson(
+      input([attempt(8, 10, 'completed', '2026-01-01'), attempt(8, 11, 'not_finished', '2026-01-08')]),
+      levels,
+      lessons,
+    )
+    expect(result.source).toBe('history')
+    if (result.source !== 'history') return
+    const topSection = groupLessonsToday(
+      [{
+        id: 'student',
+        full_name: 'Student',
+        progress: { current_level_id: 8, current_lesson_number: 12, current_lesson_title: 'Stale pointer', level_name: 'Engineer - Term 2' },
+        expectedLesson: result.lesson,
+      }],
+      levels,
+    )
+    expect(topSection[0].groups[0].lessonNumber).toBe(11)
+    expect(sessionRecommendedLesson(result.lesson, lessons.find((lesson) => lesson.id === 'L8-12') ?? null)?.lesson_number)
+      .toBe(topSection[0].groups[0].lessonNumber)
   })
 
-  it('preserves stored-pointer behavior while assessment or remediation is active', () => {
-    for (const currentKind of ['assessment', 'remediation', 'complete'] as const) {
-      expect(
-        resolveExpectedLesson({ currentLevelId: 8, currentKind, overrideNextLesson: null, completed: completed(8, 12) }, levels, lessons),
-      ).toEqual({ source: 'stored' })
-    }
+  it('a catch-up Register still recommends the next normal lesson due', () => {
+    const result = resolveExpectedLesson(input([attempt(8, 11, 'completed', '2026-01-01')]), levels, lessons)
+    expect(result.source).toBe('history')
+    if (result.source !== 'history') return
+    const catchUpRoster = groupLessonsToday(
+      [{
+        id: 'student',
+        full_name: 'Student',
+        progress: { current_level_id: 8, current_lesson_number: 11, current_lesson_title: 'Old pointer', level_name: 'Engineer - Term 2' },
+        expectedLesson: result.lesson,
+      }],
+      levels,
+    )
+    expect(catchUpRoster[0].groups[0].lessonNumber).toBe(12)
+    expect(sessionRecommendedLesson(result.lesson, null)?.lesson_number).toBe(12)
+  })
+
+  it('keeps the main curriculum and coding track separate when resolving real histories', () => {
+    const result = deriveExpectedLesson(
+      input([attempt(8, 11, 'completed', '2026-01-01'), attempt(30, 2, 'completed', '2026-01-02')]),
+      levels,
+      lessons,
+    )
+    expect(wanted(result)).toEqual([8, 12])
+  })
+
+  it('uses one stored-pointer fallback for both sections when history is not authoritative', () => {
+    const stored = lessons.find((lesson) => lesson.id === 'L8-5') ?? null
+    const resolution = resolveExpectedLesson(input([], { currentKind: 'remediation' }), levels, lessons)
+    expect(resolution).toEqual({ source: 'stored' })
+
+    const sharedLesson = resolution.source === 'history' ? resolution.lesson : stored
+    const topSection = groupLessonsToday(
+      [{
+        id: 'student',
+        full_name: 'Student',
+        progress: { current_level_id: 8, current_lesson_number: 6, current_lesson_title: 'Different view value', level_name: 'Engineer - Term 2' },
+        expectedLesson: sharedLesson,
+      }],
+      levels,
+    )
+    const sessionRowDefault = sessionRecommendedLesson(sharedLesson, stored)
+    expect(topSection[0].groups[0].lessonNumber).toBe(5)
+    expect(sessionRowDefault?.lesson_number).toBe(topSection[0].groups[0].lessonNumber)
   })
 })

@@ -24,9 +24,8 @@ export interface ProgrammeGroup {
   groups: LessonGroup[]
 }
 
-/** Groups today's roster by the lesson each student is expected to do next —
- *  the history-derived `expectedLesson` when the roster supplies one (the
- *  student's latest completed lesson plus the next step in their curriculum),
+/** Groups the selected-date roster by the lesson each student is expected to
+ *  do next — the attempt-history-derived `expectedLesson` when supplied,
  *  otherwise the stored current lesson from student_progress — then nests those
  *  groups under their programme in curriculum order (sort_order), lesson
  *  number, then student name. */

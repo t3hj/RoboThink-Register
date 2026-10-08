@@ -5,6 +5,7 @@ import { useToast } from './Toast'
 import { BusyButton } from './ui'
 import FeedbackControl from './FeedbackControl'
 import { levelLabel } from '../lib/curriculum'
+import { sessionRecommendedLesson } from '../lib/expectedLesson'
 import {
   NOT_FINISHED_REASONS,
   attendanceState,
@@ -70,11 +71,10 @@ export default function SessionEntryRow({
 
   const state: RegisterAttendanceState = attendanceState(attendance?.status)
   const lessonById = useMemo(() => new Map(lessons.map((l) => [l.id, l])), [lessons])
-  // The lesson this session should default to: the history-derived expected
-  // lesson when the register supplies one, otherwise the stored current lesson.
-  const recommendedLesson = expectedLesson === undefined
-    ? (student.current_lesson_id ? lessonById.get(student.current_lesson_id) ?? null : null)
-    : expectedLesson
+  // The same history-derived lesson shown in LessonsToday, with the stored
+  // current lesson used only when progression has no applicable history.
+  const storedLesson = student.current_lesson_id ? lessonById.get(student.current_lesson_id) ?? null : null
+  const recommendedLesson = sessionRecommendedLesson(expectedLesson, storedLesson)
   const currentLevelId = recommendedLesson?.level_id ?? student.current_level_id
   const currentLevel = levels.find((l) => l.id === currentLevelId) ?? null
   const lessonsInLevel = useMemo(
