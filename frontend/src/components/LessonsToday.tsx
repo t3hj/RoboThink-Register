@@ -1,11 +1,14 @@
 import { Link } from 'react-router-dom'
-import type { Level, StudentProgress } from '../types'
+import type { Lesson, Level, StudentProgress } from '../types'
 import { groupLessonsToday } from '../lib/lessonsToday'
 
 interface RosterLike {
   id: string
   full_name: string
   progress: StudentProgress | null
+  /** History-derived lesson for the student's next session; preferred over
+   *  progress.current_lesson_number when present. */
+  expectedLesson?: Pick<Lesson, 'level_id' | 'lesson_number' | 'title'> | null
 }
 
 /** Prominent "Lessons to be done today" panel so instructors can pull the

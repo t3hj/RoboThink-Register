@@ -36,3 +36,14 @@ migrations is a manual step in the Supabase project, not part of boot.
   "Supabase is not configured" banner when credentials are present.
 - Sign-in is Supabase magic-link email auth: an account must be linked to a
   staff profile row to reach the operational pages.
+
+## Quirk: the register's "next lesson" is derived from history
+
+`students.current_lesson_id` is a denormalised pointer that only the register
+RPCs advance, so backfilled/imported session history leaves it stale. The
+Register therefore derives the lesson it shows from the student's recorded
+COMPLETED lesson history (`frontend/src/lib/expectedLesson.ts`, unit-tested in
+`frontend/tests/expectedLesson.test.ts`), keeping the stored pointer only for
+non-normal progression states (assessment/remediation/complete), an unchecked
+`override_next_lesson`, and students with no history. `frontend/tests/` is run
+with `npx vitest run` (169 tests); typecheck with `npx tsc --noEmit`.
