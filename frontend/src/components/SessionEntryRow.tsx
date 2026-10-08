@@ -26,6 +26,11 @@ interface Props {
   attendance: Attendance | null
   sessionsToday: AttendedSession[]
   feedbackBySessionId: Map<string, FeedbackSheet>
+  /** Lesson derived from the student's actual recorded history (their latest
+   *  completed lesson plus the next step in their curriculum). When present it
+   *  is the default "Recommended" lesson, in preference to the stored current
+   *  lesson — which is not advanced by backfilled/imported session history. */
+  expectedLesson?: Lesson | null
   /** Lesson numbers within the student's current level already completed
    *  before today, with the date — drives the "previously completed"
    *  warning. Keyed by lesson_number. */
@@ -55,6 +60,7 @@ export default function SessionEntryRow({
   attendance,
   sessionsToday,
   feedbackBySessionId,
+  expectedLesson,
   previouslyCompleted,
   onChanged,
 }: Props) {
@@ -66,21 +72,24 @@ export default function SessionEntryRow({
   const [lessonScope, setLessonScope] = useState<'recommended' | 'nearby' | 'all'>('recommended')
 
   const state: RegisterAttendanceState = attendanceState(attendance?.status)
-  const currentLessonId = student.current_lesson_id
-  const currentLevelId = student.current_level_id
+  const lessonById = useMemo(() => new Map(lessons.map((l) => [l.id, l])), [lessons])
+  // The lesson this session should default to: the history-derived expected
+  // lesson when the register supplies one, otherwise the stored current lesson.
+  const recommendedLesson = expectedLesson ?? (student.current_lesson_id ? lessonById.get(student.current_lesson_id) ?? null : null)
+  const currentLevelId = recommendedLesson?.level_id ?? student.current_level_id
   const currentLevel = levels.find((l) => l.id === currentLevelId) ?? null
   const lessonsInLevel = useMemo(
     () => lessons.filter((l) => l.level_id === currentLevelId && l.lesson_kind === 'normal').sort((a, b) => a.lesson_number - b.lesson_number),
     [lessons, currentLevelId],
   )
-  const lessonById = useMemo(() => new Map(lessons.map((l) => [l.id, l])), [lessons])
+  const defaultLessonId = recommendedLesson?.id ?? lessonsInLevel[0]?.id ?? ''
 
   const showBlankFormAutomatically = state === 'attended' && sessionsToday.length === 0 && !editingSessionId
   const formOpen = draft != null || showBlankFormAutomatically
-  const activeDraft: Draft | null = draft ?? (showBlankFormAutomatically ? blankDraft(currentLessonId ?? lessonsInLevel[0]?.id ?? '') : null)
+  const activeDraft: Draft | null = draft ?? (showBlankFormAutomatically ? blankDraft(defaultLessonId) : null)
 
   function startDraft() {
-    setDraft(blankDraft(currentLessonId ?? lessonsInLevel[0]?.id ?? ''))
+    setDraft(blankDraft(defaultLessonId))
     setEditingSessionId(null)
     setLessonScope('recommended')
   }
@@ -178,7 +187,6 @@ export default function SessionEntryRow({
     : null
   const showRepeatWarning = completedDate != null
 
-  const recommendedLesson = currentLessonId ? lessonById.get(currentLessonId) : null
   const nearbyNumbers = recommendedLesson ? nearbyLessonNumbers(recommendedLesson.lesson_number, lessonsInLevel.length) : []
   const nearbyLessons = lessonsInLevel.filter((l) => nearbyNumbers.includes(l.lesson_number))
 

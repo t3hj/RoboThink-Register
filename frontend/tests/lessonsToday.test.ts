@@ -93,3 +93,34 @@ describe('groupLessonsToday', () => {
     expect(before).toEqual(after)
   })
 })
+
+describe('groupLessonsToday — prefers the history-derived expected lesson', () => {
+  it('groups by the expected lesson (and its title) instead of the stored current lesson', () => {
+    const roster: LessonsTodayRosterEntry[] = [
+      {
+        id: '1',
+        full_name: 'Student A',
+        progress: { current_level_id: 8, current_lesson_number: 5, current_lesson_title: 'T2 L5', level_name: 'Engineer - Term 2' },
+        expectedLesson: { level_id: 8, lesson_number: 6, title: 'T2 L6' },
+      },
+    ]
+    const result = groupLessonsToday(roster, levels)
+    const engineer = result.find((p) => p.programme === 'Engineer')!
+    expect(engineer.groups.map((g) => `${g.levelName}:${g.lessonNumber}:${g.lessonTitle}`)).toEqual(['Engineer - Term 2:6:T2 L6'])
+  })
+
+  it('falls back to the stored current lesson when no expected lesson is supplied', () => {
+    const roster = [entry('1', 'Student A', 7, 3, 'T1 L3')]
+    const result = groupLessonsToday(roster, levels)
+    expect(result[0].groups[0].lessonNumber).toBe(3)
+  })
+
+  it('still groups a student with no progress row when an expected lesson is supplied', () => {
+    const roster: LessonsTodayRosterEntry[] = [
+      { id: '1', full_name: 'Student A', progress: null, expectedLesson: { level_id: 7, lesson_number: 4, title: 'T1 L4' } },
+    ]
+    const result = groupLessonsToday(roster, levels)
+    expect(result[0].groups[0].lessonNumber).toBe(4)
+    expect(result[0].groups[0].levelName).toBe('Engineer - Term 1')
+  })
+})

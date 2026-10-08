@@ -1,10 +1,15 @@
-import type { Level, StudentProgress } from '../types'
+import type { Lesson, Level, StudentProgress } from '../types'
 import { parseLevelName } from './curriculum'
 
 export interface LessonsTodayRosterEntry {
   id: string
   full_name: string
   progress: Pick<StudentProgress, 'current_level_id' | 'current_lesson_number' | 'current_lesson_title' | 'level_name'> | null
+  /** The lesson derived from the student's actual recorded history (see
+   *  lib/expectedLesson.ts). Preferred over the stored current lesson when
+   *  present, because the stored pointer is not advanced by backfilled or
+   *  imported session history. */
+  expectedLesson?: Pick<Lesson, 'level_id' | 'lesson_number' | 'title'> | null
 }
 
 export interface LessonGroup {
@@ -20,11 +25,12 @@ export interface ProgrammeGroup {
   groups: LessonGroup[]
 }
 
-/** Groups today's roster by (current_level_id, current_lesson_number) —
- *  always the student's real CURRENT lesson from student_progress, never
- *  derived from attendance history and never the next lesson — then nests
- *  those groups under their programme in curriculum order (sort_order),
- *  lesson number, then student name. */
+/** Groups today's roster by the lesson each student is expected to do next —
+ *  the history-derived `expectedLesson` when the roster supplies one (the
+ *  student's latest completed lesson plus the next step in their curriculum),
+ *  otherwise the stored current lesson from student_progress — then nests those
+ *  groups under their programme in curriculum order (sort_order), lesson
+ *  number, then student name. */
 export function groupLessonsToday(
   roster: LessonsTodayRosterEntry[],
   levels: Pick<Level, 'id' | 'name' | 'sort_order'>[],
@@ -34,15 +40,20 @@ export function groupLessonsToday(
 
   for (const s of roster) {
     const p = s.progress
-    if (!p || p.current_lesson_number == null || p.current_level_id == null) continue
-    const key = `${p.current_level_id}:${p.current_lesson_number}`
+    const e = s.expectedLesson
+    const levelId = e?.level_id ?? p?.current_level_id ?? null
+    const lessonNumber = e?.lesson_number ?? p?.current_lesson_number ?? null
+    if (levelId == null || lessonNumber == null) continue
+    const lessonTitle = e ? e.title?.trim() || null : p?.current_lesson_title?.trim() || null
+    const levelName = p?.level_name ?? levelById.get(levelId)?.name ?? ''
+    const key = `${levelId}:${lessonNumber}`
     let g = byKey.get(key)
     if (!g) {
       g = {
-        levelId: p.current_level_id,
-        levelName: p.level_name ?? levelById.get(p.current_level_id)?.name ?? '',
-        lessonNumber: p.current_lesson_number,
-        lessonTitle: p.current_lesson_title?.trim() || null,
+        levelId,
+        levelName,
+        lessonNumber,
+        lessonTitle,
         students: [],
       }
       byKey.set(key, g)
