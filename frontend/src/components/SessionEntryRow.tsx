@@ -6,6 +6,7 @@ import { BusyButton } from './ui'
 import FeedbackControl from './FeedbackControl'
 import { levelLabel } from '../lib/curriculum'
 import { sessionRecommendedLesson } from '../lib/expectedLesson'
+import { REMEDIATION_PATH_OPTIONS } from '../lib/assessment'
 import {
   NOT_FINISHED_REASONS,
   attendanceState,
@@ -16,7 +17,7 @@ import {
   validateLeftAside,
   type RegisterAttendanceState,
 } from '../lib/attendedSessionsUi'
-import type { Attendance, AttendedSession, FeedbackSheet, Lesson, Level, LeftAsideReason, SessionOutcome, Student } from '../types'
+import type { AssessmentResult, Attendance, AttendedSession, FeedbackSheet, Lesson, Level, LeftAsideReason, RemediationPath, RemediationPlan, SessionOutcome, Student, StudentProject } from '../types'
 
 interface Props {
   student: Student
@@ -26,6 +27,8 @@ interface Props {
   lessons: Lesson[]
   attendance: Attendance | null
   sessionsToday: AttendedSession[]
+  projects: StudentProject[]
+  plan: RemediationPlan | null
   feedbackBySessionId: Map<string, FeedbackSheet>
   /** `undefined` keeps the stored lesson; `null` means recorded history is
    *  authoritative but no next lesson can be resolved. A lesson value is the
@@ -43,10 +46,13 @@ type Draft = {
   identifier: string
   reason: LeftAsideReason | ''
   note: string
+  projectId: string
+  assessmentResult: AssessmentResult | ''
+  remediationPath: RemediationPath | ''
 }
 
 function blankDraft(defaultLessonId: string): Draft {
-  return { lessonId: defaultLessonId, outcome: 'completed', leftAside: false, identifier: '', reason: '', note: '' }
+  return { lessonId: defaultLessonId, outcome: 'completed', leftAside: false, identifier: '', reason: '', note: '', projectId: '', assessmentResult: '', remediationPath: '' }
 }
 
 export default function SessionEntryRow({
@@ -57,6 +63,8 @@ export default function SessionEntryRow({
   lessons,
   attendance,
   sessionsToday,
+  projects,
+  plan,
   feedbackBySessionId,
   expectedLesson,
   previouslyCompleted,
@@ -102,6 +110,9 @@ export default function SessionEntryRow({
       identifier: session.left_aside_identifier ?? '',
       reason: session.left_aside_reason ?? '',
       note: session.left_aside_note ?? '',
+      projectId: session.project_id ?? '',
+      assessmentResult: '',
+      remediationPath: '',
     })
     setLessonScope('all')
   }
@@ -148,8 +159,23 @@ export default function SessionEntryRow({
 
   async function save() {
     if (!activeDraft?.lessonId) return
+    const selectedForSave = lessonById.get(activeDraft.lessonId)
+    if (selectedForSave?.lesson_kind === 'assessment') {
+      if (editingSessionId) {
+        notify('Assessment lessons are recorded as new sessions. Cancel this edit and record a new session instead.', 'error')
+        return
+      }
+      if (!activeDraft.assessmentResult) {
+        notify('Choose PASS or FAIL for this assessment.', 'error')
+        return
+      }
+      if (activeDraft.assessmentResult === 'FAIL' && plan?.status !== 'ready_for_reassessment' && !activeDraft.remediationPath) {
+        notify('Choose a remediation path before recording a FAIL.', 'error')
+        return
+      }
+    }
     const validationError = validateLeftAside(activeDraft)
-    if (validationError) {
+    if (selectedForSave?.lesson_kind !== 'assessment' && validationError) {
       notify(validationError, 'error')
       return
     }
@@ -162,19 +188,53 @@ export default function SessionEntryRow({
       in_left_aside_reason: activeDraft.leftAside ? activeDraft.reason || null : null,
       in_left_aside_note: activeDraft.leftAside && activeDraft.reason === 'other' ? activeDraft.note.trim() : null,
     }
-    const { error } = saveOperationFor(editingSessionId) === 'update'
-      ? await supabase.rpc('update_attended_session', { in_session_id: editingSessionId, ...args })
-      : await supabase.rpc('record_attended_session', { in_student_id: student.id, in_date: date, ...args })
+    let sessionId: string | null = null
+    let error: { message: string } | null = null
+    if (selectedForSave?.lesson_kind === 'assessment') {
+      const assessmentResult = await supabase.rpc('record_assessment_lesson_session', {
+        in_student_id: student.id,
+        in_assessment_lesson_id: activeDraft.lessonId,
+        in_date: date,
+        in_result: activeDraft.assessmentResult,
+        in_remediation_path: activeDraft.remediationPath || 'remediation_lessons',
+      })
+      sessionId = typeof assessmentResult.data === 'string' ? assessmentResult.data : null
+      error = assessmentResult.error
+    } else {
+      const regularResult = saveOperationFor(editingSessionId) === 'update'
+        ? await supabase.rpc('update_attended_session', { in_session_id: editingSessionId, ...args })
+        : await supabase.rpc('record_attended_session', { in_student_id: student.id, in_date: date, ...args })
+      sessionId = editingSessionId ?? (typeof regularResult.data === 'string' ? regularResult.data : null)
+      error = regularResult.error
+    }
     if (error) {
       setBusy(false)
       notify(error.message, 'error')
       return
     }
+    const savedSessionId = sessionId
+    if (savedSessionId) {
+      const { error: projectError } = await supabase
+        .from('attended_sessions')
+        .update({ project_id: activeDraft.projectId || null })
+        .eq('id', savedSessionId)
+      if (projectError) {
+        setBusy(false)
+        notify(`Session saved, but project selection was not saved: ${projectError.message}`, 'error')
+        onChanged()
+        return
+      }
+    }
     await upsertAttendance({ status: outcomeToAttendanceStatus(activeDraft.outcome) })
     setBusy(false)
     setDraft(null)
     setEditingSessionId(null)
-    notify(editingSessionId ? 'Session updated' : `Session recorded for ${student.full_name}`, 'success')
+    notify(
+      selectedForSave?.lesson_kind === 'assessment'
+        ? `${selectedForSave.title}: ${activeDraft.assessmentResult} recorded for ${student.full_name}`
+        : editingSessionId ? 'Session updated' : `Session recorded for ${student.full_name}`,
+      'success',
+    )
     onChanged()
   }
 
@@ -184,10 +244,26 @@ export default function SessionEntryRow({
   const completedDate = selectedLesson
     ? previouslyCompletedWarningDate(selectedLesson.level_id, selectedLesson.lesson_number, previouslyCompleted, editingSameLessonAsBefore)
     : null
-  const showRepeatWarning = completedDate != null
+  const showRepeatWarning = selectedLesson?.lesson_kind === 'normal' && completedDate != null
 
   const nearbyNumbers = recommendedLesson ? nearbyLessonNumbers(recommendedLesson.lesson_number, lessonsInLevel.length) : []
   const nearbyLessons = lessonsInLevel.filter((l) => nearbyNumbers.includes(l.lesson_number))
+  const activeProjects = projects.filter((project) => project.status === 'active')
+  const failNeedsRemediationChoice = activeDraft?.assessmentResult === 'FAIL' && plan?.status !== 'ready_for_reassessment'
+  const draftProjects = activeDraft?.projectId && !activeProjects.some((project) => project.id === activeDraft.projectId)
+    ? [...activeProjects, ...projects.filter((project) => project.id === activeDraft.projectId)]
+    : activeProjects
+
+  async function updateSessionProject(session: AttendedSession, projectId: string) {
+    setBusy(true)
+    const { error } = await supabase.from('attended_sessions').update({ project_id: projectId || null }).eq('id', session.id)
+    setBusy(false)
+    if (error) {
+      notify(error.message, 'error')
+      return
+    }
+    onChanged()
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -221,13 +297,32 @@ export default function SessionEntryRow({
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div>
                     <span className="font-medium">Session {s.session_number}</span>
-                    <span className="text-slate-500"> · {lesson ? `Lesson ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
+                    <span className="text-slate-500"> · {lesson ? `${lesson.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
                     {s.outcome === 'not_finished' && <span className="badge ml-1.5">Not finished</span>}
                     {s.left_aside && <span className="badge badge-assess ml-1.5">Build {s.left_aside_identifier} left aside</span>}
                   </div>
-                  <button className="text-xs text-slate-500 hover:underline" onClick={() => (editingSessionId === s.id ? setDraft(null) : startEdit(s))}>
-                    {editingSessionId === s.id ? 'Cancel' : 'Edit'}
-                  </button>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <span>Project</span>
+                    <select
+                      className="p-1.5 border border-slate-200 rounded-md bg-white text-slate-700"
+                      value={s.project_id ?? ''}
+                      disabled={busy || editingSessionId === s.id}
+                      onChange={(event) => void updateSessionProject(s, event.target.value)}
+                      aria-label={`Project for session ${s.session_number}`}
+                    >
+                      <option value="">No project</option>
+                      {projects.map((project) => (
+                        <option key={project.id} value={project.id}>{project.name}{project.status === 'active' ? '' : ` (${project.status.replace('_', ' ')})`}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {lesson?.lesson_kind === 'assessment' ? (
+                    <span className="badge badge-assess">{s.assessment_records?.[0]?.result ?? 'Result recorded'}</span>
+                  ) : (
+                    <button className="text-xs text-slate-500 hover:underline" onClick={() => (editingSessionId === s.id ? setDraft(null) : startEdit(s))}>
+                      {editingSessionId === s.id ? 'Cancel' : 'Edit'}
+                    </button>
+                  )}
                 </div>
                 {fb && (
                   <div className="mt-1.5">
@@ -265,10 +360,24 @@ export default function SessionEntryRow({
               </div>
             </div>
 
+            {draftProjects.length > 0 && (
+              <label className="block mb-2 text-sm">
+                <span className="block text-xs text-slate-500 mb-1">Project worked on in this session</span>
+                <select
+                  className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                  value={activeDraft.projectId}
+                  onChange={(event) => setDraft({ ...activeDraft, projectId: event.target.value })}
+                >
+                  <option value="">No project</option>
+                  {draftProjects.map((project) => <option key={project.id} value={project.id}>{project.name}{project.status === 'active' ? '' : ` (${project.status.replace('_', ' ')})`}</option>)}
+                </select>
+              </label>
+            )}
+
             {lessonScope === 'recommended' && recommendedLesson && (
               <button
                 className={`w-full text-left p-2.5 rounded-lg border text-sm ${activeDraft.lessonId === recommendedLesson.id ? 'border-[color:var(--rt-blue)] bg-[color:var(--rt-blue-tint)]' : 'border-slate-200 bg-white'}`}
-                onClick={() => setDraft({ ...activeDraft, lessonId: recommendedLesson.id })}
+                onClick={() => setDraft({ ...activeDraft, lessonId: recommendedLesson.id, assessmentResult: '', remediationPath: '' })}
               >
                 Lesson {recommendedLesson.lesson_number}: {recommendedLesson.title}
                 <span className="block text-xs text-slate-500">Student's current expected lesson</span>
@@ -285,7 +394,7 @@ export default function SessionEntryRow({
                   <button
                     key={l.id}
                     className={`w-full text-left p-2 rounded-lg border text-sm ${activeDraft.lessonId === l.id ? 'border-[color:var(--rt-blue)] bg-[color:var(--rt-blue-tint)]' : 'border-slate-200 bg-white'}`}
-                    onClick={() => setDraft({ ...activeDraft, lessonId: l.id })}
+                    onClick={() => setDraft({ ...activeDraft, lessonId: l.id, assessmentResult: '', remediationPath: '' })}
                   >
                     Lesson {l.lesson_number}: {l.title}
                   </button>
@@ -297,7 +406,12 @@ export default function SessionEntryRow({
               <select
                 className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white"
                 value={activeDraft.lessonId}
-                onChange={(e) => setDraft({ ...activeDraft, lessonId: e.target.value })}
+                onChange={(e) => setDraft({
+                  ...activeDraft,
+                  lessonId: e.target.value,
+                  assessmentResult: e.target.value === activeDraft.lessonId ? activeDraft.assessmentResult : '',
+                  remediationPath: e.target.value === activeDraft.lessonId ? activeDraft.remediationPath : '',
+                })}
                 aria-label="Choose any lesson"
               >
                 <optgroup label={currentLevel ? levelLabel(currentLevel) : 'Current level'}>
@@ -323,7 +437,61 @@ export default function SessionEntryRow({
                       ))}
                   </optgroup>
                 ))}
+                {Object.entries(
+                  lessons
+                    .filter((l) => l.lesson_kind === 'assessment')
+                    .reduce<Record<string, Lesson[]>>((acc, l) => {
+                      const lvl = levels.find((lv) => lv.id === l.level_id)
+                      const key = lvl ? levelLabel(lvl) : 'Other'
+                      acc[key] = [...(acc[key] ?? []), l]
+                      return acc
+                    }, {}),
+                ).map(([label, ls]) => (
+                  <optgroup key={`assessment-${label}`} label={`${label} — Assessments`}>
+                    {ls
+                      .sort((a, b) => a.lesson_number - b.lesson_number)
+                      .map((l) => (
+                        <option key={l.id} value={l.id}>Assessment {l.lesson_number}: {l.title}</option>
+                      ))}
+                  </optgroup>
+                ))}
               </select>
+            )}
+
+            {selectedLesson?.lesson_kind === 'assessment' && (
+              <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
+                <span className="block text-sm font-medium text-sky-900 mb-2">Assessment result required</span>
+                <div className="flex gap-2">
+                  {(['PASS', 'FAIL'] as const).map((result) => (
+                    <button
+                      key={result}
+                      className={`flex-1 text-sm px-3 py-2 rounded-lg font-medium ${activeDraft.assessmentResult === result ? result === 'PASS' ? 'btn-primary' : 'bg-rose-600 text-white' : 'btn-ghost'}`}
+                      onClick={() => setDraft({ ...activeDraft, assessmentResult: result, remediationPath: result === 'PASS' ? '' : activeDraft.remediationPath })}
+                    >
+                      {result}
+                    </button>
+                  ))}
+                </div>
+                {failNeedsRemediationChoice && (
+                  <fieldset className="mt-3">
+                    <legend className="text-xs text-sky-900 mb-1">Remediation path (required before saving):</legend>
+                    <div className="flex flex-col gap-1.5">
+                      {REMEDIATION_PATH_OPTIONS.map((option) => (
+                        <label key={option.value} className="flex items-start gap-1.5 text-xs text-sky-900">
+                          <input
+                            type="radio"
+                            name={`assessment-remediation-${student.id}`}
+                            className="mt-0.5"
+                            checked={activeDraft.remediationPath === option.value}
+                            onChange={() => setDraft({ ...activeDraft, remediationPath: option.value })}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
+              </div>
             )}
 
             {showRepeatWarning && selectedLesson && completedDate && (
@@ -333,7 +501,7 @@ export default function SessionEntryRow({
             )}
           </div>
 
-          <div>
+          {selectedLesson?.lesson_kind !== 'assessment' && <div>
             <span className="block text-sm font-medium text-slate-600 mb-1.5">Outcome</span>
             <div className="flex gap-2">
               <button
@@ -349,9 +517,9 @@ export default function SessionEntryRow({
                 Not Finished
               </button>
             </div>
-          </div>
+          </div>}
 
-          {activeDraft.outcome === 'not_finished' && (
+          {selectedLesson?.lesson_kind !== 'assessment' && activeDraft.outcome === 'not_finished' && (
             <div className="bg-white rounded-lg border border-slate-200 p-2.5">
               <label className="flex items-center gap-2 text-sm mb-2">
                 <input

@@ -36,6 +36,7 @@ import type {
   RemediationPlan,
   Student,
   StudentProgress,
+  StudentProject,
 } from '../types'
 
 interface RosterEntry extends Student {
@@ -49,6 +50,7 @@ interface RosterEntry extends Student {
   lessonRecords: LessonRecord[]
   sessionHistory: AttendedSession[]
   progressionOverrides: ProgressionOverrideCheckpoint[]
+  projects: StudentProject[]
 }
 
 export default function Register() {
@@ -135,9 +137,10 @@ export default function Register() {
     let recentSessions: AttendedSession[] = []
     let lessonRecords: LessonRecord[] = []
     let progressionOverrides: (ProgressionOverrideCheckpoint & { student_id: string })[] = []
+    let projects: StudentProject[] = []
 
     if (ids.length) {
-      const [progRes, planRes, feedbackRes, sessionsRes, recentRes, lessonRecordsRes, overridesRes] = await Promise.all([
+      const [progRes, planRes, feedbackRes, sessionsRes, recentRes, lessonRecordsRes, overridesRes, projectsRes] = await Promise.all([
         supabase.from('student_progress').select('*').in('student_id', ids),
         supabase
           .from('remediation_plans')
@@ -152,7 +155,7 @@ export default function Register() {
         // Existing sessions for THIS date — loading/reloading the
         // register must reflect what's already saved, never create new
         // ones just by opening the page.
-        supabase.from('attended_sessions').select('*').eq('date', forDate).in('student_id', ids),
+        supabase.from('attended_sessions').select('*, assessment_records:assessments(result)').eq('date', forDate).in('student_id', ids),
         // All sessions, across all dates, are the per-occurrence progression
         // ledger. The selected Register date must never limit lesson history.
         supabase
@@ -171,13 +174,14 @@ export default function Register() {
           .select('student_id,new_level_id,new_lesson,created_at')
           .in('student_id', ids)
           .order('created_at', { ascending: false }),
+        supabase.from('student_project_durations').select('*').in('student_id', ids).order('start_date', { ascending: false }),
       ])
       if (progRes.error) {
         setError(progRes.error.message)
         setLoading(false)
         return
       }
-      const progressionError = recentRes.error ?? lessonRecordsRes.error ?? overridesRes.error
+      const progressionError = recentRes.error ?? lessonRecordsRes.error ?? overridesRes.error ?? projectsRes.error
       if (progressionError) {
         setError(progressionError.message)
         setLoading(false)
@@ -190,6 +194,7 @@ export default function Register() {
       recentSessions = (recentRes.data ?? []) as AttendedSession[]
       lessonRecords = (lessonRecordsRes.data ?? []) as LessonRecord[]
       progressionOverrides = (overridesRes.data ?? []) as (ProgressionOverrideCheckpoint & { student_id: string })[]
+      projects = (projectsRes.data ?? []) as StudentProject[]
     }
 
     const progMap = new Map(progress.map((p) => [p.student_id, p]))
@@ -231,6 +236,7 @@ export default function Register() {
       lessonRecords: lessonRecordsByStudent.get(s.id) ?? [],
       sessionHistory: recentSessions.filter((session) => session.student_id === s.id),
       progressionOverrides: overridesByStudent.get(s.id) ?? [],
+      projects: projects.filter((project) => project.student_id === s.id),
     }))
 
     entries.sort((a, b) => {
@@ -489,6 +495,9 @@ export default function Register() {
                       .map((f) => [f.attended_session_id as string, f]),
                   )
                   const expected = expectedLessons.get(s.id)
+                  const latestSessionToday = s.sessionsToday[s.sessionsToday.length - 1]
+                  const latestSessionLessonKind = lessons.find((lesson) => lesson.id === latestSessionToday?.actual_lesson_id)?.lesson_kind
+                  const assessmentWorkflowSessionId = latestSessionLessonKind === 'normal' ? latestSessionToday?.id ?? null : null
                   return (
                     <div key={s.id} className="p-3 sm:p-4 flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-start gap-3">
@@ -527,20 +536,22 @@ export default function Register() {
                         lessons={lessons}
                         attendance={s.attendance}
                         sessionsToday={s.sessionsToday}
+                        projects={s.projects}
+                        plan={s.plan}
                         feedbackBySessionId={sessionFeedbackMap}
                         expectedLesson={expected}
                         previouslyCompleted={previouslyCompletedByStudent.get(s.id) ?? new Map()}
                         onChanged={() => void loadRoster(date)}
                       />
 
-                      {s.progress && s.progress.current_kind !== 'normal' && s.progress.current_kind !== 'complete' && (
+                      {(s.pending_assessment_point_id != null || (s.progress && s.progress.current_kind !== 'normal' && s.progress.current_kind !== 'complete')) && (
                         <AssessmentPanel
                           studentId={s.id}
                           studentName={s.full_name}
                           pendingAssessmentPointId={s.pending_assessment_point_id}
                           focusTopic={s.progress.focus_topic ?? null}
                           plan={s.plan}
-                          sessionId={s.sessionsToday.length ? s.sessionsToday[s.sessionsToday.length - 1].id : null}
+                          sessionId={assessmentWorkflowSessionId}
                           onDone={() => void loadRoster(date)}
                           compact
                         />

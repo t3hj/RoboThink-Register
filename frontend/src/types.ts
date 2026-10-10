@@ -307,6 +307,7 @@ export interface AttendedSession {
   date: string
   session_number: number
   actual_lesson_id: string
+  project_id?: string | null
   outcome: SessionOutcome
   lesson_record_id: string | null
   instructor_id: string | null
@@ -315,6 +316,8 @@ export interface AttendedSession {
   left_aside_identifier: string | null
   left_aside_reason: LeftAsideReason | null
   left_aside_note: string | null
+  /** Joined when the register loads assessment sessions. */
+  assessment_records?: { result: string | null }[] | null
   // joined
   lessons?: { lesson_number: number; title: string; level_id: number } | null
 }
