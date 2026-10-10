@@ -325,13 +325,13 @@ export default function StudentProfile() {
           ) : (
             <ul className="divide-y divide-slate-100">
               {lessons.map((l) => (
-                <li key={l.id} className="py-2 flex items-center justify-between gap-3 text-sm">
-                  <div>
+                <li key={l.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
+                  <div className="min-w-0">
                     <span className="font-medium">Lesson {l.lesson_number}{l.lessons?.title ? `: ${l.lessons.title}` : ''}</span>
                     <span className="text-slate-500"> · {l.levels?.name ?? `Level ${l.level_id}`}</span>
                     {l.status !== 'completed' && <span className="badge ml-2">Not finished</span>}
                   </div>
-                  <div className="text-slate-500 text-xs whitespace-nowrap">
+                  <div className="text-slate-500 text-xs sm:whitespace-nowrap sm:text-right">
                     {formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}
                   </div>
                 </li>
@@ -348,25 +348,25 @@ export default function StudentProfile() {
               </p>
               <ul className="divide-y divide-slate-100">
                 {assessments.map((a) => (
-                  <li key={a.id} className="py-2 flex items-center justify-between gap-3 text-sm">
+                  <li key={a.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
                     <div>
                       <span className={`font-medium ${a.passed ? 'text-emerald-700' : 'text-rose-700'}`}>
                         {a.passed ? 'PASS' : 'FAIL'}
                       </span>
                       <span className="text-slate-500"> · attempt {a.attempt_number}</span>
                     </div>
-                    <div className="text-slate-500 text-xs whitespace-nowrap">
+                    <div className="text-slate-500 text-xs sm:whitespace-nowrap sm:text-right">
                       {formatShortDate(a.date)} · {a.profiles?.name ?? 'Unassigned'}
                     </div>
                   </li>
                 ))}
                 {remediationLessons.map((r) => (
-                  <li key={r.id} className="py-2 flex items-center justify-between gap-3 text-sm">
+                  <li key={r.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
                     <div>
                       <span className="font-medium">Remediation lesson {r.lesson_number}</span>
                       {r.topic && <span className="text-slate-500"> · {r.topic}</span>}
                     </div>
-                    <div className="text-slate-500 text-xs whitespace-nowrap">
+                    <div className="text-slate-500 text-xs sm:whitespace-nowrap sm:text-right">
                       {formatShortDate(r.date)} · {r.profiles?.name ?? 'Unassigned'}
                     </div>
                   </li>
@@ -418,7 +418,7 @@ export default function StudentProfile() {
                   <div className="text-xs uppercase tracking-wide text-slate-400 mb-1.5">{month}</div>
                   <ul className="divide-y divide-slate-100">
                     {rows.map((a) => (
-                      <li key={a.id} className="py-2 flex items-center justify-between gap-3 text-sm">
+                      <li key={a.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
                         <div className="flex items-center gap-2">
                           {formatShortDate(a.date)}
                           {a.session_type === 'catch_up' && <span className="badge">Catch-up</span>}

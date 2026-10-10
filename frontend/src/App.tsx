@@ -56,22 +56,22 @@ function Layout() {
         Skip to content
       </a>
       <div className="brand-stripe" aria-hidden />
-      <div className="max-w-7xl mx-auto px-4 py-4 lg:py-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <aside className="lg:col-span-1">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4 lg:py-6 grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
+        <aside className="lg:col-span-1 min-w-0">
           <div className="card p-4 lg:sticky lg:top-6">
             <div className="flex items-center gap-3 mb-4">
               <RoboThinkLogo className="w-40 max-w-full" />
             </div>
             <p className="text-[11px] text-slate-500 -mt-2 mb-3">Register &amp; Progress</p>
             <MascotCrew className="mb-4 pb-3 border-b border-slate-100" />
-            <nav className="flex lg:flex-col gap-1 overflow-x-auto -mx-1 px-1 pb-1" aria-label="Main navigation">
+            <nav className="flex lg:flex-col gap-1.5 overflow-x-auto overscroll-x-contain -mx-1 px-1 pb-1" aria-label="Main navigation">
               {items.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                    `inline-flex min-h-11 items-center px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                       isActive ? 'bg-[color:var(--rt-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'
                     }`
                   }

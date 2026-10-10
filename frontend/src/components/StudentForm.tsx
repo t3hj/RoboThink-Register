@@ -8,7 +8,7 @@ import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import type { Level, Lesson, Student, Subscription } from '../types'
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 interface Props {
   student?: Student | null
@@ -136,8 +136,8 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
-      <div className="card p-5 max-w-lg w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit student' : 'Add student'}>
+    <div className="fixed inset-0 z-40 flex items-start sm:items-center justify-center bg-black/40 p-2 sm:p-4 overflow-y-auto overscroll-contain" onClick={onClose}>
+      <div className="card p-4 sm:p-5 max-w-lg w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain my-2 sm:my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit student' : 'Add student'}>
         <h3 className="font-semibold mb-4">{isEdit ? 'Edit student' : 'Add student'}</h3>
 
         <div className="space-y-3">
@@ -181,7 +181,7 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
             )}
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="text-sm block">
               <span className="block text-slate-500 mb-1">Normal day</span>
               <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={preferredDay} onChange={(e) => setPreferredDay(e.target.value)} disabled={busy}>
@@ -238,9 +238,9 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
           )}
         </div>
 
-        <div className="flex justify-end gap-2 mt-5">
-          <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
-          <BusyButton busy={busy} onClick={() => void save()}>{isEdit ? 'Save changes' : 'Add student'}</BusyButton>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-5">
+          <button className="btn-ghost w-full sm:w-auto" onClick={onClose} disabled={busy}>Cancel</button>
+          <BusyButton busy={busy} className="btn-primary w-full sm:w-auto" onClick={() => void save()}>{isEdit ? 'Save changes' : 'Add student'}</BusyButton>
         </div>
       </div>
     </div>

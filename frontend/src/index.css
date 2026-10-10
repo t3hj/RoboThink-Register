@@ -141,3 +141,19 @@ input, select, textarea {
   color: inherit;
   background: #fff;
 }
+
+/* Keep mobile form controls readable and prevent iOS Safari from zooming the
+   page when a smaller-text input receives focus. */
+@media (max-width: 639px) {
+  :root input:not([type="checkbox"]):not([type="radio"]),
+  :root select:not([multiple]),
+  :root textarea {
+    font-size: 16px;
+  }
+
+  :root button,
+  :root .btn-primary,
+  :root .btn-ghost {
+    min-height: 44px;
+  }
+}

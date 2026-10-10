@@ -130,13 +130,13 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
         {step === 'configure' && (
           <div className="flex flex-col gap-3">
             <div>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-2 mb-1.5">
                 <span className="text-sm font-medium text-slate-600">Actual lesson taught</span>
-                <div className="flex gap-1 text-xs">
+                <div className="flex flex-wrap gap-1 text-xs" role="group" aria-label="Lesson picker options">
                   {(['recommended', 'nearby', 'all'] as const).map((scope) => (
                     <button
                       key={scope}
-                      className={`px-2 py-1 rounded-full ${lessonScope === scope ? 'bg-[color:var(--rt-blue)] text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
+                      className={`min-h-9 px-2.5 py-1 rounded-full ${lessonScope === scope ? 'bg-[color:var(--rt-blue)] text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
                       onClick={() => setLessonScope(scope)}
                     >
                       {scope === 'recommended' ? 'Recommended' : scope === 'nearby' ? 'Nearby' : 'All lessons'}
