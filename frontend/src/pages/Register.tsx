@@ -549,7 +549,7 @@ export default function Register() {
                           studentId={s.id}
                           studentName={s.full_name}
                           pendingAssessmentPointId={s.pending_assessment_point_id}
-                          focusTopic={s.progress.focus_topic ?? null}
+                          focusTopic={s.progress?.focus_topic ?? null}
                           plan={s.plan}
                           sessionId={assessmentWorkflowSessionId}
                           onDone={() => void loadRoster(date)}
