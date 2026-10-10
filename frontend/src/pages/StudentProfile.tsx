@@ -266,7 +266,6 @@ export default function StudentProfile() {
         <div className="mb-5">
           <AssessmentPanel
             studentId={student.id}
-            studentName={student.full_name}
             pendingAssessmentPointId={student.pending_assessment_point_id}
             focusTopic={progress?.focus_topic ?? null}
             plan={plan}

@@ -17,6 +17,7 @@ import { levelLabel } from '../lib/curriculum'
 import { loadCurriculum } from '../lib/curriculumData'
 import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
 import { registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
+import { requiresAssessmentResult } from '../lib/assessment'
 import { resolveFeedbackTarget } from '../lib/bulkActions'
 import { useCentres } from '../lib/centres'
 import {
@@ -496,8 +497,8 @@ export default function Register() {
                   )
                   const expected = expectedLessons.get(s.id)
                   const latestSessionToday = s.sessionsToday[s.sessionsToday.length - 1]
-                  const latestSessionLessonKind = lessons.find((lesson) => lesson.id === latestSessionToday?.actual_lesson_id)?.lesson_kind
-                  const assessmentWorkflowSessionId = latestSessionLessonKind === 'normal' ? latestSessionToday?.id ?? null : null
+                  const latestSessionLesson = lessons.find((lesson) => lesson.id === latestSessionToday?.actual_lesson_id)
+                  const assessmentWorkflowSessionId = latestSessionLesson && !requiresAssessmentResult(latestSessionLesson) ? latestSessionToday?.id ?? null : null
                   return (
                     <div key={s.id} className="p-3 sm:p-4 flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-start gap-3">
@@ -547,7 +548,6 @@ export default function Register() {
                       {(s.pending_assessment_point_id != null || (s.progress && s.progress.current_kind !== 'normal' && s.progress.current_kind !== 'complete')) && (
                         <AssessmentPanel
                           studentId={s.id}
-                          studentName={s.full_name}
                           pendingAssessmentPointId={s.pending_assessment_point_id}
                           focusTopic={s.progress?.focus_topic ?? null}
                           plan={s.plan}

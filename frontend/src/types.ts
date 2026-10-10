@@ -50,6 +50,8 @@ export interface Lesson {
   objectives: string | null
   notes: string | null
   lesson_kind: LessonKind
+  /** Whether Register requires PASS/FAIL when this lesson is selected. */
+  assessment_required?: boolean | null
   focus_topic: string | null
   created_at: string
   levels?: { name: string; slug: string; sort_order: number } | null

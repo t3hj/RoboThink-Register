@@ -6,7 +6,7 @@ import { BusyButton } from './ui'
 import FeedbackControl from './FeedbackControl'
 import { levelLabel } from '../lib/curriculum'
 import { sessionRecommendedLesson } from '../lib/expectedLesson'
-import { REMEDIATION_PATH_OPTIONS } from '../lib/assessment'
+import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import {
   NOT_FINISHED_REASONS,
   attendanceState,
@@ -160,7 +160,7 @@ export default function SessionEntryRow({
   async function save() {
     if (!activeDraft?.lessonId) return
     const selectedForSave = lessonById.get(activeDraft.lessonId)
-    if (selectedForSave?.lesson_kind === 'assessment') {
+    if (requiresAssessmentResult(selectedForSave)) {
       if (editingSessionId) {
         notify('Assessment lessons are recorded as new sessions. Cancel this edit and record a new session instead.', 'error')
         return
@@ -175,7 +175,7 @@ export default function SessionEntryRow({
       }
     }
     const validationError = validateLeftAside(activeDraft)
-    if (selectedForSave?.lesson_kind !== 'assessment' && validationError) {
+    if (!requiresAssessmentResult(selectedForSave) && validationError) {
       notify(validationError, 'error')
       return
     }
@@ -190,7 +190,7 @@ export default function SessionEntryRow({
     }
     let sessionId: string | null = null
     let error: { message: string } | null = null
-    if (selectedForSave?.lesson_kind === 'assessment') {
+    if (requiresAssessmentResult(selectedForSave)) {
       const assessmentResult = await supabase.rpc('record_assessment_lesson_session', {
         in_student_id: student.id,
         in_assessment_lesson_id: activeDraft.lessonId,
@@ -230,8 +230,8 @@ export default function SessionEntryRow({
     setDraft(null)
     setEditingSessionId(null)
     notify(
-      selectedForSave?.lesson_kind === 'assessment'
-        ? `${selectedForSave.title}: ${activeDraft.assessmentResult} recorded for ${student.full_name}`
+      requiresAssessmentResult(selectedForSave)
+        ? `${selectedForSave?.title ?? 'Assessment'}: ${activeDraft.assessmentResult} recorded for ${student.full_name}`
         : editingSessionId ? 'Session updated' : `Session recorded for ${student.full_name}`,
       'success',
     )
@@ -244,7 +244,7 @@ export default function SessionEntryRow({
   const completedDate = selectedLesson
     ? previouslyCompletedWarningDate(selectedLesson.level_id, selectedLesson.lesson_number, previouslyCompleted, editingSameLessonAsBefore)
     : null
-  const showRepeatWarning = selectedLesson?.lesson_kind === 'normal' && completedDate != null
+  const showRepeatWarning = selectedLesson?.lesson_kind === 'normal' && !requiresAssessmentResult(selectedLesson) && completedDate != null
 
   const nearbyNumbers = recommendedLesson ? nearbyLessonNumbers(recommendedLesson.lesson_number, lessonsInLevel.length) : []
   const nearbyLessons = lessonsInLevel.filter((l) => nearbyNumbers.includes(l.lesson_number))
@@ -297,7 +297,7 @@ export default function SessionEntryRow({
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div>
                     <span className="font-medium">Session {s.session_number}</span>
-                    <span className="text-slate-500"> · {lesson ? `${lesson.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
+                    <span className="text-slate-500"> · {lesson ? `${requiresAssessmentResult(lesson) ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
                     {s.outcome === 'not_finished' && <span className="badge ml-1.5">Not finished</span>}
                     {s.left_aside && <span className="badge badge-assess ml-1.5">Build {s.left_aside_identifier} left aside</span>}
                   </div>
@@ -316,8 +316,8 @@ export default function SessionEntryRow({
                       ))}
                     </select>
                   </label>
-                  {lesson?.lesson_kind === 'assessment' ? (
-                    <span className="badge badge-assess">{s.assessment_records?.[0]?.result ?? 'Result recorded'}</span>
+                  {requiresAssessmentResult(lesson) ? (
+                    <span className="badge badge-assess">{s.assessment_records?.[0]?.result ?? 'No result saved'}</span>
                   ) : (
                     <button className="text-xs text-slate-500 hover:underline" onClick={() => (editingSessionId === s.id ? setDraft(null) : startEdit(s))}>
                       {editingSessionId === s.id ? 'Cancel' : 'Edit'}
@@ -379,7 +379,7 @@ export default function SessionEntryRow({
                 className={`w-full text-left p-2.5 rounded-lg border text-sm ${activeDraft.lessonId === recommendedLesson.id ? 'border-[color:var(--rt-blue)] bg-[color:var(--rt-blue-tint)]' : 'border-slate-200 bg-white'}`}
                 onClick={() => setDraft({ ...activeDraft, lessonId: recommendedLesson.id, assessmentResult: '', remediationPath: '' })}
               >
-                Lesson {recommendedLesson.lesson_number}: {recommendedLesson.title}
+                {requiresAssessmentResult(recommendedLesson) ? 'Assessment' : 'Lesson'} {recommendedLesson.lesson_number}: {recommendedLesson.title}
                 <span className="block text-xs text-slate-500">Student's current expected lesson</span>
               </button>
             )}
@@ -396,7 +396,7 @@ export default function SessionEntryRow({
                     className={`w-full text-left p-2 rounded-lg border text-sm ${activeDraft.lessonId === l.id ? 'border-[color:var(--rt-blue)] bg-[color:var(--rt-blue-tint)]' : 'border-slate-200 bg-white'}`}
                     onClick={() => setDraft({ ...activeDraft, lessonId: l.id, assessmentResult: '', remediationPath: '' })}
                   >
-                    Lesson {l.lesson_number}: {l.title}
+                    {requiresAssessmentResult(l) ? 'Assessment' : 'Lesson'} {l.lesson_number}: {l.title}
                   </button>
                 ))}
               </div>
@@ -415,13 +415,13 @@ export default function SessionEntryRow({
                 aria-label="Choose any lesson"
               >
                 <optgroup label={currentLevel ? levelLabel(currentLevel) : 'Current level'}>
-                  {lessonsInLevel.map((l) => (
+                  {lessonsInLevel.filter((l) => !requiresAssessmentResult(l)).map((l) => (
                     <option key={l.id} value={l.id}>Lesson {l.lesson_number}: {l.title}</option>
                   ))}
                 </optgroup>
                 {Object.entries(
                   lessons
-                    .filter((l) => l.lesson_kind === 'normal' && l.level_id !== currentLevelId)
+                    .filter((l) => l.lesson_kind === 'normal' && !requiresAssessmentResult(l) && l.level_id !== currentLevelId)
                     .reduce<Record<string, Lesson[]>>((acc, l) => {
                       const lvl = levels.find((lv) => lv.id === l.level_id)
                       const key = lvl ? levelLabel(lvl) : 'Other'
@@ -439,7 +439,7 @@ export default function SessionEntryRow({
                 ))}
                 {Object.entries(
                   lessons
-                    .filter((l) => l.lesson_kind === 'assessment')
+                    .filter((l) => requiresAssessmentResult(l))
                     .reduce<Record<string, Lesson[]>>((acc, l) => {
                       const lvl = levels.find((lv) => lv.id === l.level_id)
                       const key = lvl ? levelLabel(lvl) : 'Other'
@@ -458,7 +458,7 @@ export default function SessionEntryRow({
               </select>
             )}
 
-            {selectedLesson?.lesson_kind === 'assessment' && (
+            {requiresAssessmentResult(selectedLesson) && (
               <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
                 <span className="block text-sm font-medium text-sky-900 mb-2">Assessment result required</span>
                 <div className="flex gap-2">
@@ -501,7 +501,7 @@ export default function SessionEntryRow({
             )}
           </div>
 
-          {selectedLesson?.lesson_kind !== 'assessment' && <div>
+          {!requiresAssessmentResult(selectedLesson) && <div>
             <span className="block text-sm font-medium text-slate-600 mb-1.5">Outcome</span>
             <div className="flex gap-2">
               <button
@@ -519,7 +519,7 @@ export default function SessionEntryRow({
             </div>
           </div>}
 
-          {selectedLesson?.lesson_kind !== 'assessment' && activeDraft.outcome === 'not_finished' && (
+          {!requiresAssessmentResult(selectedLesson) && activeDraft.outcome === 'not_finished' && (
             <div className="bg-white rounded-lg border border-slate-200 p-2.5">
               <label className="flex items-center gap-2 text-sm mb-2">
                 <input
