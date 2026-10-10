@@ -165,11 +165,11 @@ export default function SessionEntryRow({
         notify('Assessment lessons are recorded as new sessions. Cancel this edit and record a new session instead.', 'error')
         return
       }
-      if (!activeDraft.assessmentResult) {
+      if (activeDraft.outcome === 'completed' && !activeDraft.assessmentResult) {
         notify('Choose PASS or FAIL for this assessment.', 'error')
         return
       }
-      if (activeDraft.assessmentResult === 'FAIL' && plan?.status !== 'ready_for_reassessment' && !activeDraft.remediationPath) {
+      if (activeDraft.outcome === 'completed' && activeDraft.assessmentResult === 'FAIL' && plan?.status !== 'ready_for_reassessment' && !activeDraft.remediationPath) {
         notify('Choose a remediation path before recording a FAIL.', 'error')
         return
       }
@@ -195,7 +195,7 @@ export default function SessionEntryRow({
         in_student_id: student.id,
         in_assessment_lesson_id: activeDraft.lessonId,
         in_date: date,
-        in_result: activeDraft.assessmentResult,
+        in_result: activeDraft.outcome === 'not_finished' ? 'NOT_FINISHED' : activeDraft.assessmentResult,
         in_remediation_path: activeDraft.remediationPath || 'remediation_lessons',
       })
       sessionId = typeof assessmentResult.data === 'string' ? assessmentResult.data : null
@@ -231,7 +231,9 @@ export default function SessionEntryRow({
     setEditingSessionId(null)
     notify(
       requiresAssessmentResult(selectedForSave)
-        ? `${selectedForSave?.title ?? 'Assessment'}: ${activeDraft.assessmentResult} recorded for ${student.full_name}`
+        ? activeDraft.outcome === 'not_finished'
+          ? `${selectedForSave?.title ?? 'Assessment'} marked not finished for ${student.full_name}`
+          : `${selectedForSave?.title ?? 'Assessment'}: ${activeDraft.assessmentResult} recorded for ${student.full_name}`
         : editingSessionId ? 'Session updated' : `Session recorded for ${student.full_name}`,
       'success',
     )
@@ -298,7 +300,7 @@ export default function SessionEntryRow({
                   <div>
                     <span className="font-medium">Session {s.session_number}</span>
                     <span className="text-slate-500"> · {lesson ? `${requiresAssessmentResult(lesson) ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
-                    {s.outcome === 'not_finished' && <span className="badge ml-1.5">Not finished</span>}
+                    {s.outcome === 'not_finished' && !requiresAssessmentResult(lesson) && <span className="badge ml-1.5">Not finished</span>}
                     {s.left_aside && <span className="badge badge-assess ml-1.5">Build {s.left_aside_identifier} left aside</span>}
                   </div>
                   <label className="flex items-center gap-1.5 text-xs text-slate-500">
@@ -317,7 +319,9 @@ export default function SessionEntryRow({
                     </select>
                   </label>
                   {requiresAssessmentResult(lesson) ? (
-                    <span className="badge badge-assess">{s.assessment_records?.[0]?.result ?? 'No result saved'}</span>
+                    s.outcome === 'not_finished'
+                      ? <span className="badge">Not finished</span>
+                      : <span className="badge badge-assess">{s.assessment_records?.[0]?.result ?? 'No result saved'}</span>
                   ) : (
                     <button className="text-xs text-slate-500 hover:underline" onClick={() => (editingSessionId === s.id ? setDraft(null) : startEdit(s))}>
                       {editingSessionId === s.id ? 'Cancel' : 'Edit'}
@@ -458,7 +462,7 @@ export default function SessionEntryRow({
               </select>
             )}
 
-            {requiresAssessmentResult(selectedLesson) && (
+            {requiresAssessmentResult(selectedLesson) && activeDraft.outcome === 'completed' && (
               <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
                 <span className="block text-sm font-medium text-sky-900 mb-2">Assessment result required</span>
                 <div className="flex gap-2">
@@ -466,7 +470,7 @@ export default function SessionEntryRow({
                     <button
                       key={result}
                       className={`flex-1 text-sm px-3 py-2 rounded-lg font-medium ${activeDraft.assessmentResult === result ? result === 'PASS' ? 'btn-primary' : 'bg-rose-600 text-white' : 'btn-ghost'}`}
-                      onClick={() => setDraft({ ...activeDraft, assessmentResult: result, remediationPath: result === 'PASS' ? '' : activeDraft.remediationPath })}
+                      onClick={() => setDraft({ ...activeDraft, outcome: 'completed', assessmentResult: result, remediationPath: result === 'PASS' ? '' : activeDraft.remediationPath })}
                     >
                       {result}
                     </button>
@@ -494,6 +498,12 @@ export default function SessionEntryRow({
               </div>
             )}
 
+            {requiresAssessmentResult(selectedLesson) && activeDraft.outcome === 'not_finished' && (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                This assessment will be saved as not finished. Record PASS or FAIL when it is completed.
+              </p>
+            )}
+
             {showRepeatWarning && selectedLesson && completedDate && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
                 This student previously completed Lesson {selectedLesson.lesson_number} on {completedDate}. Recording this session will count it as a repeat.
@@ -501,7 +511,7 @@ export default function SessionEntryRow({
             )}
           </div>
 
-          {!requiresAssessmentResult(selectedLesson) && <div>
+          <div>
             <span className="block text-sm font-medium text-slate-600 mb-1.5">Outcome</span>
             <div className="flex gap-2">
               <button
@@ -512,12 +522,12 @@ export default function SessionEntryRow({
               </button>
               <button
                 className={`flex-1 text-sm px-3 py-2 rounded-lg font-medium ${activeDraft.outcome === 'not_finished' ? 'bg-[color:var(--rt-yellow)] text-[color:var(--rt-ink)]' : 'btn-ghost'}`}
-                onClick={() => setDraft({ ...activeDraft, outcome: 'not_finished' })}
+                onClick={() => setDraft({ ...activeDraft, outcome: 'not_finished', assessmentResult: '', remediationPath: '' })}
               >
                 Not Finished
               </button>
             </div>
-          </div>}
+          </div>
 
           {!requiresAssessmentResult(selectedLesson) && activeDraft.outcome === 'not_finished' && (
             <div className="bg-white rounded-lg border border-slate-200 p-2.5">

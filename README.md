@@ -76,6 +76,8 @@ Use **Not Finished** when the student did not complete the session's work.
 This keeps the current progression lesson in place. A later session can record
 the same lesson as a repeat or catch-up. If a build or other item is left
 aside, record the identifier and reason so the next session has a reminder.
+An assessment can also be marked **Not Finished**; its PASS/FAIL result and any
+remediation workflow are recorded later, when the assessment is completed.
 
 Bulk actions always show an eligible/skipped review before applying. They create
 or update only the records described by the selected action; review the result
