@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { CentreProvider, useCentres } from './lib/centres'
 import { ToastProvider } from './components/Toast'
 import { LoadingPanel } from './components/ui'
+import { MascotCrew, RoboThinkLogo } from './components/Branding'
 import Auth from './pages/Auth'
 import Dashboard from './pages/Dashboard'
 import Register from './pages/Register'
@@ -59,12 +60,10 @@ function Layout() {
         <aside className="lg:col-span-1">
           <div className="card p-4 lg:sticky lg:top-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-[color:var(--rt-primary)] flex items-center justify-center text-white font-bold shrink-0">RT</div>
-              <div>
-                <div className="text-lg font-semibold leading-tight">RoboThink</div>
-                <div className="text-xs text-slate-500">Register & Progress</div>
-              </div>
+              <RoboThinkLogo className="w-40 max-w-full" />
             </div>
+            <p className="text-[11px] text-slate-500 -mt-2 mb-3">Register &amp; Progress</p>
+            <MascotCrew className="mb-4 pb-3 border-b border-slate-100" />
             <nav className="flex lg:flex-col gap-1 overflow-x-auto -mx-1 px-1 pb-1" aria-label="Main navigation">
               {items.map((item) => (
                 <NavLink
