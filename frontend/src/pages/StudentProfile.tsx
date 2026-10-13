@@ -575,7 +575,6 @@ export default function StudentProfile() {
                 {assessments.map((a) => {
                   const point = assessmentPoints.find((item) => item.id === a.assessment_point_id)
                   const assessmentLesson = curriculumLessons.find((lesson) => lesson.id === point?.after_lesson_id)
-                  const planForAssessment = remediationPlanHistory.find((item) => item.assessment_id === a.id || item.id === a.remediation_plan_id)
                   const isLatestAssessment = assessments[0]?.id === a.id
                   const isCurriculumSession = a.type === 'curriculum_assessment' && Boolean(a.attended_session_id && assessmentLesson)
                   return (
