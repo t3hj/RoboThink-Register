@@ -494,85 +494,10 @@ export default function StudentProfile() {
               }}>+ Add session</button>
             )}
           </div>
-          <p className="text-xs text-slate-500 mb-3">Curriculum lessons are listed below. Assessments and projects appear under Recorded sessions and do not advance normal lesson progression.</p>
-          {lessons.length === 0 ? (
-            <EmptyState title="No curriculum lessons recorded yet" hint="Assessment and project sessions are listed separately below." />
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {lessons.map((l) => (
-                <li key={l.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
-                  <div className="min-w-0">
-                    <span className="font-medium">Lesson {l.lesson_number}{l.lessons?.title ? `: ${l.lessons.title}` : ''}</span>
-                    <span className="text-slate-500"> · {l.levels?.name ?? `Level ${l.level_id}`}</span>
-                    {l.status !== 'completed' && <span className="badge ml-2">Not finished</span>}
-                  </div>
-                  <div className="flex items-center justify-end gap-3 text-xs">
-                    <span className="text-slate-500 sm:whitespace-nowrap sm:text-right">{formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}</span>
-                    {(role === 'admin' || role === 'instructor') && (
-                      <div className="flex items-center gap-3 shrink-0">
-                        <button className="text-[color:var(--rt-blue)] hover:underline" onClick={() => setLessonEdit({ id: l.id, date: l.date, lessonId: l.lesson_id ?? curriculumLessons.find((lesson) => lesson.level_id === l.level_id && lesson.lesson_number === l.lesson_number)?.id ?? '', outcome: l.status === 'completed' ? 'completed' : 'not_finished' })}>Edit</button>
-                        <button
-                          className="text-[color:var(--rt-blue)] hover:underline"
-                          onClick={() => setAssessmentHistoryEdit({
-                            kind: 'convert',
-                            id: l.id,
-                            date: l.date,
-                            lessonId: assessmentPoints.find((point) => point.level_id === l.level_id)?.after_lesson_id ?? '',
-                            result: '',
-                            remediationPath: 'remediation_lessons',
-                          })}
-                        >Convert to assessment</button>
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <h4 className="font-medium mt-5 mb-2">Recorded sessions</h4>
-          <p className="text-xs text-slate-500 mb-2">Assessment sessions can be corrected while eligible, but cannot be removed here. Removing other sessions also removes linked feedback; attendance for that date remains marked as attended.</p>
-          {historySessions.length === 0 ? (
-            <p className="text-sm text-slate-400">No session entries recorded yet.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {historySessions.map((session) => {
-                const linkedAssessment = assessments.find((assessment) => assessment.attended_session_id === session.id)
-                const assessmentOrRemediation = Boolean(linkedAssessment || session.assessment_records?.length || session.remediation_lessons?.length)
-                const canEditLinkedAssessment = linkedAssessment?.type === 'curriculum_assessment'
-                  && linkedAssessment.id === assessments[0]?.id
-                  && Boolean(assessmentPoints.some((point) => point.id === linkedAssessment.assessment_point_id))
-                const title = session.project_id
-                  ? `Project: ${session.student_projects?.name ?? 'Project'}`
-                  : session.lessons
-                  ? `${requiresAssessmentResult(curriculumLessons.find((lesson) => lesson.id === session.actual_lesson_id)) ? 'Assessment' : session.lessons.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${session.lessons.lesson_number}: ${session.lessons.title}`
-                    : 'Session'
-                return (
-                  <li key={session.id} className="py-2 flex items-center justify-between gap-3 text-sm">
-                    <div className="min-w-0">
-                      <span className="font-medium">{title}</span>
-                      <span className="text-slate-500"> · session {session.session_number} · {formatShortDate(session.date)}</span>
-                      {linkedAssessment && <span className={`badge ml-2 ${linkedAssessment.passed ? 'text-emerald-700' : 'text-rose-700'}`}>{linkedAssessment.passed ? 'PASS' : 'FAIL'}</span>}
-                      {session.outcome === 'not_finished' && <span className="badge ml-2">Not finished</span>}
-                    </div>
-                    {(role === 'admin' || role === 'instructor') && (
-                      linkedAssessment
-                        ? canEditLinkedAssessment
-                          ? <button className="text-xs text-[color:var(--rt-blue)] hover:underline" onClick={() => openAssessmentHistoryEditor(linkedAssessment)}>Edit assessment</button>
-                          : <span className="text-xs text-slate-400">Protected assessment</span>
-                        : assessmentOrRemediation
-                          ? <span className="text-xs text-slate-400">Protected record</span>
-                          : <button className="text-xs text-rose-700 hover:underline" disabled={removeSessionId === session.id} onClick={() => void removeHistorySession(session)}>{removeSessionId === session.id ? 'Removing…' : 'Remove'}</button>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-
+          <p className="text-xs text-slate-500 mb-3">Learning history lists curriculum lessons, assessment results and remediation. Recorded sessions below shows each visit, including assessment and project sessions.</p>
           {(assessments.length > 0 || remediationLessons.length > 0) && (
             <>
-              <h3 className="font-semibold mt-5 mb-3">Assessments & remediation</h3>
+              <h4 className="font-medium mb-2">Assessments & remediation</h4>
               <p className="text-xs text-slate-400 mb-2">The latest curriculum assessment can be corrected here before remediation sessions or a later assessment depend on it.</p>
               <ul className="divide-y divide-slate-100">
                 {assessments.map((a) => {
@@ -613,6 +538,73 @@ export default function StudentProfile() {
                 ))}
               </ul>
             </>
+          )}
+          {lessons.length === 0 ? (
+            <EmptyState title="No curriculum lessons recorded yet" hint="Assessment and project sessions are listed separately below." />
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {lessons.map((l) => (
+                <li key={l.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
+                  <div className="min-w-0">
+                    <span className="font-medium">Lesson {l.lesson_number}{l.lessons?.title ? `: ${l.lessons.title}` : ''}</span>
+                    <span className="text-slate-500"> · {l.levels?.name ?? `Level ${l.level_id}`}</span>
+                    {l.status !== 'completed' && <span className="badge ml-2">Not finished</span>}
+                  </div>
+                  <div className="flex items-center justify-end gap-3 text-xs">
+                    <span className="text-slate-500 sm:whitespace-nowrap sm:text-right">{formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}</span>
+                    {(role === 'admin' || role === 'instructor') && (
+                      <div className="flex items-center gap-3 shrink-0">
+                        <button className="text-[color:var(--rt-blue)] hover:underline" onClick={() => setLessonEdit({ id: l.id, date: l.date, lessonId: l.lesson_id ?? curriculumLessons.find((lesson) => lesson.level_id === l.level_id && lesson.lesson_number === l.lesson_number)?.id ?? '', outcome: l.status === 'completed' ? 'completed' : 'not_finished' })}>Edit</button>
+                        <button
+                          className="text-[color:var(--rt-blue)] hover:underline"
+                          onClick={() => setAssessmentHistoryEdit({
+                            kind: 'convert',
+                            id: l.id,
+                            date: l.date,
+                            lessonId: assessmentPoints.find((point) => point.level_id === l.level_id)?.after_lesson_id ?? '',
+                            result: '',
+                            remediationPath: 'remediation_lessons',
+                          })}
+                        >Convert to assessment</button>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h4 className="font-medium mt-5 mb-2">Recorded sessions</h4>
+          <p className="text-xs text-slate-500 mb-2">Assessment results are shown in Learning history above. Assessment and remediation sessions cannot be removed here. Removing other sessions also removes linked feedback; attendance for that date remains marked as attended.</p>
+          {historySessions.length === 0 ? (
+            <p className="text-sm text-slate-400">No session entries recorded yet.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {historySessions.map((session) => {
+                const linkedAssessment = assessments.find((assessment) => assessment.attended_session_id === session.id)
+                const assessmentOrRemediation = Boolean(linkedAssessment || session.assessment_records?.length || session.remediation_lessons?.length)
+                const title = session.project_id
+                  ? `Project: ${session.student_projects?.name ?? 'Project'}`
+                  : session.lessons
+                  ? `${requiresAssessmentResult(curriculumLessons.find((lesson) => lesson.id === session.actual_lesson_id)) ? 'Assessment' : session.lessons.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${session.lessons.lesson_number}: ${session.lessons.title}`
+                    : 'Session'
+                return (
+                  <li key={session.id} className="py-2 flex items-center justify-between gap-3 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium">{title}</span>
+                      <span className="text-slate-500"> · session {session.session_number} · {formatShortDate(session.date)}</span>
+                      {linkedAssessment && <span className="badge ml-2">Assessment session</span>}
+                      {session.outcome === 'not_finished' && <span className="badge ml-2">Not finished</span>}
+                    </div>
+                    {(role === 'admin' || role === 'instructor') && (
+                      assessmentOrRemediation
+                        ? <span className="text-xs text-slate-400">Protected record</span>
+                        : <button className="text-xs text-rose-700 hover:underline" disabled={removeSessionId === session.id} onClick={() => void removeHistorySession(session)}>{removeSessionId === session.id ? 'Removing…' : 'Remove'}</button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
           )}
 
           <h3 className="font-semibold mt-5 mb-3">Feedback sheets</h3>
