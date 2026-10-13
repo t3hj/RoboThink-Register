@@ -222,6 +222,28 @@ export default function StudentProfile() {
     await load()
   }
 
+  function openAssessmentHistoryEditor(assessment: Assessment) {
+    const point = assessmentPoints.find((item) => item.id === assessment.assessment_point_id)
+    const assessmentLesson = curriculumLessons.find((lesson) => lesson.id === point?.after_lesson_id)
+    if (!assessmentLesson || !assessment.attended_session_id) {
+      notify('This assessment is not linked to an editable curriculum session', 'error')
+      return
+    }
+    if (assessment.id !== assessments[0]?.id) {
+      notify('Only the latest assessment can be edited because later attempts may depend on it', 'error')
+      return
+    }
+    const planForAssessment = remediationPlanHistory.find((item) => item.assessment_id === assessment.id || item.id === assessment.remediation_plan_id)
+    setAssessmentHistoryEdit({
+      kind: 'edit',
+      id: assessment.id,
+      date: assessment.date,
+      lessonId: assessmentLesson.id,
+      result: assessment.passed ? 'PASS' : 'FAIL',
+      remediationPath: planForAssessment?.remediation_path ?? 'remediation_lessons',
+    })
+  }
+
   async function saveAssessmentHistoryEdit() {
     if (!assessmentHistoryEdit) return
     if (!assessmentHistoryEdit.date || !assessmentHistoryEdit.lessonId || !assessmentHistoryEdit.result) return
@@ -459,7 +481,7 @@ export default function StudentProfile() {
 
         <div className="card p-4 md:col-span-2">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <h3 className="font-semibold">Lesson history</h3>
+            <h3 className="font-semibold">Learning history</h3>
             {(role === 'admin' || role === 'instructor') && (
               <button className="btn-primary text-sm" onClick={() => {
                 const currentNormalLesson = curriculumLessons.find((lesson) => lesson.id === student.current_lesson_id && lesson.lesson_kind === 'normal')
@@ -469,8 +491,9 @@ export default function StudentProfile() {
               }}>+ Add session</button>
             )}
           </div>
+          <p className="text-xs text-slate-500 mb-3">Curriculum lessons are listed below. Assessments and projects appear under Recorded sessions and do not advance normal lesson progression.</p>
           {lessons.length === 0 ? (
-            <EmptyState title="No lessons recorded yet" hint="Completed and not-finished lessons will appear here." />
+            <EmptyState title="No curriculum lessons recorded yet" hint="Assessment and project sessions are listed separately below." />
           ) : (
             <ul className="divide-y divide-slate-100">
               {lessons.map((l) => (
@@ -505,13 +528,17 @@ export default function StudentProfile() {
           )}
 
           <h4 className="font-medium mt-5 mb-2">Recorded sessions</h4>
-          <p className="text-xs text-slate-500 mb-2">Removing a session also removes its linked feedback. Attendance for the date remains marked as attended.</p>
+          <p className="text-xs text-slate-500 mb-2">Assessment sessions can be corrected while eligible, but cannot be removed here. Removing other sessions also removes linked feedback; attendance for that date remains marked as attended.</p>
           {historySessions.length === 0 ? (
             <p className="text-sm text-slate-400">No session entries recorded yet.</p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {historySessions.map((session) => {
-                const assessmentOrRemediation = Boolean(session.assessment_records?.length || session.remediation_lessons?.length)
+                const linkedAssessment = assessments.find((assessment) => assessment.attended_session_id === session.id)
+                const assessmentOrRemediation = Boolean(linkedAssessment || session.assessment_records?.length || session.remediation_lessons?.length)
+                const canEditLinkedAssessment = linkedAssessment?.type === 'curriculum_assessment'
+                  && linkedAssessment.id === assessments[0]?.id
+                  && Boolean(assessmentPoints.some((point) => point.id === linkedAssessment.assessment_point_id))
                 const title = session.project_id
                   ? `Project: ${session.student_projects?.name ?? 'Project'}`
                   : session.lessons
@@ -522,12 +549,17 @@ export default function StudentProfile() {
                     <div className="min-w-0">
                       <span className="font-medium">{title}</span>
                       <span className="text-slate-500"> · session {session.session_number} · {formatShortDate(session.date)}</span>
+                      {linkedAssessment && <span className={`badge ml-2 ${linkedAssessment.passed ? 'text-emerald-700' : 'text-rose-700'}`}>{linkedAssessment.passed ? 'PASS' : 'FAIL'}</span>}
                       {session.outcome === 'not_finished' && <span className="badge ml-2">Not finished</span>}
                     </div>
                     {(role === 'admin' || role === 'instructor') && (
-                      assessmentOrRemediation
-                        ? <span className="text-xs text-slate-400">Protected record</span>
-                        : <button className="text-xs text-rose-700 hover:underline" disabled={removeSessionId === session.id} onClick={() => void removeHistorySession(session)}>{removeSessionId === session.id ? 'Removing…' : 'Remove'}</button>
+                      linkedAssessment
+                        ? canEditLinkedAssessment
+                          ? <button className="text-xs text-[color:var(--rt-blue)] hover:underline" onClick={() => openAssessmentHistoryEditor(linkedAssessment)}>Edit assessment</button>
+                          : <span className="text-xs text-slate-400">Protected assessment</span>
+                        : assessmentOrRemediation
+                          ? <span className="text-xs text-slate-400">Protected record</span>
+                          : <button className="text-xs text-rose-700 hover:underline" disabled={removeSessionId === session.id} onClick={() => void removeHistorySession(session)}>{removeSessionId === session.id ? 'Removing…' : 'Remove'}</button>
                     )}
                   </li>
                 )
@@ -559,14 +591,7 @@ export default function StudentProfile() {
                         {(role === 'admin' || role === 'instructor') && isCurriculumSession && isLatestAssessment && (
                           <button
                             className="text-[color:var(--rt-blue)] hover:underline"
-                            onClick={() => setAssessmentHistoryEdit({
-                              kind: 'edit',
-                              id: a.id,
-                              date: a.date,
-                              lessonId: assessmentLesson.id,
-                              result: a.passed ? 'PASS' : 'FAIL',
-                              remediationPath: planForAssessment?.remediation_path ?? 'remediation_lessons',
-                            })}
+                            onClick={() => openAssessmentHistoryEditor(a)}
                           >Edit</button>
                         )}
                       </div>
