@@ -15,9 +15,12 @@ import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
 import { attendancePercentage, groupAttendanceByMonth } from '../lib/attendanceStats'
+import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import type {
   AttendedSession,
   Assessment,
+  AssessmentPoint,
+  AssessmentResult,
   Attendance,
   FeedbackSheet,
   Level,
@@ -26,6 +29,7 @@ import type {
   ProgressOverride,
   RemediationLesson,
   RemediationPlan,
+  RemediationPath,
   Student,
   StudentProject,
   StudentProgress,
@@ -36,6 +40,15 @@ type ProfileSession = Omit<AttendedSession, 'lessons' | 'assessment_records'> & 
   student_projects?: { name: string } | null
   assessment_records?: { id: string }[] | null
   remediation_lessons?: { id: string }[] | null
+}
+
+type AssessmentHistoryEdit = {
+  kind: 'convert' | 'edit'
+  id: string
+  date: string
+  lessonId: string
+  result: AssessmentResult | 'NOT_FINISHED' | ''
+  remediationPath: RemediationPath
 }
 
 export default function StudentProfile() {
@@ -50,6 +63,8 @@ export default function StudentProfile() {
   const [historySessions, setHistorySessions] = useState<ProfileSession[]>([])
   const [remediationLessons, setRemediationLessons] = useState<RemediationLesson[]>([])
   const [assessments, setAssessments] = useState<Assessment[]>([])
+  const [assessmentPoints, setAssessmentPoints] = useState<AssessmentPoint[]>([])
+  const [remediationPlanHistory, setRemediationPlanHistory] = useState<Pick<RemediationPlan, 'id' | 'assessment_id' | 'remediation_path'>[]>([])
   const [attendance, setAttendance] = useState<Attendance[]>([])
   const [feedback, setFeedback] = useState<FeedbackSheet[]>([])
   const [projects, setProjects] = useState<StudentProject[]>([])
@@ -66,6 +81,8 @@ export default function StudentProfile() {
   const [transferBusy, setTransferBusy] = useState(false)
   const [lessonEdit, setLessonEdit] = useState<{ id: string; date: string; lessonId: string; outcome: 'completed' | 'not_finished' } | null>(null)
   const [lessonEditBusy, setLessonEditBusy] = useState(false)
+  const [assessmentHistoryEdit, setAssessmentHistoryEdit] = useState<AssessmentHistoryEdit | null>(null)
+  const [assessmentHistoryBusy, setAssessmentHistoryBusy] = useState(false)
   const [addSessionOpen, setAddSessionOpen] = useState(false)
   const [addSessionBusy, setAddSessionBusy] = useState(false)
   const [removeSessionId, setRemoveSessionId] = useState<string | null>(null)
@@ -75,7 +92,7 @@ export default function StudentProfile() {
     if (!id) return
     setLoading(true)
     setError(null)
-    const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, fRes, projectRes, ovRes, latestSessionRes, sessionsRes, curriculum] = await Promise.all([
+    const [sRes, pRes, planRes, lRes, rRes, aRes, pointRes, planHistoryRes, attRes, fRes, projectRes, ovRes, latestSessionRes, sessionsRes, curriculum] = await Promise.all([
       supabase.from('students').select('*, levels(name), subscriptions(name), centres(name)').eq('id', id).maybeSingle(),
       supabase.from('student_progress').select('*').eq('student_id', id).maybeSingle(),
       supabase
@@ -99,7 +116,10 @@ export default function StudentProfile() {
         .from('assessments')
         .select('*, profiles(name), levels(name)')
         .eq('student_id', id)
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false }),
+      supabase.from('assessment_points').select('*').eq('active', true),
+      supabase.from('remediation_plans').select('id,assessment_id,remediation_path').eq('student_id', id),
       supabase.from('attendance').select('*').eq('student_id', id).order('date', { ascending: false }),
       supabase
         .from('feedback_sheets')
@@ -134,13 +154,15 @@ export default function StudentProfile() {
         .order('session_number', { ascending: false }),
       loadCurriculum(),
     ])
-    if (sRes.error || pRes.error || lRes.error || rRes.error || aRes.error || attRes.error || fRes.error || projectRes.error || sessionsRes.error) {
+    if (sRes.error || pRes.error || lRes.error || rRes.error || aRes.error || pointRes.error || planHistoryRes.error || attRes.error || fRes.error || projectRes.error || sessionsRes.error) {
       setError(
         sRes.error?.message ??
           pRes.error?.message ??
           lRes.error?.message ??
           rRes.error?.message ??
           aRes.error?.message ??
+          pointRes.error?.message ??
+          planHistoryRes.error?.message ??
           attRes.error?.message ??
           fRes.error?.message ??
           projectRes.error?.message ??
@@ -162,6 +184,8 @@ export default function StudentProfile() {
     setHistorySessions((sessionsRes.data ?? []) as ProfileSession[])
     setRemediationLessons((rRes.data ?? []) as RemediationLesson[])
     setAssessments((aRes.data ?? []) as Assessment[])
+    setAssessmentPoints((pointRes.data ?? []) as AssessmentPoint[])
+    setRemediationPlanHistory((planHistoryRes.data ?? []) as Pick<RemediationPlan, 'id' | 'assessment_id' | 'remediation_path'>[])
     setAttendance((attRes.data ?? []) as Attendance[])
     setFeedback((fRes.data ?? []) as FeedbackSheet[])
     setProjects((projectRes.data ?? []) as StudentProject[])
@@ -195,6 +219,36 @@ export default function StudentProfile() {
     }
     setLessonEdit(null)
     notify('Lesson history updated', 'success')
+    await load()
+  }
+
+  async function saveAssessmentHistoryEdit() {
+    if (!assessmentHistoryEdit) return
+    if (!assessmentHistoryEdit.date || !assessmentHistoryEdit.lessonId || !assessmentHistoryEdit.result) return
+    if (assessmentHistoryEdit.result === 'FAIL' && !assessmentHistoryEdit.remediationPath) return
+    setAssessmentHistoryBusy(true)
+    const saveError = assessmentHistoryEdit.kind === 'convert'
+      ? (await supabase.rpc('convert_lesson_history_to_assessment', {
+          in_lesson_record_id: assessmentHistoryEdit.id,
+          in_date: assessmentHistoryEdit.date,
+          in_assessment_lesson_id: assessmentHistoryEdit.lessonId,
+          in_result: assessmentHistoryEdit.result,
+          in_remediation_path: assessmentHistoryEdit.remediationPath,
+        })).error
+      : (await supabase.rpc('edit_assessment_history', {
+          in_assessment_id: assessmentHistoryEdit.id,
+          in_date: assessmentHistoryEdit.date,
+          in_assessment_lesson_id: assessmentHistoryEdit.lessonId,
+          in_result: assessmentHistoryEdit.result,
+          in_remediation_path: assessmentHistoryEdit.remediationPath,
+        })).error
+    setAssessmentHistoryBusy(false)
+    if (saveError) {
+      notify(saveError.message, 'error')
+      return
+    }
+    setAssessmentHistoryEdit(null)
+    notify(assessmentHistoryEdit.kind === 'convert' ? 'Lesson converted to an assessment session' : 'Assessment history corrected', 'success')
     await load()
   }
 
@@ -429,7 +483,20 @@ export default function StudentProfile() {
                   <div className="flex items-center justify-end gap-3 text-xs">
                     <span className="text-slate-500 sm:whitespace-nowrap sm:text-right">{formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}</span>
                     {(role === 'admin' || role === 'instructor') && (
-                      <button className="text-[color:var(--rt-blue)] hover:underline" onClick={() => setLessonEdit({ id: l.id, date: l.date, lessonId: l.lesson_id ?? curriculumLessons.find((lesson) => lesson.level_id === l.level_id && lesson.lesson_number === l.lesson_number)?.id ?? '', outcome: l.status === 'completed' ? 'completed' : 'not_finished' })}>Edit</button>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <button className="text-[color:var(--rt-blue)] hover:underline" onClick={() => setLessonEdit({ id: l.id, date: l.date, lessonId: l.lesson_id ?? curriculumLessons.find((lesson) => lesson.level_id === l.level_id && lesson.lesson_number === l.lesson_number)?.id ?? '', outcome: l.status === 'completed' ? 'completed' : 'not_finished' })}>Edit</button>
+                        <button
+                          className="text-[color:var(--rt-blue)] hover:underline"
+                          onClick={() => setAssessmentHistoryEdit({
+                            kind: 'convert',
+                            id: l.id,
+                            date: l.date,
+                            lessonId: assessmentPoints.find((point) => point.level_id === l.level_id)?.after_lesson_id ?? '',
+                            result: '',
+                            remediationPath: 'remediation_lessons',
+                          })}
+                        >Convert to assessment</button>
+                      </div>
                     )}
                   </div>
                 </li>
@@ -448,7 +515,7 @@ export default function StudentProfile() {
                 const title = session.project_id
                   ? `Project: ${session.student_projects?.name ?? 'Project'}`
                   : session.lessons
-                    ? `${session.lessons.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${session.lessons.lesson_number}: ${session.lessons.title}`
+                  ? `${requiresAssessmentResult(curriculumLessons.find((lesson) => lesson.id === session.actual_lesson_id)) ? 'Assessment' : session.lessons.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${session.lessons.lesson_number}: ${session.lessons.title}`
                     : 'Session'
                 return (
                   <li key={session.id} className="py-2 flex items-center justify-between gap-3 text-sm">
@@ -471,24 +538,41 @@ export default function StudentProfile() {
           {(assessments.length > 0 || remediationLessons.length > 0) && (
             <>
               <h3 className="font-semibold mt-5 mb-3">Assessments & remediation</h3>
-              <p className="text-xs text-slate-400 mb-2">
-                Assessment results are historical and can't be edited here — an incorrect result needs a manual
-                fix to progression via "Change current lesson" above, not a reversal of the assessment record itself.
-              </p>
+              <p className="text-xs text-slate-400 mb-2">The latest curriculum assessment can be corrected here before remediation sessions or a later assessment depend on it.</p>
               <ul className="divide-y divide-slate-100">
-                {assessments.map((a) => (
-                  <li key={a.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
-                    <div>
-                      <span className={`font-medium ${a.passed ? 'text-emerald-700' : 'text-rose-700'}`}>
-                        {a.passed ? 'PASS' : 'FAIL'}
-                      </span>
-                      <span className="text-slate-500"> · attempt {a.attempt_number}</span>
-                    </div>
-                    <div className="text-slate-500 text-xs sm:whitespace-nowrap sm:text-right">
-                      {formatShortDate(a.date)} · {a.profiles?.name ?? 'Unassigned'}
-                    </div>
-                  </li>
-                ))}
+                {assessments.map((a) => {
+                  const point = assessmentPoints.find((item) => item.id === a.assessment_point_id)
+                  const assessmentLesson = curriculumLessons.find((lesson) => lesson.id === point?.after_lesson_id)
+                  const planForAssessment = remediationPlanHistory.find((item) => item.assessment_id === a.id || item.id === a.remediation_plan_id)
+                  const isLatestAssessment = assessments[0]?.id === a.id
+                  const isCurriculumSession = a.type === 'curriculum_assessment' && Boolean(a.attended_session_id && assessmentLesson)
+                  return (
+                    <li key={a.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
+                      <div>
+                        <span className={`font-medium ${a.passed ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {a.passed ? 'PASS' : 'FAIL'}
+                        </span>
+                        <span className="text-slate-500"> · {assessmentLesson ? `Assessment ${assessmentLesson.lesson_number}: ${assessmentLesson.title}` : a.type} · attempt {a.attempt_number}</span>
+                      </div>
+                      <div className="flex items-center justify-end gap-3 text-xs">
+                        <span className="text-slate-500 sm:whitespace-nowrap sm:text-right">{formatShortDate(a.date)} · {a.profiles?.name ?? 'Unassigned'}</span>
+                        {(role === 'admin' || role === 'instructor') && isCurriculumSession && isLatestAssessment && (
+                          <button
+                            className="text-[color:var(--rt-blue)] hover:underline"
+                            onClick={() => setAssessmentHistoryEdit({
+                              kind: 'edit',
+                              id: a.id,
+                              date: a.date,
+                              lessonId: assessmentLesson.id,
+                              result: a.passed ? 'PASS' : 'FAIL',
+                              remediationPath: planForAssessment?.remediation_path ?? 'remediation_lessons',
+                            })}
+                          >Edit</button>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
                 {remediationLessons.map((r) => (
                   <li key={r.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
                     <div>
@@ -583,6 +667,68 @@ export default function StudentProfile() {
               <label className="block text-sm"><span className="block text-slate-500 mb-1">Outcome</span><select className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.outcome} onChange={(event) => setLessonEdit({ ...lessonEdit, outcome: event.target.value as 'completed' | 'not_finished' })} disabled={lessonEditBusy}><option value="completed">Completed</option><option value="not_finished">Not finished</option></select></label>
             </div>
             <div className="flex justify-end gap-2 mt-5"><button className="btn-ghost" onClick={() => setLessonEdit(null)} disabled={lessonEditBusy}>Cancel</button><button className="btn-primary" onClick={() => void saveLessonHistoryEdit()} disabled={lessonEditBusy || !lessonEdit.date || !lessonEdit.lessonId}>{lessonEditBusy ? 'Saving…' : 'Save changes'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {assessmentHistoryEdit && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => !assessmentHistoryBusy && setAssessmentHistoryEdit(null)}>
+          <div className="card p-5 max-w-lg w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={assessmentHistoryEdit.kind === 'convert' ? 'Convert lesson to assessment' : 'Edit assessment history'}>
+            <h3 className="font-semibold mb-1">{assessmentHistoryEdit.kind === 'convert' ? 'Convert lesson to assessment' : 'Correct assessment history'}</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              {assessmentHistoryEdit.kind === 'convert'
+                ? 'This replaces the normal lesson record with an assessment session, preserving the date and linked feedback.'
+                : 'This updates the assessment and its linked session. Edits are blocked after remediation sessions or later assessments depend on this attempt.'}
+            </p>
+            <div className="space-y-3">
+              <label className="block text-sm"><span className="block text-slate-500 mb-1">Date</span><input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={assessmentHistoryEdit.date} onChange={(event) => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, date: event.target.value })} disabled={assessmentHistoryBusy} /></label>
+              <label className="block text-sm">
+                <span className="block text-slate-500 mb-1">Assessment</span>
+                <select className="w-full p-2 border border-slate-200 rounded-lg" value={assessmentHistoryEdit.lessonId} onChange={(event) => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, lessonId: event.target.value })} disabled={assessmentHistoryBusy}>
+                  <option value="">Choose an assessment</option>
+                  {levels.map((level) => {
+                    const levelAssessments = curriculumLessons
+                      .filter((lesson) => requiresAssessmentResult(lesson) && lesson.level_id === level.id && assessmentPoints.some((point) => point.after_lesson_id === lesson.id))
+                      .sort((a, b) => a.lesson_number - b.lesson_number)
+                    return levelAssessments.length > 0 ? (
+                      <optgroup key={level.id} label={level.name}>
+                        {levelAssessments.map((lesson) => <option key={lesson.id} value={lesson.id}>Assessment {lesson.lesson_number}: {lesson.title}</option>)}
+                      </optgroup>
+                    ) : null
+                  })}
+                </select>
+              </label>
+              <fieldset className="text-sm">
+                <legend className="block text-slate-500 mb-1">Result</legend>
+                <div className="flex gap-2">
+                  {(['PASS', 'FAIL'] as const).map((result) => (
+                    <button key={result} type="button" className={`flex-1 px-3 py-2 rounded-lg font-medium ${assessmentHistoryEdit.result === result ? result === 'PASS' ? 'btn-primary' : 'bg-rose-600 text-white' : 'btn-ghost'}`} onClick={() => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, result, remediationPath: assessmentHistoryEdit.remediationPath || 'remediation_lessons' })} disabled={assessmentHistoryBusy}>{result}</button>
+                  ))}
+                  {assessmentHistoryEdit.kind === 'convert' && (
+                    <button type="button" className={`flex-1 px-3 py-2 rounded-lg font-medium ${assessmentHistoryEdit.result === 'NOT_FINISHED' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, result: 'NOT_FINISHED' })} disabled={assessmentHistoryBusy}>Not finished</button>
+                  )}
+                </div>
+              </fieldset>
+              {assessmentHistoryEdit.result === 'FAIL' && (
+                <fieldset className="rounded-lg border border-sky-200 bg-sky-50 p-3">
+                  <legend className="text-xs text-sky-900 px-1">Remediation path</legend>
+                  <div className="flex flex-col gap-2">
+                    {REMEDIATION_PATH_OPTIONS.map((option) => (
+                      <label key={option.value} className="flex items-start gap-2 text-xs text-sky-900">
+                        <input type="radio" className="mt-0.5" name="history-assessment-remediation-path" checked={assessmentHistoryEdit.remediationPath === option.value} onChange={() => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, remediationPath: option.value })} disabled={assessmentHistoryBusy} />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button className="btn-ghost" onClick={() => setAssessmentHistoryEdit(null)} disabled={assessmentHistoryBusy}>Cancel</button>
+              <button className="btn-primary" onClick={() => void saveAssessmentHistoryEdit()} disabled={assessmentHistoryBusy || !assessmentHistoryEdit.date || !assessmentHistoryEdit.lessonId || !assessmentHistoryEdit.result || (assessmentHistoryEdit.result === 'FAIL' && !assessmentHistoryEdit.remediationPath)}>
+                {assessmentHistoryBusy ? 'Saving…' : assessmentHistoryEdit.kind === 'convert' ? 'Save assessment' : 'Save correction'}
+              </button>
+            </div>
           </div>
         </div>
       )}
