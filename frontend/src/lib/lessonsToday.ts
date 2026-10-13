@@ -1,4 +1,4 @@
-import type { Lesson, Level, StudentProgress } from '../types'
+import type { Lesson, Level, StudentProgress, StudentProject } from '../types'
 import { parseLevelName } from './curriculum'
 
 export interface LessonsTodayRosterEntry {
@@ -9,6 +9,7 @@ export interface LessonsTodayRosterEntry {
    *  not override the stored pointer; `null` means history is authoritative but
    *  there is no resolvable next lesson. */
   expectedLesson?: Pick<Lesson, 'level_id' | 'lesson_number' | 'title'> | null
+  projects?: StudentProject[]
 }
 
 export interface LessonGroup {
@@ -22,6 +23,12 @@ export interface LessonGroup {
 export interface ProgrammeGroup {
   programme: string
   groups: LessonGroup[]
+}
+
+export interface ProjectGroup {
+  projectId: string
+  name: string
+  students: { id: string; full_name: string }[]
 }
 
 /** Groups the selected-date roster by the lesson each student is expected to
@@ -84,4 +91,20 @@ export function groupLessonsToday(
     byProgramme.get(programme)!.push(g)
   }
   return order.map((programme) => ({ programme, groups: byProgramme.get(programme)! }))
+}
+
+/** Active projects are real work for today's register even though they do not advance the curriculum. */
+export function groupProjectsToday(roster: LessonsTodayRosterEntry[]): ProjectGroup[] {
+  const byProject = new Map<string, ProjectGroup>()
+  for (const student of roster) {
+    for (const project of student.projects ?? []) {
+      if (project.status !== 'active') continue
+      const group = byProject.get(project.id) ?? { projectId: project.id, name: project.name, students: [] }
+      group.students.push({ id: student.id, full_name: student.full_name })
+      byProject.set(project.id, group)
+    }
+  }
+  return [...byProject.values()]
+    .map((group) => ({ ...group, students: group.students.sort((a, b) => a.full_name.localeCompare(b.full_name)) }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }

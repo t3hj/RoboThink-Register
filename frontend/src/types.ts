@@ -308,7 +308,7 @@ export interface AttendedSession {
   student_id: string
   date: string
   session_number: number
-  actual_lesson_id: string
+  actual_lesson_id: string | null
   project_id?: string | null
   outcome: SessionOutcome
   lesson_record_id: string | null

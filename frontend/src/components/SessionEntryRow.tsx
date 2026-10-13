@@ -40,6 +40,7 @@ interface Props {
 }
 
 type Draft = {
+  activity: 'lesson' | 'project'
   lessonId: string
   outcome: SessionOutcome
   leftAside: boolean
@@ -52,7 +53,7 @@ type Draft = {
 }
 
 function blankDraft(defaultLessonId: string): Draft {
-  return { lessonId: defaultLessonId, outcome: 'completed', leftAside: false, identifier: '', reason: '', note: '', projectId: '', assessmentResult: '', remediationPath: '' }
+  return { activity: 'lesson', lessonId: defaultLessonId, outcome: 'completed', leftAside: false, identifier: '', reason: '', note: '', projectId: '', assessmentResult: '', remediationPath: '' }
 }
 
 export default function SessionEntryRow({
@@ -104,7 +105,8 @@ export default function SessionEntryRow({
   function startEdit(session: AttendedSession) {
     setEditingSessionId(session.id)
     setDraft({
-      lessonId: session.actual_lesson_id,
+      activity: session.project_id && !session.actual_lesson_id ? 'project' : 'lesson',
+      lessonId: session.actual_lesson_id ?? '',
       outcome: session.outcome,
       leftAside: session.left_aside,
       identifier: session.left_aside_identifier ?? '',
@@ -158,9 +160,17 @@ export default function SessionEntryRow({
   }
 
   async function save() {
-    if (!activeDraft?.lessonId) return
+    if (!activeDraft) return
+    if (activeDraft.activity === 'project' && !activeDraft.projectId) {
+      notify('Choose a project first.', 'error')
+      return
+    }
+    if (activeDraft.activity === 'lesson' && !activeDraft.lessonId) {
+      notify('Choose a lesson first.', 'error')
+      return
+    }
     const selectedForSave = lessonById.get(activeDraft.lessonId)
-    if (requiresAssessmentResult(selectedForSave)) {
+    if (activeDraft.activity === 'lesson' && requiresAssessmentResult(selectedForSave)) {
       if (editingSessionId) {
         notify('Assessment lessons are recorded as new sessions. Cancel this edit and record a new session instead.', 'error')
         return
@@ -174,12 +184,29 @@ export default function SessionEntryRow({
         return
       }
     }
-    const validationError = validateLeftAside(activeDraft)
-    if (!requiresAssessmentResult(selectedForSave) && validationError) {
+    const validationError = activeDraft.activity === 'project' ? null : validateLeftAside(activeDraft)
+    if (validationError) {
       notify(validationError, 'error')
       return
     }
     setBusy(true)
+    if (activeDraft.activity === 'project') {
+      const { error } = editingSessionId
+        ? await supabase.rpc('update_project_session', { in_session_id: editingSessionId, in_project_id: activeDraft.projectId, in_outcome: activeDraft.outcome, in_date: date })
+        : await supabase.rpc('record_project_session', { in_student_id: student.id, in_project_id: activeDraft.projectId, in_outcome: activeDraft.outcome, in_date: date })
+      if (error) {
+        setBusy(false)
+        notify(error.message, 'error')
+        return
+      }
+      await upsertAttendance({ status: outcomeToAttendanceStatus(activeDraft.outcome) })
+      setBusy(false)
+      setDraft(null)
+      setEditingSessionId(null)
+      notify(editingSessionId ? 'Project session updated' : `Project session recorded for ${student.full_name}`, 'success')
+      onChanged()
+      return
+    }
     const args = {
       in_actual_lesson_id: activeDraft.lessonId,
       in_outcome: activeDraft.outcome,
@@ -292,14 +319,14 @@ export default function SessionEntryRow({
       {sessionsToday.length > 0 && (
         <ul className="flex flex-col gap-2">
           {sessionsToday.map((s) => {
-            const lesson = lessonById.get(s.actual_lesson_id)
+            const lesson = s.actual_lesson_id ? lessonById.get(s.actual_lesson_id) : undefined
             const fb = feedbackBySessionId.get(s.id)
             return (
               <li key={s.id} className="bg-slate-50 rounded-lg p-2.5 text-sm">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div>
                     <span className="font-medium">Session {s.session_number}</span>
-                    <span className="text-slate-500"> · {lesson ? `${requiresAssessmentResult(lesson) ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
+                    <span className="text-slate-500"> · {s.project_id && !lesson ? `Project: ${projects.find((project) => project.id === s.project_id)?.name ?? 'Project'}` : lesson ? `${requiresAssessmentResult(lesson) ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
                     {s.outcome === 'not_finished' && !requiresAssessmentResult(lesson) && <span className="badge ml-1.5">Not finished</span>}
                     {s.left_aside && <span className="badge badge-assess ml-1.5">Build {s.left_aside_identifier} left aside</span>}
                   </div>
@@ -348,6 +375,34 @@ export default function SessionEntryRow({
       {/* Session entry / edit form */}
       {state === 'attended' && activeDraft && (
         <div className="bg-slate-50 rounded-lg p-3 flex flex-col gap-3">
+          <div className="flex gap-2" role="group" aria-label="Session activity">
+            {(['lesson', 'project'] as const).map((activity) => {
+              const editingNormalSession = editingSessionId != null && !sessionsToday.find((session) => session.id === editingSessionId)?.project_id
+              return <button key={activity} type="button" disabled={activity === 'project' && editingNormalSession} className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${activeDraft.activity === activity ? 'btn-primary' : 'btn-ghost'} disabled:opacity-40`} onClick={() => setDraft({ ...activeDraft, activity })}>
+                {activity === 'lesson' ? 'Normal lesson' : 'Project'}
+              </button>
+            })}
+          </div>
+          {activeDraft.activity === 'project' && (
+            <>
+              <label className="block text-sm">
+                <span className="block text-slate-500 mb-1">Project worked on</span>
+                <select className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white" value={activeDraft.projectId} onChange={(event) => setDraft({ ...activeDraft, projectId: event.target.value })}>
+                  <option value="">— Choose an active project —</option>
+                  {draftProjects.filter((project) => project.status === 'active' || project.id === activeDraft.projectId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                </select>
+              </label>
+              <div>
+                <span className="block text-sm font-medium text-slate-600 mb-1.5">Project session outcome</span>
+                <div className="flex gap-2">
+                  <button className={`flex-1 text-sm px-3 py-2 rounded-lg font-medium ${activeDraft.outcome === 'completed' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setDraft({ ...activeDraft, outcome: 'completed' })}>Completed</button>
+                  <button className={`flex-1 text-sm px-3 py-2 rounded-lg font-medium ${activeDraft.outcome === 'not_finished' ? 'bg-[color:var(--rt-yellow)] text-[color:var(--rt-ink)]' : 'btn-ghost'}`} onClick={() => setDraft({ ...activeDraft, outcome: 'not_finished' })}>Not finished</button>
+                </div>
+              </div>
+            </>
+          )}
+          {activeDraft.activity === 'lesson' && (
+          <>
           <div>
             <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-2 mb-1.5">
               <span className="text-sm font-medium text-slate-600">Actual lesson taught</span>
@@ -579,6 +634,8 @@ export default function SessionEntryRow({
               )}
             </div>
           )}
+          </>
+          )}
 
           <div className="flex justify-end gap-2">
             <button
@@ -591,7 +648,7 @@ export default function SessionEntryRow({
             >
               Cancel
             </button>
-            <BusyButton busy={busy} disabled={!activeDraft.lessonId} onClick={() => void save()} className="btn-primary text-sm">
+            <BusyButton busy={busy} disabled={activeDraft.activity === 'project' ? !activeDraft.projectId : !activeDraft.lessonId} onClick={() => void save()} className="btn-primary text-sm">
               Save
             </BusyButton>
           </div>

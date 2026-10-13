@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Lesson, Level, StudentProgress } from '../types'
-import { groupLessonsToday } from '../lib/lessonsToday'
+import { groupLessonsToday, groupProjectsToday } from '../lib/lessonsToday'
 
 interface RosterLike {
   id: string
@@ -17,8 +17,9 @@ interface RosterLike {
  *  component is just the rendering. */
 export default function LessonsToday({ roster, levels }: { roster: RosterLike[]; levels: Level[] }) {
   const programmes = groupLessonsToday(roster, levels)
+  const projects = groupProjectsToday(roster)
 
-  if (programmes.length === 0) return null
+  if (programmes.length === 0 && projects.length === 0) return null
 
   return (
     <section className="card card-accent-top p-4 mb-5" style={{ ['--accent-color' as string]: 'var(--rt-yellow)' }}>
@@ -58,6 +59,23 @@ export default function LessonsToday({ roster, levels }: { roster: RosterLike[];
           )
         })}
       </div>
+      {projects.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-100">
+          <div className="text-sm font-semibold text-slate-800">Projects</div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
+            {projects.map((project) => (
+              <div key={project.projectId} className="mt-1">
+                <div className="text-sm font-medium">{project.name}</div>
+                <ul className="ml-1 text-sm text-slate-600">
+                  {project.students.map((student) => (
+                    <li key={student.id}><Link to={`/students/${student.id}`} className="hover:underline">{student.full_name}</Link></li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   )
 }

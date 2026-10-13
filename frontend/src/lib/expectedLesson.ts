@@ -68,7 +68,7 @@ export function buildProgressionAttempts<L extends LessonRef>(
   )
 
   const sessionAttempts = sessions.flatMap((session) => {
-    const lesson = normalLessonById.get(session.actual_lesson_id)
+    const lesson = session.actual_lesson_id ? normalLessonById.get(session.actual_lesson_id) : undefined
     return lesson
       ? [{
           level_id: lesson.level_id,

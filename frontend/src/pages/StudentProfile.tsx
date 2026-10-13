@@ -55,6 +55,8 @@ export default function StudentProfile() {
   const [transferCentreId, setTransferCentreId] = useState('')
   const [transferDate, setTransferDate] = useState(todayISO())
   const [transferBusy, setTransferBusy] = useState(false)
+  const [lessonEdit, setLessonEdit] = useState<{ id: string; date: string; lessonId: string; outcome: 'completed' | 'not_finished' } | null>(null)
+  const [lessonEditBusy, setLessonEditBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -155,6 +157,25 @@ export default function StudentProfile() {
   useEffect(() => {
     void load()
   }, [load])
+
+  async function saveLessonHistoryEdit() {
+    if (!lessonEdit) return
+    setLessonEditBusy(true)
+    const { error: editError } = await supabase.rpc('update_lesson_history', {
+      in_lesson_record_id: lessonEdit.id,
+      in_date: lessonEdit.date,
+      in_lesson_id: lessonEdit.lessonId,
+      in_outcome: lessonEdit.outcome,
+    })
+    setLessonEditBusy(false)
+    if (editError) {
+      notify(editError.message, 'error')
+      return
+    }
+    setLessonEdit(null)
+    notify('Lesson history updated', 'success')
+    await load()
+  }
 
   function openTransfer() {
     setTransferCentreId('')
@@ -331,8 +352,11 @@ export default function StudentProfile() {
                     <span className="text-slate-500"> · {l.levels?.name ?? `Level ${l.level_id}`}</span>
                     {l.status !== 'completed' && <span className="badge ml-2">Not finished</span>}
                   </div>
-                  <div className="text-slate-500 text-xs sm:whitespace-nowrap sm:text-right">
-                    {formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}
+                  <div className="flex items-center justify-end gap-3 text-xs">
+                    <span className="text-slate-500 sm:whitespace-nowrap sm:text-right">{formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}</span>
+                    {(role === 'admin' || role === 'instructor') && (
+                      <button className="text-[color:var(--rt-blue)] hover:underline" onClick={() => setLessonEdit({ id: l.id, date: l.date, lessonId: l.lesson_id ?? curriculumLessons.find((lesson) => lesson.level_id === l.level_id && lesson.lesson_number === l.lesson_number)?.id ?? '', outcome: l.status === 'completed' ? 'completed' : 'not_finished' })}>Edit</button>
+                    )}
                   </div>
                 </li>
               ))}
@@ -437,6 +461,26 @@ export default function StudentProfile() {
           )}
         </div>
       </div>
+
+      {lessonEdit && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => !lessonEditBusy && setLessonEdit(null)}>
+          <div className="card p-5 max-w-lg w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Edit lesson history">
+            <h3 className="font-semibold mb-1">Edit lesson history</h3>
+            <p className="text-sm text-slate-500 mb-4">Changing this entry also updates its linked session, so register history and progression stay in sync.</p>
+            <div className="space-y-3">
+              <label className="block text-sm"><span className="block text-slate-500 mb-1">Date</span><input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.date} onChange={(event) => setLessonEdit({ ...lessonEdit, date: event.target.value })} disabled={lessonEditBusy} /></label>
+              <label className="block text-sm">
+                <span className="block text-slate-500 mb-1">Lesson</span>
+                <select className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.lessonId} onChange={(event) => setLessonEdit({ ...lessonEdit, lessonId: event.target.value })} disabled={lessonEditBusy}>
+                  {levels.map((level) => <optgroup key={level.id} label={level.name}>{curriculumLessons.filter((lesson) => lesson.level_id === level.id && lesson.lesson_kind === 'normal').sort((a, b) => a.lesson_number - b.lesson_number).map((lesson) => <option key={lesson.id} value={lesson.id}>Lesson {lesson.lesson_number}: {lesson.title}</option>)}</optgroup>)}
+                </select>
+              </label>
+              <label className="block text-sm"><span className="block text-slate-500 mb-1">Outcome</span><select className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.outcome} onChange={(event) => setLessonEdit({ ...lessonEdit, outcome: event.target.value as 'completed' | 'not_finished' })} disabled={lessonEditBusy}><option value="completed">Completed</option><option value="not_finished">Not finished</option></select></label>
+            </div>
+            <div className="flex justify-end gap-2 mt-5"><button className="btn-ghost" onClick={() => setLessonEdit(null)} disabled={lessonEditBusy}>Cancel</button><button className="btn-primary" onClick={() => void saveLessonHistoryEdit()} disabled={lessonEditBusy || !lessonEdit.date || !lessonEdit.lessonId}>{lessonEditBusy ? 'Saving…' : 'Save changes'}</button></div>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <StudentForm
