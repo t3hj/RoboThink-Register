@@ -16,6 +16,7 @@ import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
 import { attendancePercentage, groupAttendanceByMonth } from '../lib/attendanceStats'
 import type {
+  AttendedSession,
   Assessment,
   Attendance,
   FeedbackSheet,
@@ -30,15 +31,23 @@ import type {
   StudentProgress,
 } from '../types'
 
+type ProfileSession = Omit<AttendedSession, 'lessons' | 'assessment_records'> & {
+  lessons?: { lesson_number: number; title: string; level_id: number; lesson_kind: 'normal' | 'assessment' } | null
+  student_projects?: { name: string } | null
+  assessment_records?: { id: string }[] | null
+  remediation_lessons?: { id: string }[] | null
+}
+
 export default function StudentProfile() {
   const { id } = useParams<{ id: string }>()
-  const { role } = useAuth()
+  const { role, profile } = useAuth()
   const { activeCentres } = useCentres()
   const { notify } = useToast()
   const [student, setStudent] = useState<Student | null>(null)
   const [progress, setProgress] = useState<StudentProgress | null>(null)
   const [plan, setPlan] = useState<RemediationPlan | null>(null)
   const [lessons, setLessons] = useState<LessonRecord[]>([])
+  const [historySessions, setHistorySessions] = useState<ProfileSession[]>([])
   const [remediationLessons, setRemediationLessons] = useState<RemediationLesson[]>([])
   const [assessments, setAssessments] = useState<Assessment[]>([])
   const [attendance, setAttendance] = useState<Attendance[]>([])
@@ -57,12 +66,16 @@ export default function StudentProfile() {
   const [transferBusy, setTransferBusy] = useState(false)
   const [lessonEdit, setLessonEdit] = useState<{ id: string; date: string; lessonId: string; outcome: 'completed' | 'not_finished' } | null>(null)
   const [lessonEditBusy, setLessonEditBusy] = useState(false)
+  const [addSessionOpen, setAddSessionOpen] = useState(false)
+  const [addSessionBusy, setAddSessionBusy] = useState(false)
+  const [removeSessionId, setRemoveSessionId] = useState<string | null>(null)
+  const [historyAdd, setHistoryAdd] = useState<{ date: string; lessonId: string; outcome: 'completed' | 'not_finished' }>({ date: todayISO(), lessonId: '', outcome: 'completed' })
 
   const load = useCallback(async () => {
     if (!id) return
     setLoading(true)
     setError(null)
-    const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, fRes, projectRes, ovRes, latestSessionRes, curriculum] = await Promise.all([
+    const [sRes, pRes, planRes, lRes, rRes, aRes, attRes, fRes, projectRes, ovRes, latestSessionRes, sessionsRes, curriculum] = await Promise.all([
       supabase.from('students').select('*, levels(name), subscriptions(name), centres(name)').eq('id', id).maybeSingle(),
       supabase.from('student_progress').select('*').eq('student_id', id).maybeSingle(),
       supabase
@@ -113,9 +126,15 @@ export default function StudentProfile() {
         .order('session_number', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from('attended_sessions')
+        .select('*, lessons(lesson_number,title,level_id,lesson_kind), student_projects(name), assessment_records:assessments(id), remediation_lessons(id)')
+        .eq('student_id', id)
+        .order('date', { ascending: false })
+        .order('session_number', { ascending: false }),
       loadCurriculum(),
     ])
-    if (sRes.error || pRes.error || lRes.error || rRes.error || aRes.error || attRes.error || fRes.error || projectRes.error) {
+    if (sRes.error || pRes.error || lRes.error || rRes.error || aRes.error || attRes.error || fRes.error || projectRes.error || sessionsRes.error) {
       setError(
         sRes.error?.message ??
           pRes.error?.message ??
@@ -125,6 +144,7 @@ export default function StudentProfile() {
           attRes.error?.message ??
           fRes.error?.message ??
           projectRes.error?.message ??
+          sessionsRes.error?.message ??
           'Unknown error',
       )
       setLoading(false)
@@ -139,6 +159,7 @@ export default function StudentProfile() {
         : null,
     )
     setLessons((lRes.data ?? []) as LessonRecord[])
+    setHistorySessions((sessionsRes.data ?? []) as ProfileSession[])
     setRemediationLessons((rRes.data ?? []) as RemediationLesson[])
     setAssessments((aRes.data ?? []) as Assessment[])
     setAttendance((attRes.data ?? []) as Attendance[])
@@ -174,6 +195,49 @@ export default function StudentProfile() {
     }
     setLessonEdit(null)
     notify('Lesson history updated', 'success')
+    await load()
+  }
+
+  async function saveAddedLessonSession() {
+    if (!student || !historyAdd.date || !historyAdd.lessonId || !profile) return
+    setAddSessionBusy(true)
+    const { error: sessionError } = await supabase.rpc('record_attended_session', {
+      in_student_id: student.id,
+      in_actual_lesson_id: historyAdd.lessonId,
+      in_date: historyAdd.date,
+      in_outcome: historyAdd.outcome,
+    })
+    if (sessionError) {
+      setAddSessionBusy(false)
+      notify(sessionError.message, 'error')
+      return
+    }
+    const dayLabel = new Date(`${historyAdd.date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' })
+    const { error: attendanceError } = await supabase.from('attendance').upsert({
+      student_id: student.id,
+      date: historyAdd.date,
+      scheduled_day: student.preferred_day ?? dayLabel,
+      actual_day: dayLabel,
+      instructor_id: profile.id,
+      status: historyAdd.outcome === 'completed' ? 'Completed' : 'Arrived',
+    }, { onConflict: 'student_id,date' })
+    setAddSessionBusy(false)
+    setAddSessionOpen(false)
+    notify(attendanceError ? `Session added, but attendance could not be updated: ${attendanceError.message}` : 'Lesson session added', attendanceError ? 'error' : 'success')
+    await load()
+  }
+
+  async function removeHistorySession(session: ProfileSession) {
+    const confirmed = window.confirm('Remove this session and its linked feedback? The student will remain marked as attended for that date.')
+    if (!confirmed) return
+    setRemoveSessionId(session.id)
+    const { error: removeError } = await supabase.rpc('delete_attended_session', { in_session_id: session.id })
+    setRemoveSessionId(null)
+    if (removeError) {
+      notify(removeError.message, 'error')
+      return
+    }
+    notify('Session and linked feedback removed', 'success')
     await load()
   }
 
@@ -340,7 +404,17 @@ export default function StudentProfile() {
         </div>
 
         <div className="card p-4 md:col-span-2">
-          <h3 className="font-semibold mb-3">Lesson history</h3>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h3 className="font-semibold">Lesson history</h3>
+            {(role === 'admin' || role === 'instructor') && (
+              <button className="btn-primary text-sm" onClick={() => {
+                const currentNormalLesson = curriculumLessons.find((lesson) => lesson.id === student.current_lesson_id && lesson.lesson_kind === 'normal')
+                const currentLevelLesson = curriculumLessons.find((lesson) => lesson.level_id === student.current_level_id && lesson.lesson_kind === 'normal')
+                setHistoryAdd({ date: todayISO(), lessonId: currentNormalLesson?.id ?? currentLevelLesson?.id ?? curriculumLessons.find((lesson) => lesson.lesson_kind === 'normal')?.id ?? '', outcome: 'completed' })
+                setAddSessionOpen(true)
+              }}>+ Add session</button>
+            )}
+          </div>
           {lessons.length === 0 ? (
             <EmptyState title="No lessons recorded yet" hint="Completed and not-finished lessons will appear here." />
           ) : (
@@ -360,6 +434,37 @@ export default function StudentProfile() {
                   </div>
                 </li>
               ))}
+            </ul>
+          )}
+
+          <h4 className="font-medium mt-5 mb-2">Recorded sessions</h4>
+          <p className="text-xs text-slate-500 mb-2">Removing a session also removes its linked feedback. Attendance for the date remains marked as attended.</p>
+          {historySessions.length === 0 ? (
+            <p className="text-sm text-slate-400">No session entries recorded yet.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {historySessions.map((session) => {
+                const assessmentOrRemediation = Boolean(session.assessment_records?.length || session.remediation_lessons?.length)
+                const title = session.project_id
+                  ? `Project: ${session.student_projects?.name ?? 'Project'}`
+                  : session.lessons
+                    ? `${session.lessons.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${session.lessons.lesson_number}: ${session.lessons.title}`
+                    : 'Session'
+                return (
+                  <li key={session.id} className="py-2 flex items-center justify-between gap-3 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium">{title}</span>
+                      <span className="text-slate-500"> · session {session.session_number} · {formatShortDate(session.date)}</span>
+                      {session.outcome === 'not_finished' && <span className="badge ml-2">Not finished</span>}
+                    </div>
+                    {(role === 'admin' || role === 'instructor') && (
+                      assessmentOrRemediation
+                        ? <span className="text-xs text-slate-400">Protected record</span>
+                        : <button className="text-xs text-rose-700 hover:underline" disabled={removeSessionId === session.id} onClick={() => void removeHistorySession(session)}>{removeSessionId === session.id ? 'Removing…' : 'Remove'}</button>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           )}
 
@@ -478,6 +583,26 @@ export default function StudentProfile() {
               <label className="block text-sm"><span className="block text-slate-500 mb-1">Outcome</span><select className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.outcome} onChange={(event) => setLessonEdit({ ...lessonEdit, outcome: event.target.value as 'completed' | 'not_finished' })} disabled={lessonEditBusy}><option value="completed">Completed</option><option value="not_finished">Not finished</option></select></label>
             </div>
             <div className="flex justify-end gap-2 mt-5"><button className="btn-ghost" onClick={() => setLessonEdit(null)} disabled={lessonEditBusy}>Cancel</button><button className="btn-primary" onClick={() => void saveLessonHistoryEdit()} disabled={lessonEditBusy || !lessonEdit.date || !lessonEdit.lessonId}>{lessonEditBusy ? 'Saving…' : 'Save changes'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {addSessionOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => !addSessionBusy && setAddSessionOpen(false)}>
+          <div className="card p-5 max-w-lg w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add lesson session">
+            <h3 className="font-semibold mb-1">Add lesson session</h3>
+            <p className="text-sm text-slate-500 mb-4">This records a session and feedback entry. A completed lesson can update lesson progression.</p>
+            <div className="space-y-3">
+              <label className="block text-sm"><span className="block text-slate-500 mb-1">Date</span><input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={historyAdd.date} onChange={(event) => setHistoryAdd({ ...historyAdd, date: event.target.value })} disabled={addSessionBusy} /></label>
+              <label className="block text-sm">
+                <span className="block text-slate-500 mb-1">Lesson</span>
+                <select className="w-full p-2 border border-slate-200 rounded-lg" value={historyAdd.lessonId} onChange={(event) => setHistoryAdd({ ...historyAdd, lessonId: event.target.value })} disabled={addSessionBusy}>
+                  {levels.map((level) => <optgroup key={level.id} label={level.name}>{curriculumLessons.filter((lesson) => lesson.level_id === level.id && lesson.lesson_kind === 'normal').sort((a, b) => a.lesson_number - b.lesson_number).map((lesson) => <option key={lesson.id} value={lesson.id}>Lesson {lesson.lesson_number}: {lesson.title}</option>)}</optgroup>)}
+                </select>
+              </label>
+              <label className="block text-sm"><span className="block text-slate-500 mb-1">Outcome</span><select className="w-full p-2 border border-slate-200 rounded-lg" value={historyAdd.outcome} onChange={(event) => setHistoryAdd({ ...historyAdd, outcome: event.target.value as 'completed' | 'not_finished' })} disabled={addSessionBusy}><option value="completed">Completed</option><option value="not_finished">Not finished</option></select></label>
+            </div>
+            <div className="flex justify-end gap-2 mt-5"><button className="btn-ghost" onClick={() => setAddSessionOpen(false)} disabled={addSessionBusy}>Cancel</button><button className="btn-primary" onClick={() => void saveAddedLessonSession()} disabled={addSessionBusy || !historyAdd.date || !historyAdd.lessonId}>{addSessionBusy ? 'Saving…' : 'Add session'}</button></div>
           </div>
         </div>
       )}
