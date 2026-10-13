@@ -199,11 +199,16 @@ export default function SessionEntryRow({
         notify(error.message, 'error')
         return
       }
-      await upsertAttendance({ status: outcomeToAttendanceStatus(activeDraft.outcome) })
+      const attendanceSaved = await upsertAttendance({ status: outcomeToAttendanceStatus(activeDraft.outcome) })
       setBusy(false)
       setDraft(null)
       setEditingSessionId(null)
-      notify(editingSessionId ? 'Project session updated' : `Project session recorded for ${student.full_name}`, 'success')
+      notify(
+        attendanceSaved
+          ? editingSessionId ? 'Project session updated' : `Project session recorded for ${student.full_name}`
+          : 'Project session saved, but attendance could not be updated. Please check the attendance status.',
+        attendanceSaved ? 'success' : 'error',
+      )
       onChanged()
       return
     }
@@ -252,17 +257,19 @@ export default function SessionEntryRow({
         return
       }
     }
-    await upsertAttendance({ status: outcomeToAttendanceStatus(activeDraft.outcome) })
+    const attendanceSaved = await upsertAttendance({ status: outcomeToAttendanceStatus(activeDraft.outcome) })
     setBusy(false)
     setDraft(null)
     setEditingSessionId(null)
     notify(
-      requiresAssessmentResult(selectedForSave)
-        ? activeDraft.outcome === 'not_finished'
-          ? `${selectedForSave?.title ?? 'Assessment'} marked not finished for ${student.full_name}`
-          : `${selectedForSave?.title ?? 'Assessment'}: ${activeDraft.assessmentResult} recorded for ${student.full_name}`
-        : editingSessionId ? 'Session updated' : `Session recorded for ${student.full_name}`,
-      'success',
+      attendanceSaved
+        ? requiresAssessmentResult(selectedForSave)
+          ? activeDraft.outcome === 'not_finished'
+            ? `${selectedForSave?.title ?? 'Assessment'} marked not finished for ${student.full_name}`
+            : `${selectedForSave?.title ?? 'Assessment'}: ${activeDraft.assessmentResult} recorded for ${student.full_name}`
+          : editingSessionId ? 'Session updated' : `Session recorded for ${student.full_name}`
+        : 'Session saved, but attendance could not be updated. Please check the attendance status.',
+      attendanceSaved ? 'success' : 'error',
     )
     onChanged()
   }

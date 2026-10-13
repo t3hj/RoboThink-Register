@@ -451,7 +451,7 @@ export default function StudentProfile() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <StatCard value={completed} label="Lessons completed" />
+        <StatCard value={completed} label="Curriculum lessons completed" />
         <StatCard value={notFinishedCount} label="Not-finished attempts" />
         <StatCard
           value={attendancePct == null ? '—' : `${attendancePct}%`}
@@ -460,6 +460,9 @@ export default function StudentProfile() {
         />
         <StatCard value={absent} label="Absences" tone={absent > 2 ? 'bad' : undefined} />
       </div>
+      <p className="-mt-3 mb-5 text-xs text-slate-500">
+        Assessments and project sessions count toward attendance, but not toward curriculum lesson completion or lesson progression.
+      </p>
 
       <StudentProjectsPanel studentId={student.id} projects={projects} onChanged={() => void load()} />
 
