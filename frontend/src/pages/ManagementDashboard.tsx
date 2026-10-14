@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
+import { useBrand } from '../lib/brand'
+import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState } from '../components/ui'
 import { todayISO, dayName, addDays, formatShortDate, formatTime12h } from '../lib/dates'
 import { attendancePercentage, attendanceFlag, sessionTimeBreakdown } from '../lib/attendanceStats'
+import { AttendanceTrendChart, CentreAttendanceChart, lastTwelveWeekStarts, weeklyAttendancePoints, type CentreAttendancePoint } from '../components/AnalyticsCharts'
 import type { Attendance, Student, TermTimeFollowup, TermTimeFollowupStatus } from '../types'
 
 const FOLLOWUP_OPTIONS: { value: TermTimeFollowupStatus; label: string }[] = [
@@ -36,6 +39,8 @@ function expectedSessionsInRange(students: Student[], from: string, to: string):
 
 export default function ManagementDashboard() {
   const { role } = useAuth()
+  const { activeBrand } = useBrand()
+  const { centres } = useCentres()
   const { notify } = useToast()
   const today = todayISO()
   const weekStart = addDays(today, -6)
@@ -44,6 +49,8 @@ export default function ManagementDashboard() {
   const monthStart = addDays(today, -29)
   const prevMonthStart = addDays(today, -59)
   const prevMonthEnd = addDays(today, -30)
+  const weekStarts = useMemo(() => lastTwelveWeekStarts(today), [today])
+  const trendStart = weekStarts[0]
 
   const [students, setStudents] = useState<Student[]>([])
   const [todayAtt, setTodayAtt] = useState<Attendance[]>([])
@@ -52,6 +59,7 @@ export default function ManagementDashboard() {
   const [monthAtt, setMonthAtt] = useState<Attendance[]>([])
   const [prevMonthAtt, setPrevMonthAtt] = useState<Attendance[]>([])
   const [allAtt, setAllAtt] = useState<Attendance[]>([])
+  const [trendAtt, setTrendAtt] = useState<Attendance[]>([])
   const [followups, setFollowups] = useState<TermTimeFollowup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +67,7 @@ export default function ManagementDashboard() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const [sRes, taRes, waRes, pwRes, maRes, pmRes, allRes, ftRes] = await Promise.all([
+    const [sRes, taRes, waRes, pwRes, maRes, pmRes, allRes, trendRes, ftRes] = await Promise.all([
       supabase.from('students').select('*'),
       supabase.from('attendance').select('*').eq('date', today),
       supabase.from('attendance').select('*').gte('date', weekStart).lte('date', today),
@@ -68,9 +76,10 @@ export default function ManagementDashboard() {
       supabase.from('attendance').select('*').gte('date', prevMonthStart).lte('date', prevMonthEnd),
       // Used for "long absence" detection — most recent attendance per student.
       supabase.from('attendance').select('*').order('date', { ascending: false }).limit(2000),
+      supabase.from('attendance').select('*').gte('date', trendStart).lte('date', today),
       supabase.from('term_time_followups').select('*, students(full_name)').order('created_at', { ascending: false }),
     ])
-    if (sRes.error || taRes.error || waRes.error || pwRes.error || maRes.error || pmRes.error || allRes.error || ftRes.error) {
+    if (sRes.error || taRes.error || waRes.error || pwRes.error || maRes.error || pmRes.error || allRes.error || trendRes.error || ftRes.error) {
       setError(
         sRes.error?.message ??
           taRes.error?.message ??
@@ -79,6 +88,7 @@ export default function ManagementDashboard() {
           maRes.error?.message ??
           pmRes.error?.message ??
           allRes.error?.message ??
+          trendRes.error?.message ??
           ftRes.error?.message ??
           'Unknown error',
       )
@@ -92,9 +102,10 @@ export default function ManagementDashboard() {
     setMonthAtt((maRes.data ?? []) as Attendance[])
     setPrevMonthAtt((pmRes.data ?? []) as Attendance[])
     setAllAtt((allRes.data ?? []) as Attendance[])
+    setTrendAtt((trendRes.data ?? []) as Attendance[])
     setFollowups((ftRes.data ?? []) as TermTimeFollowup[])
     setLoading(false)
-  }, [today, weekStart, prevWeekStart, prevWeekEnd, monthStart, prevMonthStart, prevMonthEnd])
+  }, [today, weekStart, prevWeekStart, prevWeekEnd, monthStart, prevMonthStart, prevMonthEnd, trendStart])
 
   useEffect(() => {
     void load()
@@ -180,6 +191,16 @@ export default function ManagementDashboard() {
 
   const outstandingFollowups = followups.filter((f) => f.status === 'needs_follow_up')
   const sessionBreakdown = useMemo(() => sessionTimeBreakdown(active), [active])
+  const trendPoints = useMemo(() => weeklyAttendancePoints(trendAtt, weekStarts), [trendAtt, weekStarts])
+  const centreAttendance = useMemo<CentreAttendancePoint[]>(() => {
+    const centreForStudent = new Map(students.map((student) => [student.id, student.centre_id]))
+    return centres.map((centre) => {
+      const rows = trendAtt.filter((row) => centreForStudent.get(row.student_id) === centre.id)
+      const attended = rows.filter((row) => row.status === 'Arrived' || row.status === 'Completed').length
+      const missed = rows.filter((row) => row.status === 'Absent').length
+      return { id: centre.id, name: centre.name, attended, missed, rate: attendancePercentage(rows) }
+    })
+  }, [centres, students, trendAtt])
 
   if (loading) return <LoadingPanel label="Loading management dashboard…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
@@ -193,7 +214,12 @@ export default function ManagementDashboard() {
 
   return (
     <div>
-      <PageHeader title="Management dashboard" subtitle="Read-only operational overview" accent="blue" />
+      <PageHeader title="Management dashboard" subtitle={`Read-only operational overview · ${activeBrand === 'robothink' ? 'RoboThink' : 'Creative IQ'} · 12-week attendance`} accent="blue" />
+
+      <div className="grid xl:grid-cols-2 gap-6 mb-6">
+        <AttendanceTrendChart points={trendPoints} title="Overall attendance · Last 12 weeks" />
+        <CentreAttendanceChart points={centreAttendance} />
+      </div>
 
       <h2 className="text-lg font-semibold mb-3">Today</h2>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

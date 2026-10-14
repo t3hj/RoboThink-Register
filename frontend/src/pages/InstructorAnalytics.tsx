@@ -5,6 +5,7 @@ import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState, StatusBadge
 import { todayISO, dayName, addDays, formatShortDate } from '../lib/dates'
 import { parseLevelName } from '../lib/curriculum'
 import { attendancePercentage, attendanceFlag, FLAG_LABELS } from '../lib/attendanceStats'
+import { AttendanceTrendChart, lastTwelveWeekStarts, weeklyAttendancePoints } from '../components/AnalyticsCharts'
 import type { Attendance, Student, StudentProgress } from '../types'
 
 export default function InstructorAnalytics() {
@@ -13,6 +14,7 @@ export default function InstructorAnalytics() {
   const [progress, setProgress] = useState<StudentProgress[]>([])
   const [todayAttendance, setTodayAttendance] = useState<Attendance[]>([])
   const [weekAttendance, setWeekAttendance] = useState<Attendance[]>([])
+  const [trendAttendance, setTrendAttendance] = useState<Attendance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -21,18 +23,21 @@ export default function InstructorAnalytics() {
   const [historyLoading, setHistoryLoading] = useState(false)
 
   const weekStart = addDays(today, -6)
+  const weekStarts = useMemo(() => lastTwelveWeekStarts(today), [today])
+  const trendStart = weekStarts[0]
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const [sRes, pRes, taRes, waRes] = await Promise.all([
+    const [sRes, pRes, taRes, waRes, trendRes] = await Promise.all([
       supabase.from('students').select('*').eq('active', true).order('full_name'),
       supabase.from('student_progress').select('*'),
       supabase.from('attendance').select('*').eq('date', today),
       supabase.from('attendance').select('*').gte('date', weekStart).lte('date', today),
+      supabase.from('attendance').select('*').gte('date', trendStart).lte('date', today),
     ])
-    if (sRes.error || pRes.error || taRes.error || waRes.error) {
-      setError(sRes.error?.message ?? pRes.error?.message ?? taRes.error?.message ?? waRes.error?.message ?? 'Unknown error')
+    if (sRes.error || pRes.error || taRes.error || waRes.error || trendRes.error) {
+      setError(sRes.error?.message ?? pRes.error?.message ?? taRes.error?.message ?? waRes.error?.message ?? trendRes.error?.message ?? 'Unknown error')
       setLoading(false)
       return
     }
@@ -40,8 +45,9 @@ export default function InstructorAnalytics() {
     setProgress((pRes.data ?? []) as StudentProgress[])
     setTodayAttendance((taRes.data ?? []) as Attendance[])
     setWeekAttendance((waRes.data ?? []) as Attendance[])
+    setTrendAttendance((trendRes.data ?? []) as Attendance[])
     setLoading(false)
-  }, [today, weekStart])
+  }, [today, weekStart, trendStart])
 
   useEffect(() => {
     void load()
@@ -100,6 +106,20 @@ export default function InstructorAnalytics() {
     return { expected, attended, missed, catchUp, pct }
   }, [weekAttendance, students, weekStart])
 
+  const trendPoints = useMemo(() => weeklyAttendancePoints(trendAttendance, weekStarts), [trendAttendance, weekStarts])
+  const attendanceFollowups = useMemo(() => {
+    const rowsByStudent = new Map<string, Attendance[]>()
+    for (const row of trendAttendance) rowsByStudent.set(row.student_id, [...(rowsByStudent.get(row.student_id) ?? []), row])
+    const priority = { several_recent_missed: 0, missed_recently: 1, no_attendance_recently: 2 }
+    return students
+      .map((student) => ({
+        student,
+        flag: attendanceFlag({ rows: rowsByStudent.get(student.id) ?? [], today, hasSchedule: Boolean(student.preferred_day) }),
+      }))
+      .filter((item): item is { student: Student; flag: keyof typeof FLAG_LABELS } => item.flag != null)
+      .sort((a, b) => priority[a.flag] - priority[b.flag] || a.student.full_name.localeCompare(b.student.full_name))
+  }, [students, trendAttendance, today])
+
   const overview = useMemo(() => {
     const byLevel = new Map<string, number>()
     for (const s of students) {
@@ -126,6 +146,33 @@ export default function InstructorAnalytics() {
   return (
     <div>
       <PageHeader title="Analytics" subtitle="Instructor view — today, this week, and individual students" accent="green" />
+
+      <h2 className="text-lg font-semibold mb-3">Attendance and follow-up · Last 12 weeks</h2>
+      <div className="grid lg:grid-cols-2 gap-6 mb-6">
+        <AttendanceTrendChart points={trendPoints} />
+        <section className="card p-4" aria-labelledby="attendance-followup-title">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 id="attendance-followup-title" className="font-semibold">Students to follow up</h3>
+              <p className="text-xs text-slate-500 mt-1">Flags repeated recent absences and scheduled students without recent attendance.</p>
+            </div>
+            <span className="badge badge-assess">{attendanceFollowups.length}</span>
+          </div>
+          {attendanceFollowups.length === 0 ? (
+            <p className="text-sm text-slate-400 py-5">No attendance follow-ups flagged right now.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+              {attendanceFollowups.slice(0, 12).map(({ student, flag }) => (
+                <li key={student.id} className="py-2 flex items-center justify-between gap-3 text-sm">
+                  <Link to={`/students/${student.id}`} className="font-medium hover:underline truncate">{student.full_name}</Link>
+                  <span className="badge badge-assess shrink-0">{FLAG_LABELS[flag]}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {attendanceFollowups.length > 12 && <p className="text-xs text-slate-400 mt-2">Showing 12 of {attendanceFollowups.length}; use the student list to see the rest.</p>}
+        </section>
+      </div>
 
       <h2 className="text-lg font-semibold mb-3">Today</h2>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
