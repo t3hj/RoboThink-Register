@@ -96,3 +96,17 @@ export function RoboThinkLogo({ className = 'w-40' }: { className?: string }) {
     </span>
   )
 }
+
+/** Creative IQ wordmark, linked to the official brand website asset. */
+export function CreativeIqLogo({ className = 'w-40' }: { className?: string }) {
+  const [imageFailed, setImageFailed] = useState(false)
+  const logoUrl = 'https://www.creative-iq.co.uk/wp-content/uploads/2025/05/Logo.webp'
+
+  return !imageFailed ? (
+    <img src={logoUrl} alt="creative IQ" className={className + ' h-auto object-contain object-left'} onError={() => setImageFailed(true)} />
+  ) : (
+    <span className={className + ' inline-flex items-center font-extrabold tracking-tight text-slate-800'} role="img" aria-label="creative IQ">
+      <span>creative</span><span className="ml-1 text-[color:var(--rt-primary)]">IQ</span>
+    </span>
+  )
+}

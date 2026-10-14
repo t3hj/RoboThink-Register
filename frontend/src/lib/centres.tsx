@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabaseClient'
 import { useAuth } from './auth'
+import { useBrand } from './brand'
 import type { Centre, StaffCentre } from '../types'
 
 const SELECTED_CENTRE_KEY = 'robothink.selectedCentreId'
@@ -26,6 +27,7 @@ function readStoredCentreId() {
 
 export function CentreProvider({ children }: { children: React.ReactNode }) {
   const { profile, role } = useAuth()
+  const { activeBrand } = useBrand()
   const [centres, setCentres] = useState<Centre[]>([])
   const [assignments, setAssignments] = useState<StaffCentre[]>([])
   const [selectedCentreId, setSelectedCentreIdState] = useState<string | null>(readStoredCentreId)
@@ -42,7 +44,7 @@ export function CentreProvider({ children }: { children: React.ReactNode }) {
     setLoading(true)
     setError(null)
     const [centresRes, assignmentsRes] = await Promise.all([
-      supabase.from('centres').select('*').order('name'),
+      supabase.from('centres').select('*').eq('brand', activeBrand).order('name'),
       supabase.from('staff_centres').select('staff_id, centre_id, created_at').eq('staff_id', profile.id),
     ])
     if (centresRes.error || assignmentsRes.error) {
@@ -59,11 +61,12 @@ export function CentreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void refresh()
-  }, [profile?.id])
+  }, [profile?.id, activeBrand])
 
+  const brandCentres = useMemo(() => centres.filter((centre) => centre.brand === activeBrand), [centres, activeBrand])
   const assignedIds = useMemo(() => new Set(assignments.map((assignment) => assignment.centre_id)), [assignments])
-  const assignedCentres = useMemo(() => centres.filter((centre) => assignedIds.has(centre.id)), [centres, assignedIds])
-  const activeCentres = useMemo(() => centres.filter((centre) => centre.active), [centres])
+  const assignedCentres = useMemo(() => brandCentres.filter((centre) => assignedIds.has(centre.id)), [brandCentres, assignedIds])
+  const activeCentres = useMemo(() => brandCentres.filter((centre) => centre.active), [brandCentres])
   const selectableCentres = role === 'admin' ? activeCentres : assignedCentres.filter((centre) => centre.active)
   const isAllCentres = role === 'admin' && selectedCentreId === null
 
@@ -90,12 +93,12 @@ export function CentreProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const selectedCentre = centres.find((centre) => centre.id === selectedCentreId) ?? null
+  const selectedCentre = brandCentres.find((centre) => centre.id === selectedCentreId) ?? null
 
   return (
     <CentreContext.Provider
       value={{
-        centres,
+        centres: brandCentres,
         assignedCentres,
         activeCentres,
         selectedCentreId,

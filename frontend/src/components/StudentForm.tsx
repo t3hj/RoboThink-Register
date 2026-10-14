@@ -6,6 +6,7 @@ import LevelLessonPicker from './LevelLessonPicker'
 import { loadCurriculum } from '../lib/curriculumData'
 import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
+import { useBrand } from '../lib/brand'
 import type { Level, Lesson, Student, Subscription } from '../types'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -25,6 +26,7 @@ interface Props {
 export default function StudentForm({ student, onClose, onSaved }: Props) {
   const { notify } = useToast()
   const { activeCentres, selectedCentreId } = useCentres()
+  const { activeBrand } = useBrand()
   const isEdit = Boolean(student)
 
   const [fullName, setFullName] = useState(student?.full_name ?? '')
@@ -117,6 +119,7 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
     }
     const { error } = await supabase.from('students').insert({
       full_name: fullName.trim(),
+      brand: activeBrand,
       date_joined: joined || null,
       preferred_day: preferredDay || null,
       preferred_time: preferredTime || null,

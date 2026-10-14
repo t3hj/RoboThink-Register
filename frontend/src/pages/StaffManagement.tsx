@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useToast } from '../components/Toast'
+import { useBrand } from '../lib/brand'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState } from '../components/ui'
-import type { Centre, Profile, Role, StaffCentre } from '../types'
+import type { BrandId, Centre, Profile, Role, StaffCentre } from '../types'
 
 const ROLES: Role[] = ['admin', 'instructor', 'management']
+const BRAND_LABELS: Record<BrandId, string> = { robothink: 'RoboThink', creative_iq: 'Creative IQ' }
 
 /** Minimal, admin-only: list staff and change their role. Nothing fancier
  *  than that is asked for — inviting/creating accounts still happens via
@@ -13,6 +15,7 @@ const ROLES: Role[] = ['admin', 'instructor', 'management']
  *  to 'instructor', never 'admin'). */
 export default function StaffManagement() {
   const { notify } = useToast()
+  const { activeBrand } = useBrand()
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [centres, setCentres] = useState<Centre[]>([])
   const [assignments, setAssignments] = useState<StaffCentre[]>([])
@@ -28,7 +31,7 @@ export default function StaffManagement() {
     setError(null)
     const [profilesRes, centresRes, assignmentsRes] = await Promise.all([
       supabase.from('profiles').select('*').order('name'),
-      supabase.from('centres').select('*').order('name'),
+      supabase.from('centres').select('*').eq('brand', activeBrand).order('name'),
       supabase.from('staff_centres').select('staff_id, centre_id, created_at'),
     ])
     if (profilesRes.error || centresRes.error || assignmentsRes.error) {
@@ -40,7 +43,7 @@ export default function StaffManagement() {
     setCentres((centresRes.data ?? []) as Centre[])
     setAssignments((assignmentsRes.data ?? []) as StaffCentre[])
     setLoading(false)
-  }, [])
+  }, [activeBrand])
 
   useEffect(() => {
     void load()
@@ -62,7 +65,7 @@ export default function StaffManagement() {
     const name = newCentreName.trim()
     if (!name) return
     setSavingId('new-centre')
-    const { error: err } = await supabase.from('centres').insert({ name, active: true })
+    const { error: err } = await supabase.from('centres').insert({ name, brand: activeBrand, active: true })
     setSavingId(null)
     if (err) {
       notify(err.message, 'error')
@@ -96,7 +99,7 @@ export default function StaffManagement() {
     }
     setAssignmentStaffId('')
     setAssignmentCentreId('')
-    notify('Centre assignment added', 'success')
+    notify('Venue assignment added', 'success')
     void load()
   }
 
@@ -112,26 +115,31 @@ export default function StaffManagement() {
       notify(err.message, 'error')
       return
     }
-    notify('Centre assignment removed', 'success')
+    notify('Venue assignment removed', 'success')
     void load()
   }
 
   if (loading) return <LoadingPanel label="Loading staff…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
 
+  const brandCentres = centres.filter((centre) => centre.brand === activeBrand)
+  const brandCentreIds = new Set(brandCentres.map((centre) => centre.id))
+  const brandAssignments = assignments.filter((assignment) => brandCentreIds.has(assignment.centre_id))
+
   return (
     <div>
-      <PageHeader title="Staff & centres" subtitle="Manage staff roles, centre access, and active centres" accent="red" />
+      <PageHeader title="Staff & centres" subtitle="Manage staff roles and assign instructors to venues" accent="red" />
 
       <section className="card p-4 mb-5">
-        <h2 className="font-semibold mb-3">Centres</h2>
+        <h2 className="font-semibold mb-1">Centres and venues</h2>
+        <p className="text-xs text-slate-500 mb-3">Adding here places the venue under {BRAND_LABELS[activeBrand]}.</p>
         <form className="flex gap-2 mb-4" onSubmit={(event) => { event.preventDefault(); void addCentre() }}>
-          <input className="flex-1 p-2 border border-slate-200 rounded-lg text-sm" placeholder="New centre name" value={newCentreName} onChange={(event) => setNewCentreName(event.target.value)} disabled={savingId === 'new-centre'} />
-          <button className="btn-primary" type="submit" disabled={savingId === 'new-centre' || !newCentreName.trim()}>Add centre</button>
+          <input className="flex-1 p-2 border border-slate-200 rounded-lg text-sm" placeholder="New centre or venue name" value={newCentreName} onChange={(event) => setNewCentreName(event.target.value)} disabled={savingId === 'new-centre'} />
+          <button className="btn-primary" type="submit" disabled={savingId === 'new-centre' || !newCentreName.trim()}>Add venue</button>
         </form>
-        {centres.length === 0 ? <EmptyState title="No centres found" /> : (
+        {brandCentres.length === 0 ? <EmptyState title={`No ${BRAND_LABELS[activeBrand]} centres found`} /> : (
           <div className="divide-y divide-slate-100">
-            {centres.map((centre) => (
+            {brandCentres.map((centre) => (
               <div key={centre.id} className="py-2 flex items-center justify-between gap-3">
                 <div>
                   <div className="font-medium text-sm">{centre.name}</div>
@@ -147,20 +155,20 @@ export default function StaffManagement() {
       </section>
 
       <section className="card p-4 mb-5">
-        <h2 className="font-semibold mb-3">Centre assignments</h2>
+        <h2 className="font-semibold mb-3">Instructor and venue assignments</h2>
         <div className="grid sm:grid-cols-[1fr_1fr_auto] gap-2 mb-4">
           <select className="p-2 border border-slate-200 rounded-lg text-sm" value={assignmentStaffId} onChange={(event) => setAssignmentStaffId(event.target.value)} aria-label="Staff member">
             <option value="">Choose staff</option>
             {profiles.filter((profile) => profile.auth_id).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
           </select>
-          <select className="p-2 border border-slate-200 rounded-lg text-sm" value={assignmentCentreId} onChange={(event) => setAssignmentCentreId(event.target.value)} aria-label="Centre">
-            <option value="">Choose centre</option>
-            {centres.filter((centre) => centre.active).map((centre) => <option key={centre.id} value={centre.id}>{centre.name}</option>)}
+          <select className="p-2 border border-slate-200 rounded-lg text-sm" value={assignmentCentreId} onChange={(event) => setAssignmentCentreId(event.target.value)} aria-label="Centre or venue">
+            <option value="">Choose venue</option>
+            {brandCentres.filter((centre) => centre.active).map((centre) => <option key={centre.id} value={centre.id}>{centre.name}</option>)}
           </select>
           <button className="btn-primary" onClick={() => void addAssignment()} disabled={savingId === 'assignment' || !assignmentStaffId || !assignmentCentreId}>Assign</button>
         </div>
         <div className="divide-y divide-slate-100">
-          {assignments.map((assignment) => {
+          {brandAssignments.map((assignment) => {
             const staff = profiles.find((profile) => profile.id === assignment.staff_id)
             const centre = centres.find((item) => item.id === assignment.centre_id)
             return (

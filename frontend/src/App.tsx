@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { CentreProvider, useCentres } from './lib/centres'
+import { BrandProvider, useBrand } from './lib/brand'
 import { ToastProvider } from './components/Toast'
 import { LoadingPanel } from './components/ui'
-import { MascotCrew, RoboThinkLogo } from './components/Branding'
+import { CreativeIqLogo, MascotCrew, RoboThinkLogo } from './components/Branding'
+import BrandSwitcher from './components/BrandSwitcher'
 import Auth from './pages/Auth'
 import Dashboard from './pages/Dashboard'
 import Register from './pages/Register'
@@ -48,10 +50,11 @@ function RoleRoute({ roles, children }: { roles: Role[]; children: React.ReactNo
 
 function Layout() {
   const { profile, role, signOut } = useAuth()
+  const { activeBrand } = useBrand()
   const { activeCentres, assignedCentres, selectedCentreId, selectedCentre, isAllCentres, loading: centresLoading, error: centresError, setSelectedCentreId } = useCentres()
   const items = NAV.filter((item) => !role || item.roles.includes(role))
   return (
-    <div className="min-h-screen bg-[color:var(--rt-paper)] text-[color:var(--rt-ink)]">
+    <div data-brand={activeBrand} className="min-h-screen bg-[color:var(--rt-paper)] text-[color:var(--rt-ink)]">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn-primary">
         Skip to content
       </a>
@@ -60,10 +63,11 @@ function Layout() {
         <aside className="lg:col-span-1 min-w-0">
           <div className="card p-4 lg:sticky lg:top-6">
             <div className="flex items-center gap-3 mb-4">
-              <RoboThinkLogo className="w-40 max-w-full" />
+              {activeBrand === 'creative_iq' ? <CreativeIqLogo className="w-40 max-w-full" /> : <RoboThinkLogo className="w-40 max-w-full" />}
             </div>
             <p className="text-[11px] text-slate-500 -mt-2 mb-3">Register &amp; Progress</p>
-            <MascotCrew className="mb-4 pb-3 border-b border-slate-100" />
+            <BrandSwitcher />
+            {activeBrand === 'robothink' && <MascotCrew className="mb-4 pb-3 border-b border-slate-100" />}
             <nav className="flex lg:flex-col gap-1.5 overflow-x-auto overscroll-x-contain -mx-1 px-1 pb-1" aria-label="Main navigation">
               {items.map((item) => (
                 <NavLink
@@ -109,7 +113,7 @@ function Layout() {
         </aside>
 
         <main id="main-content" className="lg:col-span-4 min-w-0">
-          <Routes>
+          <Routes key={activeBrand}>
             <Route path="/" element={<RoleRoute roles={['admin', 'instructor']}><Dashboard /></RoleRoute>} />
             <Route path="/register" element={<RoleRoute roles={['admin', 'instructor']}><Register /></RoleRoute>} />
             <Route path="/students" element={<RoleRoute roles={['admin', 'instructor']}><Students /></RoleRoute>} />
@@ -147,9 +151,11 @@ export default function App() {
     <ToastProvider>
       <AuthProvider>
         <BrowserRouter>
-          <CentreProvider>
-            <Protected />
-          </CentreProvider>
+          <BrandProvider>
+            <CentreProvider>
+              <Protected />
+            </CentreProvider>
+          </BrandProvider>
         </BrowserRouter>
       </AuthProvider>
     </ToastProvider>

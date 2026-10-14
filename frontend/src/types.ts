@@ -3,6 +3,7 @@
 // in db/ — see db/README_SCHEMA_DRIFT.md for details.
 
 export type Role = 'admin' | 'instructor' | 'management'
+export type BrandId = 'robothink' | 'creative_iq'
 
 export interface Profile {
   id: string
@@ -10,12 +11,14 @@ export interface Profile {
   name: string
   email: string | null
   role: Role
+  active_brand?: BrandId
   created_at: string
 }
 
 export interface Centre {
   id: string
   name: string
+  brand: BrandId
   active: boolean
   created_at: string
 }
@@ -60,6 +63,7 @@ export interface Lesson {
 export interface Student {
   id: string
   full_name: string
+  brand: BrandId
   centre_id: string | null
   preferred_day: string | null
   preferred_time: string | null

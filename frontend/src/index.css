@@ -23,6 +23,18 @@
   --rt-amber: #de9b33;
 }
 
+/* Creative IQ uses its official yellow and green accents. */
+[data-brand='creative_iq'] {
+  --rt-yellow: #ffe553;
+  --rt-yellow-tint: #fff9d6;
+  --rt-green: #568203;
+  --rt-green-tint: #edf4df;
+  --rt-blue: #568203;
+  --rt-blue-tint: #edf4df;
+  --rt-primary: #568203;
+  --rt-paper: #fbfaf5;
+}
+
 /* Thin four-colour brand stripe — a decorative identity mark, not a status
    indicator. Used once, at the very top of the app shell. */
 .brand-stripe {
@@ -82,6 +94,7 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
   transition: background 0.15s ease, transform 0.05s ease;
 }
 .btn-primary:hover { background: #234fb0; }
+[data-brand='creative_iq'] .btn-primary:hover { background: #416400; }
 .btn-primary:active { transform: translateY(1px); }
 .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -157,3 +170,5 @@ input, select, textarea {
     min-height: 44px;
   }
 }
+
+[data-brand='creative_iq'] .brand-stripe { background: linear-gradient(90deg, var(--rt-yellow) 0 50%, var(--rt-green) 50% 100%); }
