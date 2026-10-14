@@ -8,7 +8,7 @@ import { useToast } from '../components/Toast'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState } from '../components/ui'
 import { todayISO, dayName, addDays, formatShortDate, formatTime12h } from '../lib/dates'
 import { attendancePercentage, attendanceFlag, sessionTimeBreakdown } from '../lib/attendanceStats'
-import { AttendanceTrendChart, CentreAttendanceChart, lastTwelveWeekStarts, weeklyAttendancePoints, type CentreAttendancePoint } from '../components/AnalyticsCharts'
+import { AttendanceTrendChart, CentreAttendanceChart, StudentRetentionChart, lastTwelveWeekStarts, studentRetentionCohorts, weeklyAttendancePoints, type CentreAttendancePoint } from '../components/AnalyticsCharts'
 import type { Attendance, Student, TermTimeFollowup, TermTimeFollowupStatus } from '../types'
 
 const FOLLOWUP_OPTIONS: { value: TermTimeFollowupStatus; label: string }[] = [
@@ -192,6 +192,7 @@ export default function ManagementDashboard() {
   const outstandingFollowups = followups.filter((f) => f.status === 'needs_follow_up')
   const sessionBreakdown = useMemo(() => sessionTimeBreakdown(active), [active])
   const trendPoints = useMemo(() => weeklyAttendancePoints(trendAtt, weekStarts), [trendAtt, weekStarts])
+  const retentionCohorts = useMemo(() => studentRetentionCohorts(students, weekStarts, today), [students, weekStarts, today])
   const centreAttendance = useMemo<CentreAttendancePoint[]>(() => {
     const centreForStudent = new Map(students.map((student) => [student.id, student.centre_id]))
     return centres.map((centre) => {
@@ -219,6 +220,7 @@ export default function ManagementDashboard() {
       <div className="grid xl:grid-cols-2 gap-6 mb-6">
         <AttendanceTrendChart points={trendPoints} title="Overall attendance · Last 12 weeks" />
         <CentreAttendanceChart points={centreAttendance} />
+        <StudentRetentionChart cohorts={retentionCohorts} />
       </div>
 
       <h2 className="text-lg font-semibold mb-3">Today</h2>

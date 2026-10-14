@@ -1,4 +1,4 @@
-import type { Attendance } from '../types'
+import type { Attendance, Student } from '../types'
 import { attendancePercentage } from '../lib/attendanceStats'
 import { addDays, formatShortDate, parseISODate } from '../lib/dates'
 
@@ -17,6 +17,13 @@ export interface CentreAttendancePoint {
   rate: number | null
 }
 
+export interface StudentRetentionCohortPoint {
+  weekStart: string
+  active: number
+  total: number
+  rate: number
+}
+
 export function lastTwelveWeekStarts(today: string): string[] {
   const localDate = parseISODate(today)
   const mondayOffset = (localDate.getDay() + 6) % 7
@@ -32,6 +39,15 @@ export function weeklyAttendancePoints(rows: Attendance[], weekStarts: string[])
     const missed = weekRows.filter((row) => row.status === 'Absent').length
     return { weekStart, attended, missed, rate: attendancePercentage(weekRows) }
   })
+}
+
+export function studentRetentionCohorts(students: Student[], weekStarts: string[], today: string): StudentRetentionCohortPoint[] {
+  return weekStarts.map((weekStart) => {
+    const weekEnd = addDays(weekStart, 6)
+    const cohort = students.filter((student) => student.date_joined != null && student.date_joined >= weekStart && student.date_joined <= weekEnd && student.date_joined <= today)
+    const active = cohort.filter((student) => student.active).length
+    return { weekStart, active, total: cohort.length, rate: cohort.length ? Math.round((active / cohort.length) * 100) : 0 }
+  }).filter((cohort) => cohort.total > 0)
 }
 
 export function AttendanceTrendChart({ points, title = 'Attendance over the last 12 weeks' }: { points: WeeklyAttendancePoint[]; title?: string }) {
@@ -115,6 +131,33 @@ export function CentreAttendanceChart({ points }: { points: CentreAttendancePoin
         </div>
       )}
       <p className="text-xs text-slate-400 mt-3">Rate = attended ÷ sessions marked. Unmarked and not-arrived rows are excluded.</p>
+    </section>
+  )
+}
+
+export function StudentRetentionChart({ cohorts }: { cohorts: StudentRetentionCohortPoint[] }) {
+  return (
+    <section className="card p-4" aria-labelledby="student-retention-title">
+      <div className="mb-3">
+        <h3 id="student-retention-title" className="font-semibold">Student retention by join week · 12 weeks</h3>
+        <p className="text-xs text-slate-500 mt-1">Share of each new-student cohort currently marked active.</p>
+      </div>
+      {cohorts.length === 0 ? (
+        <p className="text-sm text-slate-400 py-8 text-center">No students joined in this period.</p>
+      ) : (
+        <div className="space-y-3" role="list" aria-label="Current active rate by student join week">
+          {cohorts.map((cohort) => (
+            <div key={cohort.weekStart} role="listitem" className="grid grid-cols-[4.5rem_minmax(4rem,1fr)_auto] items-center gap-3 text-sm">
+              <span className="text-slate-600">{formatShortDate(cohort.weekStart)}</span>
+              <div className="h-3 rounded-full bg-slate-100 overflow-hidden" role="img" aria-label={`${formatShortDate(cohort.weekStart)} cohort: ${cohort.rate}% currently active`}>
+                <div className="h-full rounded-full bg-emerald-600" style={{ width: `${cohort.rate}%` }} />
+              </div>
+              <span className="tabular-nums text-right min-w-24"><strong>{cohort.rate}%</strong><span className="text-xs text-slate-500"> · {cohort.active}/{cohort.total} active</span></span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-xs text-slate-400 mt-3">Cohorts are students whose join date falls in that week. The app records current active status, not the date a student became inactive.</p>
     </section>
   )
 }
