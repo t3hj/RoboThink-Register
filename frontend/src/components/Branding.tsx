@@ -97,12 +97,15 @@ export function RoboThinkLogo({ className = 'w-40' }: { className?: string }) {
   )
 }
 
-/** Creative IQ wordmark, linked to the official brand website asset. */
+/** Official Creative IQ logo, with a light backing so it remains visible in either theme. */
 export function CreativeIqLogo({ className = 'w-40' }: { className?: string }) {
   return (
-    <span className={className + ' inline-flex min-h-10 items-center whitespace-nowrap text-[1.65rem] leading-none tracking-tight'} role="img" aria-label="creative IQ">
-      <span className="font-semibold text-slate-700">creative</span>
-      <span className="ml-1 font-black text-[color:var(--rt-primary)]">IQ</span>
+    <span className={className + ' inline-flex items-center rounded-md bg-white p-1'}>
+      <img
+        src="https://www.creative-iq.co.uk/wp-content/uploads/2025/05/Logo.webp"
+        alt="creative IQ"
+        className="h-12 w-full object-contain object-left"
+      />
     </span>
   )
 }
