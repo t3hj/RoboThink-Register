@@ -100,11 +100,11 @@ export function RoboThinkLogo({ className = 'w-40' }: { className?: string }) {
 /** Official Creative IQ logo, with a light backing so it remains visible in either theme. */
 export function CreativeIqLogo({ className = 'w-40' }: { className?: string }) {
   return (
-    <span className={className + ' inline-flex items-center rounded-md bg-white p-1'}>
+    <span className={className + ' inline-flex items-center rounded-md bg-slate-900 p-1'}>
       <img
         src="https://www.creative-iq.co.uk/wp-content/uploads/2025/05/Logo.webp"
         alt="creative IQ"
-        className="h-12 w-full object-contain object-left"
+        className="h-14 w-auto max-w-full object-contain object-left"
       />
     </span>
   )
