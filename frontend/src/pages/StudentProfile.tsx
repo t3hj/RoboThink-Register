@@ -14,7 +14,7 @@ import { formatShortDate, formatDisplayDate, formatTime12h } from '../lib/dates'
 import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
-import { attendancePercentage, groupAttendanceByMonth } from '../lib/attendanceStats'
+import { attendancePercentage, classifyAttendance, groupAttendanceByMonth } from '../lib/attendanceStats'
 import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import type {
   AttendedSession,
@@ -642,10 +642,10 @@ export default function StudentProfile() {
           ) : (
             <>
               <p className="text-sm text-slate-500 mb-3">
-                Scheduled: {student.preferred_day ?? '—'} {student.preferred_time ? formatTime12h(student.preferred_time) : ''}
+                Scheduled: {student.preferred_day ?? '—'} {student.preferred_time ? formatTime12h(student.preferred_time) : ''}{student.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}
                 {attendancePercentage(attendance) != null && <> · {attendancePercentage(attendance)}% attendance</>}
               </p>
-              {groupAttendanceByMonth(attendance).map(({ month, rows }) => (
+              {groupAttendanceByMonth(classifyAttendance(attendance)).map(({ month, rows }) => (
                 <div key={month} className="mb-4">
                   <div className="text-xs uppercase tracking-wide text-slate-400 mb-1.5">{month}</div>
                   <ul className="divide-y divide-slate-100">
@@ -655,6 +655,7 @@ export default function StudentProfile() {
                           {formatShortDate(a.date)}
                           {a.session_type === 'catch_up' && <span className="badge">Catch-up</span>}
                           {a.session_type === 'special' && <span className="badge">Special session</span>}
+                          {a.kind === 'made_up' && <span className="badge bg-[color:var(--rt-green-tint)] text-emerald-800">Made up</span>}
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-slate-500">{a.time_in ?? '–'} → {a.time_out ?? '–'}</span>

@@ -33,6 +33,14 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
   const [joined, setJoined] = useState(student?.date_joined ?? todayISO())
   const [preferredDay, setPreferredDay] = useState(student?.preferred_day ?? '')
   const [preferredTime, setPreferredTime] = useState(student?.preferred_time ?? '')
+  const [pattern, setPattern] = useState<'weekly' | 'fortnightly'>(student?.attendance_pattern === 'fortnightly' ? 'fortnightly' : 'weekly')
+  const [anchor, setAnchor] = useState(student?.fortnight_anchor ?? '')
+  // Only send the fortnightly columns once the database has them (an edited
+  // student already carries them) or when fortnightly is actually chosen, so
+  // the form keeps working before the migration is applied.
+  const patternColumns = student?.attendance_pattern !== undefined || pattern === 'fortnightly'
+    ? { attendance_pattern: pattern, fortnight_anchor: pattern === 'fortnightly' ? anchor || null : null }
+    : {}
   const [subscriptionId, setSubscriptionId] = useState<number | ''>(student?.subscription_id ?? '')
   const [notes, setNotes] = useState(student?.notes ?? '')
   const [active, setActive] = useState(student?.active ?? true)
@@ -76,6 +84,10 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
       notify('Full name is required.', 'error')
       return
     }
+    if (pattern === 'fortnightly' && (!preferredDay || !anchor)) {
+      notify('A fortnightly student needs a normal day and an "on" week date.', 'error')
+      return
+    }
     setBusy(true)
     if (isEdit && student) {
       const { error } = await supabase
@@ -85,6 +97,7 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
           date_joined: joined || null,
           preferred_day: preferredDay || null,
           preferred_time: preferredTime || null,
+          ...patternColumns,
           subscription_id: subscriptionId === '' ? null : subscriptionId,
           notes: notes || null,
           active,
@@ -123,6 +136,7 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
       date_joined: joined || null,
       preferred_day: preferredDay || null,
       preferred_time: preferredTime || null,
+      ...patternColumns,
       subscription_id: subscriptionId,
       current_level_id: levelId,
       current_lesson_id: lesson.id,
@@ -199,6 +213,37 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
               <input type="time" className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={preferredTime} onChange={(e) => setPreferredTime(e.target.value)} disabled={busy} />
             </label>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="text-sm block">
+              <span className="block text-slate-500 mb-1">How often</span>
+              <select
+                className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                value={pattern}
+                onChange={(e) => {
+                  const next = e.target.value as 'weekly' | 'fortnightly'
+                  setPattern(next)
+                  if (next === 'fortnightly' && !anchor) setAnchor(todayISO())
+                }}
+                disabled={busy}
+              >
+                <option value="weekly">Every week</option>
+                <option value="fortnightly">Every other week</option>
+              </select>
+            </label>
+            {pattern === 'fortnightly' && (
+              <label className="text-sm block">
+                <span className="block text-slate-500 mb-1">A week they attend (any date in it)</span>
+                <input type="date" className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={anchor} onChange={(e) => setAnchor(e.target.value)} disabled={busy} />
+              </label>
+            )}
+          </div>
+          {pattern === 'fortnightly' && (
+            <p className="text-xs text-slate-500 -mt-1">
+              They show on the register every second week from that date and are not counted absent in their off weeks.
+              If they do two sessions in their on week, add the second with “+ Add to register” as a catch-up.
+            </p>
+          )}
 
           <label className="text-sm block">
             <span className="block text-slate-500 mb-1">Date joined</span>

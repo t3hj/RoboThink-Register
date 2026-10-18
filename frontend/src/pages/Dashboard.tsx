@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState, StatusBadge } from '../components/ui'
 import { RobotWave } from '../components/RobotArt'
-import { todayISO, dayName, formatDisplayDate } from '../lib/dates'
+import { todayISO, dayName, formatDisplayDate, addDays } from '../lib/dates'
+import { isExpectedOnDate, findUnmarkedSessions, type UnmarkedSession } from '../lib/attendanceStats'
 import type { Attendance, Student, LessonRecord, StudentProgress, StudentRequiringAction } from '../types'
 
 interface UpcomingStudent extends Student {
@@ -18,6 +19,7 @@ interface DashboardData {
   totals: { total: number; active: number }
   needsAction: StudentRequiringAction[]
   feedbackOutstanding: number
+  unmarked: UnmarkedSession[]
 }
 
 export default function Dashboard() {
@@ -30,9 +32,10 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const dow = dayName(today)
+    const lookbackStart = addDays(today, -14)
+    const yesterday = addDays(today, -1)
 
-    const [studentsRes, attendanceRes, lessonsRes, progressRes, actionRes, feedbackRes] = await Promise.all([
+    const [studentsRes, attendanceRes, lessonsRes, progressRes, actionRes, feedbackRes, recentAttRes] = await Promise.all([
       supabase.from('students').select('*').order('full_name'),
       supabase.from('attendance').select('*').eq('date', today),
       supabase
@@ -44,11 +47,13 @@ export default function Dashboard() {
       supabase.from('student_progress').select('*'),
       supabase.from('students_requiring_assessment_action').select('*'),
       supabase.from('feedback_sheets').select('id', { count: 'exact', head: true }).neq('status', 'given'),
+      supabase.from('attendance').select('student_id,date').gte('date', lookbackStart).lte('date', yesterday),
     ])
 
-    if (studentsRes.error || attendanceRes.error || lessonsRes.error || progressRes.error || actionRes.error || feedbackRes.error) {
+    if (studentsRes.error || recentAttRes.error || attendanceRes.error || lessonsRes.error || progressRes.error || actionRes.error || feedbackRes.error) {
       setError(
         studentsRes.error?.message ??
+          recentAttRes.error?.message ??
           attendanceRes.error?.message ??
           lessonsRes.error?.message ??
           progressRes.error?.message ??
@@ -66,13 +71,14 @@ export default function Dashboard() {
 
     setData({
       expected: withProgress.filter(
-        (s) => s.active && (s.preferred_day === dow || attendanceRes.data?.some((a) => a.student_id === s.id)),
+        (s) => s.active && (isExpectedOnDate(s, today) || attendanceRes.data?.some((a) => a.student_id === s.id)),
       ),
       attendance: (attendanceRes.data ?? []) as Attendance[],
       recentLessons: (lessonsRes.data ?? []) as LessonRecord[],
       totals: { total: students.length, active: students.filter((s) => s.active).length },
       needsAction: (actionRes.data ?? []) as StudentRequiringAction[],
       feedbackOutstanding: feedbackRes.count ?? 0,
+      unmarked: findUnmarkedSessions(students, (recentAttRes.data ?? []) as Attendance[], lookbackStart, yesterday),
     })
     setLoading(false)
   }, [today])
@@ -178,6 +184,35 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+
+      <section className="card p-4 mt-6" aria-labelledby="unmarked-heading">
+        <div className="flex items-center justify-between mb-1">
+          <h3 id="unmarked-heading" className="font-semibold">Registers still to fill in</h3>
+          <span className={`badge ${data.unmarked.length > 0 ? 'badge-assess' : ''}`}>{data.unmarked.length}</span>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">
+          Students who were expected in the last 14 days but have no attendance mark at all. Nothing is counted against
+          them until you mark Attended or Absent.
+        </p>
+        {data.unmarked.length === 0 ? (
+          <EmptyState title="Every recent register is complete" />
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {data.unmarked.slice(0, 12).map(({ date, student }) => (
+              <li key={`${student.id}-${date}`} className="py-2 flex items-center justify-between gap-3 text-sm">
+                <div className="min-w-0">
+                  <Link to={`/students/${student.id}`} className="font-medium hover:underline truncate block">{student.full_name}</Link>
+                  <span className="text-xs text-slate-500">{dayName(date)} {formatDisplayDate(date)}</span>
+                </div>
+                <Link to={`/register?date=${date}`} className="btn-ghost text-xs whitespace-nowrap">Open register</Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        {data.unmarked.length > 12 && (
+          <p className="text-xs text-slate-500 mt-2">Showing the 12 most recent of {data.unmarked.length}.</p>
+        )}
+      </section>
 
       <section className="card p-4 mt-6">
         <div className="flex items-center justify-between mb-3">

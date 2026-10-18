@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, SubscriptionBadge } from '../components/ui'
 import LessonsToday from '../components/LessonsToday'
@@ -16,6 +16,7 @@ import { todayISO, dayName, formatDisplayDate, addDays, formatTime12h, formatSho
 import { levelLabel } from '../lib/curriculum'
 import { loadCurriculum } from '../lib/curriculumData'
 import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
+import { isExpectedOnDate } from '../lib/attendanceStats'
 import { registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
 import { requiresAssessmentResult } from '../lib/assessment'
 import { resolveFeedbackTarget } from '../lib/bulkActions'
@@ -56,7 +57,12 @@ interface RosterEntry extends Student {
 
 export default function Register() {
     const { selectedCentreId, selectedCentre, isAllCentres } = useCentres()
-  const [date, setDate] = useState(todayISO())
+  const [searchParams] = useSearchParams()
+  const requestedDate = searchParams.get('date')
+  // ?date=YYYY-MM-DD lets other pages (e.g. the dashboard's "unmarked
+  // sessions" list) open the register straight on the right day.
+  const [date, setDate] = useState(requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : todayISO())
+  const [offWeek, setOffWeek] = useState<Pick<Student, 'id' | 'full_name'>[]>([])
   const [roster, setRoster] = useState<RosterEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -106,7 +112,13 @@ export default function Register() {
     }
 
     const attendance = (att ?? []) as Attendance[]
-    const scheduledIds = new Set((scheduled ?? []).map((s) => s.id))
+    // Fortnightly students only appear in their "on" weeks. Off-week students
+    // who nevertheless have an attendance row today are picked up as extras.
+    const scheduledAll = (scheduled ?? []) as Student[]
+    const expectedToday = scheduledAll.filter((s) => isExpectedOnDate(s, forDate))
+    const attendedIds = new Set(attendance.map((a) => a.student_id))
+    setOffWeek(scheduledAll.filter((s) => !isExpectedOnDate(s, forDate) && !attendedIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name })))
+    const scheduledIds = new Set(expectedToday.map((s) => s.id))
     // Catch-up/special students: anyone with an attendance row for this
     // date who wasn't already in the normal scheduled list. Restricted to
     // active students, same as the scheduled query.
@@ -128,7 +140,7 @@ export default function Register() {
       extras = (extraData ?? []) as Student[]
     }
 
-    const everyone = [...((scheduled ?? []) as Student[]), ...extras]
+    const everyone = [...expectedToday, ...extras]
     const ids = everyone.map((s) => s.id)
 
     let progress: StudentProgress[] = []
@@ -241,8 +253,8 @@ export default function Register() {
     }))
 
     entries.sort((a, b) => {
-      const aSched = a.preferred_day === dow ? 0 : 1
-      const bSched = b.preferred_day === dow ? 0 : 1
+      const aSched = isExpectedOnDate(a, forDate) ? 0 : 1
+      const bSched = isExpectedOnDate(b, forDate) ? 0 : 1
       if (aSched !== bSched) return aSched - bSched
       return (a.preferred_time ?? '').localeCompare(b.preferred_time ?? '')
     })
@@ -393,6 +405,18 @@ export default function Register() {
         }
       />
 
+      {offWeek.length > 0 && (
+        <details className="mb-4 text-sm text-slate-600 card px-3 py-2">
+          <summary className="cursor-pointer select-none">
+            {offWeek.length} fortnightly student{offWeek.length === 1 ? ' is' : 's are'} off this week
+          </summary>
+          <p className="mt-2 text-slate-500">
+            {offWeek.map((s) => s.full_name).join(', ')}. They are not counted as absent. If one turns up anyway, use
+            “+ Add to register”.
+          </p>
+        </details>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <span className="badge bg-[color:var(--rt-blue-tint)] text-[color:var(--rt-blue)]" aria-label="Register completeness">
           {completeness.recorded} / {completeness.total} recorded
@@ -518,7 +542,7 @@ export default function Register() {
                               <Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link>
                               {s.attendance?.session_type === 'catch_up' && <span className="badge">Catch-up</span>}
                               {s.attendance?.session_type === 'special' && <span className="badge">Special session</span>}
-                              {!s.attendance && s.preferred_day !== dayName(date) && <span className="badge">Catch-up</span>}
+                              {!s.attendance && !isExpectedOnDate(s, date) && <span className="badge">Catch-up</span>}
                             </div>
                             <div className="text-xs text-slate-500 flex flex-wrap gap-x-2">
                               <span>{s.progress ? levelLabel({ name: s.progress.level_name ?? '' }) : s.levels?.name ?? '—'}</span>
