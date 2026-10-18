@@ -1,5 +1,5 @@
 import type { Attendance, Student } from '../types'
-import { attendancePercentage } from '../lib/attendanceStats'
+import { classifyAttendance } from '../lib/attendanceStats'
 import { addDays, formatShortDate, parseISODate } from '../lib/dates'
 
 export interface WeeklyAttendancePoint {
@@ -32,12 +32,15 @@ export function lastTwelveWeekStarts(today: string): string[] {
 }
 
 export function weeklyAttendancePoints(rows: Attendance[], weekStarts: string[]): WeeklyAttendancePoint[] {
+  // Classify across every row first so an absence is still recognised as
+  // made up when its catch-up session falls in the following week.
+  const classified = classifyAttendance(rows)
   return weekStarts.map((weekStart) => {
     const end = addDays(weekStart, 6)
-    const weekRows = rows.filter((row) => row.date >= weekStart && row.date <= end)
-    const attended = weekRows.filter((row) => row.status === 'Arrived' || row.status === 'Completed').length
-    const missed = weekRows.filter((row) => row.status === 'Absent').length
-    return { weekStart, attended, missed, rate: attendancePercentage(weekRows) }
+    const weekRows = classified.filter((row) => row.date >= weekStart && row.date <= end)
+    const attended = weekRows.filter((row) => row.kind === 'attended').length
+    const missed = weekRows.filter((row) => row.kind === 'missed').length
+    return { weekStart, attended, missed, rate: attended + missed ? Math.round((attended / (attended + missed)) * 100) : null }
   })
 }
 

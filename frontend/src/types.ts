@@ -78,6 +78,11 @@ export interface Student {
   parent_contact: string | null
   notes: string | null
   override_next_lesson: number | null
+  /** 'weekly' (default) or 'fortnightly'. Optional until the fortnightly
+   *  migration has been applied to the live database. */
+  attendance_pattern?: 'weekly' | 'fortnightly' | null
+  /** Any date inside one of a fortnightly student's "on" weeks. */
+  fortnight_anchor?: string | null
   created_at: string
   // Joined relations (when requested via select with foreign key hints)
   levels?: { name: string; slug: string; sort_order: number } | null

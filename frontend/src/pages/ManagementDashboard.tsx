@@ -7,7 +7,7 @@ import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState } from '../components/ui'
 import { todayISO, dayName, addDays, formatShortDate, formatTime12h } from '../lib/dates'
-import { attendancePercentage, attendanceFlag, sessionTimeBreakdown } from '../lib/attendanceStats'
+import { attendancePercentage, attendanceFlag, sessionTimeBreakdown, summariseAttendance, isExpectedOnDate } from '../lib/attendanceStats'
 import { AttendanceTrendChart, CentreAttendanceChart, StudentRetentionChart, lastTwelveWeekStarts, studentRetentionCohorts, weeklyAttendancePoints, type CentreAttendancePoint } from '../components/AnalyticsCharts'
 import type { Attendance, Student, TermTimeFollowup, TermTimeFollowupStatus } from '../types'
 
@@ -20,8 +20,7 @@ const FOLLOWUP_OPTIONS: { value: TermTimeFollowupStatus; label: string }[] = [
 ]
 
 function rangeStats(rows: Attendance[], expected: number) {
-  const attended = rows.filter((a) => a.status === 'Arrived' || a.status === 'Completed').length
-  const missed = rows.filter((a) => a.status === 'Absent').length
+  const { attended, missed } = summariseAttendance(rows)
   const catchUp = rows.filter((a) => a.session_type === 'catch_up').length
   return { expected, attended, missed, catchUp, pct: attendancePercentage(rows) }
 }
@@ -30,8 +29,7 @@ function expectedSessionsInRange(students: Student[], from: string, to: string):
   let n = 0
   let d = from
   while (d <= to) {
-    const dow = dayName(d)
-    n += students.filter((s) => s.preferred_day === dow).length
+    n += students.filter((s) => isExpectedOnDate(s, d)).length
     d = addDays(d, 1)
   }
   return n
@@ -181,7 +179,7 @@ export default function ManagementDashboard() {
     const longAbsent: Student[] = []
     for (const s of active) {
       const rows = byStudent.get(s.id) ?? []
-      const flag = attendanceFlag({ rows, today, hasSchedule: Boolean(s.preferred_day) })
+      const flag = attendanceFlag({ rows, today, hasSchedule: Boolean(s.preferred_day), frequency: s.attendance_pattern })
       if (flag === 'several_recent_missed') declining.push(s)
       else if (flag === 'no_attendance_recently') longAbsent.push(s)
     }
@@ -197,8 +195,7 @@ export default function ManagementDashboard() {
     const centreForStudent = new Map(students.map((student) => [student.id, student.centre_id]))
     return centres.map((centre) => {
       const rows = trendAtt.filter((row) => centreForStudent.get(row.student_id) === centre.id)
-      const attended = rows.filter((row) => row.status === 'Arrived' || row.status === 'Completed').length
-      const missed = rows.filter((row) => row.status === 'Absent').length
+      const { attended, missed } = summariseAttendance(rows)
       return { id: centre.id, name: centre.name, attended, missed, rate: attendancePercentage(rows) }
     })
   }, [centres, students, trendAtt])

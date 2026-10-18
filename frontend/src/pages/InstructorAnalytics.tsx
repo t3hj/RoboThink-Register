@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState, StatusBadge } from '../components/ui'
 import { todayISO, dayName, addDays, formatShortDate } from '../lib/dates'
 import { parseLevelName } from '../lib/curriculum'
-import { attendancePercentage, attendanceFlag, FLAG_LABELS } from '../lib/attendanceStats'
+import { attendancePercentage, attendanceFlag, FLAG_LABELS, summariseAttendance, isExpectedOnDate } from '../lib/attendanceStats'
 import { AttendanceTrendChart, lastTwelveWeekStarts, weeklyAttendancePoints } from '../components/AnalyticsCharts'
 import type { Attendance, Student, StudentProgress } from '../types'
 
@@ -96,11 +96,10 @@ export default function InstructorAnalytics() {
   const weekStats = useMemo(() => {
     let expected = 0
     for (let i = 0; i < 7; i++) {
-      const d = dayName(addDays(weekStart, i))
-      expected += students.filter((s) => s.preferred_day === d).length
+      const d = addDays(weekStart, i)
+      expected += students.filter((s) => isExpectedOnDate(s, d)).length
     }
-    const attended = weekAttendance.filter((a) => a.status === 'Arrived' || a.status === 'Completed').length
-    const missed = weekAttendance.filter((a) => a.status === 'Absent').length
+    const { attended, missed } = summariseAttendance(weekAttendance)
     const catchUp = weekAttendance.filter((a) => a.session_type === 'catch_up').length
     const pct = attendancePercentage(weekAttendance)
     return { expected, attended, missed, catchUp, pct }
@@ -114,7 +113,7 @@ export default function InstructorAnalytics() {
     return students
       .map((student) => ({
         student,
-        flag: attendanceFlag({ rows: rowsByStudent.get(student.id) ?? [], today, hasSchedule: Boolean(student.preferred_day) }),
+        flag: attendanceFlag({ rows: rowsByStudent.get(student.id) ?? [], today, hasSchedule: Boolean(student.preferred_day), frequency: student.attendance_pattern }),
       }))
       .filter((item): item is { student: Student; flag: keyof typeof FLAG_LABELS } => item.flag != null)
       .sort((a, b) => priority[a.flag] - priority[b.flag] || a.student.full_name.localeCompare(b.student.full_name))
@@ -137,7 +136,7 @@ export default function InstructorAnalytics() {
   const selectedStudent = students.find((s) => s.id === selectedStudentId) ?? null
   const selectedPct = attendancePercentage(studentHistory)
   const selectedFlag = selectedStudent
-    ? attendanceFlag({ rows: studentHistory, today, hasSchedule: Boolean(selectedStudent.preferred_day) })
+    ? attendanceFlag({ rows: studentHistory, today, hasSchedule: Boolean(selectedStudent.preferred_day), frequency: selectedStudent.attendance_pattern })
     : null
 
   if (loading) return <LoadingPanel label="Loading analytics…" />
