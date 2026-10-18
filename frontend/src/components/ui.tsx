@@ -13,7 +13,7 @@ export function StatusBadge({ status }: { status: AttendanceStatus }) {
     Completed: 'bg-teal-100 text-teal-800',
   }
   return (
-    <span className={`badge ${styles[status] ?? ''}`}>
+    <span className={`badge badge-dot ${styles[status] ?? ''}`}>
       {status}
     </span>
   )
@@ -115,9 +115,12 @@ export function PageHeader({
 export function StatCard({ value, label, tone }: { value: React.ReactNode; label: string; tone?: 'good' | 'bad' | 'warn' | undefined }) {
   const toneClass =
     tone === 'good' ? 'text-emerald-600' : tone === 'bad' ? 'text-rose-600' : tone === 'warn' ? 'text-amber-600' : ''
+  // A thin top accent echoes the tone; neutral cards use the brand blue.
+  const accent =
+    tone === 'good' ? 'var(--rt-green)' : tone === 'bad' ? 'var(--rt-red)' : tone === 'warn' ? 'var(--rt-yellow)' : 'var(--rt-blue)'
   return (
-    <div className="card p-4 text-center">
-      <div className={`text-3xl font-bold ${toneClass}`}>{value}</div>
+    <div className="card card-accent-top p-4 text-center" style={{ '--accent-color': accent } as React.CSSProperties}>
+      <div className={`text-3xl font-bold tabular-nums ${toneClass}`}>{value}</div>
       <div className="text-sm text-slate-500 mt-1">{label}</div>
     </div>
   )

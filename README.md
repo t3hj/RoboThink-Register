@@ -33,6 +33,10 @@ portal.
 - Attendance, completion and assessment reporting.
 - Management summaries and staff-role administration.
 - Centre selection and centre-scoped access where the live database supports it.
+- Every-other-week (fortnightly) students, who are only expected in their "on" weeks.
+- Make-up tracking: an absence covered by a catch-up session is not counted against the student.
+- A dashboard list of expected sessions that were never marked.
+- In-app **Help & guides** page and written instructor guides in `docs/`.
 
 ## How it works
 
@@ -48,6 +52,9 @@ dates can be opened to correct or backfill attendance, subject to the user's
 permissions.
 
 ## Staff guide
+
+Step-by-step guides for instructors and admins are in [`docs/`](docs/README.md),
+and a short version is built into the app under **Help & guides**.
 
 ### Sign in
 
@@ -69,6 +76,17 @@ the wrong role, contact an administrator.
 
 Use the lesson picker rather than relying on a lesson number from memory. It
 shows the authorised curriculum data available to the signed-in staff member.
+
+### Attendance counting, fortnightly students and make-ups
+
+Only sessions marked Attended or Absent count towards a student's attendance
+percentage. An Absent that is followed (up to three weeks later) or preceded (up
+to one week earlier) by an attended Catch-up or Special session is treated as
+made up and not counted against them; catch-ups never raise the percentage on
+their own. Students set to "Every other week" are expected only on their normal
+day in alternate weeks from their anchor date, so off weeks are never absences.
+This needs
+`db/migrations_pending_2026-10-18/001_fortnightly_attendance.sql` applied.
 
 ### Not finished, repeats and catch-up
 
@@ -133,6 +151,7 @@ frontend/tests/               Unit tests
 frontend/.env.example         Local configuration template
 db/                           Schema, migrations, RLS and synthetic seed examples
 frontend/public/              Small static UI assets
+docs/                         Instructor and admin guides
 ```
 
 The migration folders describe database changes applied over time. The live

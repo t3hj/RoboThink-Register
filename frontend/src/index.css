@@ -62,6 +62,21 @@ body {
   color: var(--rt-ink);
   -webkit-font-smoothing: antialiased;
   line-height: 1.5;
+  /* Soft brand-coloured glow behind the paper background so pages feel less flat. */
+  background-color: var(--rt-paper);
+  background-image:
+    radial-gradient(60rem 30rem at 100% -10%, color-mix(in srgb, var(--rt-yellow) 14%, transparent), transparent 70%),
+    radial-gradient(50rem 28rem at -10% 0%, color-mix(in srgb, var(--rt-blue) 8%, transparent), transparent 70%);
+  background-attachment: fixed;
+}
+
+::selection { background: var(--rt-yellow-tint); color: var(--rt-ink); }
+
+/* Form controls: one consistent, visible focus state. */
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: none;
+  border-color: var(--rt-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rt-primary) 22%, transparent);
 }
 
 h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
@@ -77,10 +92,54 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
 /* Reusable component classes (plain CSS, Tailwind-v4 safe) */
 .card {
   background: #fff;
-  border: 1px solid #eef1f6;
-  border-radius: 0.875rem;
-  box-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 1px 0 rgb(15 23 42 / 0.03);
+  border: 1px solid #e9edf3;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 4px 14px -6px rgb(15 23 42 / 0.06);
 }
+
+/* Cards that act as links/buttons get a gentle lift. */
+.card-hover { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.card-hover:hover { transform: translateY(-2px); box-shadow: 0 2px 4px 0 rgb(15 23 42 / 0.05), 0 10px 24px -8px rgb(15 23 42 / 0.12); }
+
+/* Page content eases in on every route change. */
+.page-enter { animation: page-enter 0.22s ease-out both; }
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter { animation: none; }
+  .card-hover, .btn-primary, .btn-ghost { transition: none; }
+  .card-hover:hover { transform: none; }
+}
+
+/* Sidebar navigation */
+.nav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--rt-ink-soft);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-link:hover { background: color-mix(in srgb, var(--rt-primary) 7%, white); color: var(--rt-ink); }
+.nav-link[aria-current='page'] {
+  background: var(--rt-primary);
+  color: #fff;
+  box-shadow: 0 4px 10px -4px color-mix(in srgb, var(--rt-primary) 70%, transparent);
+}
+.nav-dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; background: var(--dot, var(--rt-blue)); flex: none; }
+.nav-link[aria-current='page'] .nav-dot { background: #fff; }
+
+/* Row hover for list-style cards */
+.row-hover { transition: background 0.12s ease; }
+.row-hover:hover { background: #fafbfd; }
 
 .btn-primary {
   background: var(--rt-primary);
@@ -90,11 +149,10 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
   border-radius: 0.5rem;
   border: none;
   cursor: pointer;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 4px 10px -4px color-mix(in srgb, var(--rt-primary) 55%, transparent);
   transition: background 0.15s ease, transform 0.05s ease;
 }
-.btn-primary:hover { background: #234fb0; }
-[data-brand='creative_iq'] .btn-primary:hover { background: #416400; }
+.btn-primary:hover { background: color-mix(in srgb, var(--rt-primary) 85%, black); }
 .btn-primary:active { transform: translateY(1px); }
 .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -111,6 +169,15 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
 }
 .btn-ghost:hover { background: #f8fafc; border-color: #cbd5e1; }
 .btn-ghost:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.badge-dot::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.75;
+}
 
 .badge {
   display: inline-flex;
@@ -143,7 +210,7 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
   overflow: hidden;
 }
 .progress-fill {
-  background: var(--rt-blue);
+  background: linear-gradient(90deg, var(--rt-blue), color-mix(in srgb, var(--rt-blue) 70%, var(--rt-green)));
   height: 100%;
   border-radius: 9999px;
   transition: width 0.2s ease;

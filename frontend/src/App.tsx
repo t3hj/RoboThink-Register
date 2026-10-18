@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { CentreProvider, useCentres } from './lib/centres'
 import { BrandProvider, useBrand } from './lib/brand'
@@ -16,6 +16,7 @@ import Reports from './pages/Reports'
 import InstructorAnalytics from './pages/InstructorAnalytics'
 import ManagementDashboard from './pages/ManagementDashboard'
 import StaffManagement from './pages/StaffManagement'
+import Help from './pages/Help'
 import NotFound from './pages/NotFound'
 import type { Role } from './types'
 
@@ -32,7 +33,11 @@ const NAV: { to: string; label: string; end?: boolean; roles: Role[] }[] = [
   { to: '/analytics', label: 'Analytics', roles: ['admin', 'instructor'] },
   { to: '/management', label: 'Management dashboard', roles: ['admin', 'management'] },
   { to: '/staff', label: 'Staff', roles: ['admin'] },
+  { to: '/help', label: 'Help & guides', roles: ['admin', 'instructor', 'management'] },
 ]
+
+/** Rotates the four brand colours through the nav dots — decoration only. */
+const DOT_COLOURS = ['var(--rt-yellow)', 'var(--rt-green)', 'var(--rt-blue)', 'var(--rt-red)']
 
 function homeFor(role: Role | null): string {
   if (role === 'management') return '/management'
@@ -51,6 +56,7 @@ function RoleRoute({ roles, children }: { roles: Role[]; children: React.ReactNo
 function Layout() {
   const { profile, role, signOut } = useAuth()
   const { activeBrand } = useBrand()
+  const { pathname } = useLocation()
   const { activeCentres, assignedCentres, selectedCentreId, selectedCentre, isAllCentres, loading: centresLoading, error: centresError, setSelectedCentreId } = useCentres()
   const items = NAV.filter((item) => !role || item.roles.includes(role))
   return (
@@ -69,17 +75,14 @@ function Layout() {
             <BrandSwitcher />
             {activeBrand === 'robothink' && <MascotCrew className="mb-4 pb-3 border-b border-slate-100" />}
             <nav className="flex lg:flex-col gap-1.5 overflow-x-auto overscroll-x-contain -mx-1 px-1 pb-1" aria-label="Main navigation">
-              {items.map((item) => (
+              {items.map((item, index) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   end={item.end}
-                  className={({ isActive }) =>
-                    `inline-flex min-h-11 items-center px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                      isActive ? 'bg-[color:var(--rt-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`
-                  }
+                  className="nav-link"
                 >
+                  <span className="nav-dot" style={{ '--dot': DOT_COLOURS[index % DOT_COLOURS.length] } as React.CSSProperties} aria-hidden />
                   {item.label}
                 </NavLink>
               ))}
@@ -113,7 +116,8 @@ function Layout() {
         </aside>
 
         <main id="main-content" className="lg:col-span-4 min-w-0">
-          <Routes key={activeBrand}>
+          <div key={`${activeBrand}:${pathname}`} className="page-enter">
+          <Routes>
             <Route path="/" element={<RoleRoute roles={['admin', 'instructor']}><Dashboard /></RoleRoute>} />
             <Route path="/register" element={<RoleRoute roles={['admin', 'instructor']}><Register /></RoleRoute>} />
             <Route path="/students" element={<RoleRoute roles={['admin', 'instructor']}><Students /></RoleRoute>} />
@@ -124,8 +128,10 @@ function Layout() {
             <Route path="/management" element={<RoleRoute roles={['admin', 'management']}><ManagementDashboard /></RoleRoute>} />
             <Route path="/staff" element={<RoleRoute roles={['admin']}><StaffManagement /></RoleRoute>} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/help" element={<Help />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </div>
         </main>
       </div>
     </div>
