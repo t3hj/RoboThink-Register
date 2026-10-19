@@ -97,10 +97,11 @@ export function RoboThinkLogo({ className = 'w-40' }: { className?: string }) {
   )
 }
 
-/** Official Creative IQ logo, with a light backing so it remains visible in either theme. */
+/** Official Creative IQ logo. The artwork is white, so it sits on the brand's
+ *  green-to-teal gradient exactly as on creative-iq.co.uk. */
 export function CreativeIqLogo({ className = 'w-40' }: { className?: string }) {
   return (
-    <span className={className + ' inline-flex items-center rounded-md bg-slate-900 p-1'}>
+    <span className={className + ' inline-flex items-center rounded-xl p-2 shadow-sm'} style={{ background: 'linear-gradient(135deg, #5f8a2c 0%, #4f8f86 100%)' }}>
       <img
         src="https://www.creative-iq.co.uk/wp-content/uploads/2025/05/Logo.webp"
         alt="creative IQ"

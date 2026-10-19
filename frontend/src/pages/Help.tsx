@@ -59,7 +59,7 @@ const GUIDES: Guide[] = [
       'Mark the missed day as “Absent” on that day’s register. Do not delete it.',
       'When they come to make it up, open that day’s register and use “+ Add to register”, choosing “Catch-up”.',
       'Mark them Attended and record the lesson as normal.',
-      'The app pairs the absence with the catch-up automatically if it falls within a week before or three weeks after. Their history shows a “Made up” label.',
+      'The app pairs the absence with the catch-up automatically whenever the catch-up happens (or up to a week before the absence). There is no deadline. Their history shows a “Made up” label.',
     ],
     tip: 'Catch-ups and special sessions never push someone’s percentage above what their regular sessions earned. They only cancel out an absence.',
   },

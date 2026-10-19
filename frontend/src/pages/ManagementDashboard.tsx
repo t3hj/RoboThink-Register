@@ -6,8 +6,8 @@ import { useBrand } from '../lib/brand'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState } from '../components/ui'
-import { todayISO, dayName, addDays, formatShortDate, formatTime12h } from '../lib/dates'
-import { attendancePercentage, attendanceFlag, sessionTimeBreakdown, summariseAttendance, isExpectedOnDate } from '../lib/attendanceStats'
+import { todayISO, addDays, formatShortDate, formatTime12h } from '../lib/dates'
+import { attendancePercentage, attendanceFlag, sessionTimeBreakdown, summariseAttendance, summariseRange, isExpectedOnDate } from '../lib/attendanceStats'
 import { AttendanceTrendChart, CentreAttendanceChart, StudentRetentionChart, lastTwelveWeekStarts, studentRetentionCohorts, weeklyAttendancePoints, type CentreAttendancePoint } from '../components/AnalyticsCharts'
 import type { Attendance, Student, TermTimeFollowup, TermTimeFollowupStatus } from '../types'
 
@@ -19,10 +19,12 @@ const FOLLOWUP_OPTIONS: { value: TermTimeFollowupStatus; label: string }[] = [
   { value: 'snoozed', label: 'Snoozed / follow up later' },
 ]
 
-function rangeStats(rows: Attendance[], expected: number) {
-  const { attended, missed } = summariseAttendance(rows)
-  const catchUp = rows.filter((a) => a.session_type === 'catch_up').length
-  return { expected, attended, missed, catchUp, pct: attendancePercentage(rows) }
+/** `all` must cover the whole period plus some margin so make-ups that land
+ *  just outside it are still matched to their absence. */
+function rangeStats(all: Attendance[], from: string, to: string, expected: number) {
+  const { attended, missed } = summariseRange(all, from, to)
+  const catchUp = all.filter((a) => a.date >= from && a.date <= to && a.session_type === 'catch_up').length
+  return { expected, attended, missed, catchUp, pct: attended + missed ? Math.round((attended / (attended + missed)) * 100) : null }
 }
 
 function expectedSessionsInRange(students: Student[], from: string, to: string): number {
@@ -52,10 +54,6 @@ export default function ManagementDashboard() {
 
   const [students, setStudents] = useState<Student[]>([])
   const [todayAtt, setTodayAtt] = useState<Attendance[]>([])
-  const [weekAtt, setWeekAtt] = useState<Attendance[]>([])
-  const [prevWeekAtt, setPrevWeekAtt] = useState<Attendance[]>([])
-  const [monthAtt, setMonthAtt] = useState<Attendance[]>([])
-  const [prevMonthAtt, setPrevMonthAtt] = useState<Attendance[]>([])
   const [allAtt, setAllAtt] = useState<Attendance[]>([])
   const [trendAtt, setTrendAtt] = useState<Attendance[]>([])
   const [followups, setFollowups] = useState<TermTimeFollowup[]>([])
@@ -65,26 +63,18 @@ export default function ManagementDashboard() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const [sRes, taRes, waRes, pwRes, maRes, pmRes, allRes, trendRes, ftRes] = await Promise.all([
+    const [sRes, taRes, allRes, trendRes, ftRes] = await Promise.all([
       supabase.from('students').select('*'),
       supabase.from('attendance').select('*').eq('date', today),
-      supabase.from('attendance').select('*').gte('date', weekStart).lte('date', today),
-      supabase.from('attendance').select('*').gte('date', prevWeekStart).lte('date', prevWeekEnd),
-      supabase.from('attendance').select('*').gte('date', monthStart).lte('date', today),
-      supabase.from('attendance').select('*').gte('date', prevMonthStart).lte('date', prevMonthEnd),
       // Used for "long absence" detection — most recent attendance per student.
       supabase.from('attendance').select('*').order('date', { ascending: false }).limit(2000),
       supabase.from('attendance').select('*').gte('date', trendStart).lte('date', today),
       supabase.from('term_time_followups').select('*, students(full_name)').order('created_at', { ascending: false }),
     ])
-    if (sRes.error || taRes.error || waRes.error || pwRes.error || maRes.error || pmRes.error || allRes.error || trendRes.error || ftRes.error) {
+    if (sRes.error || taRes.error || allRes.error || trendRes.error || ftRes.error) {
       setError(
         sRes.error?.message ??
           taRes.error?.message ??
-          waRes.error?.message ??
-          pwRes.error?.message ??
-          maRes.error?.message ??
-          pmRes.error?.message ??
           allRes.error?.message ??
           trendRes.error?.message ??
           ftRes.error?.message ??
@@ -95,15 +85,11 @@ export default function ManagementDashboard() {
     }
     setStudents((sRes.data ?? []) as Student[])
     setTodayAtt((taRes.data ?? []) as Attendance[])
-    setWeekAtt((waRes.data ?? []) as Attendance[])
-    setPrevWeekAtt((pwRes.data ?? []) as Attendance[])
-    setMonthAtt((maRes.data ?? []) as Attendance[])
-    setPrevMonthAtt((pmRes.data ?? []) as Attendance[])
     setAllAtt((allRes.data ?? []) as Attendance[])
     setTrendAtt((trendRes.data ?? []) as Attendance[])
     setFollowups((ftRes.data ?? []) as TermTimeFollowup[])
     setLoading(false)
-  }, [today, weekStart, prevWeekStart, prevWeekEnd, monthStart, prevMonthStart, prevMonthEnd, trendStart])
+  }, [today, trendStart])
 
   useEffect(() => {
     void load()
@@ -122,8 +108,7 @@ export default function ManagementDashboard() {
   const active = useMemo(() => students.filter((s) => s.active), [students])
 
   const todayStats = useMemo(() => {
-    const dow = dayName(today)
-    const expected = active.filter((s) => s.preferred_day === dow)
+    const expected = active.filter((s) => isExpectedOnDate(s, today))
     const attMap = new Map(todayAtt.map((a) => [a.student_id, a]))
     const studentMap = new Map(active.map((s) => [s.id, s]))
     const notArrivedStudents = expected.filter((s) => (attMap.get(s.id)?.status ?? 'Not Arrived') === 'Not Arrived')
@@ -156,15 +141,15 @@ export default function ManagementDashboard() {
     }
   }, [active, todayAtt, today])
 
-  const week = useMemo(() => rangeStats(weekAtt, expectedSessionsInRange(active, weekStart, today)), [weekAtt, active, weekStart, today])
+  const week = useMemo(() => rangeStats(trendAtt, weekStart, today, expectedSessionsInRange(active, weekStart, today)), [trendAtt, active, weekStart, today])
   const prevWeek = useMemo(
-    () => rangeStats(prevWeekAtt, expectedSessionsInRange(active, prevWeekStart, prevWeekEnd)),
-    [prevWeekAtt, active, prevWeekStart, prevWeekEnd],
+    () => rangeStats(trendAtt, prevWeekStart, prevWeekEnd, expectedSessionsInRange(active, prevWeekStart, prevWeekEnd)),
+    [trendAtt, active, prevWeekStart, prevWeekEnd],
   )
-  const month = useMemo(() => rangeStats(monthAtt, expectedSessionsInRange(active, monthStart, today)), [monthAtt, active, monthStart, today])
+  const month = useMemo(() => rangeStats(trendAtt, monthStart, today, expectedSessionsInRange(active, monthStart, today)), [trendAtt, active, monthStart, today])
   const prevMonth = useMemo(
-    () => rangeStats(prevMonthAtt, expectedSessionsInRange(active, prevMonthStart, prevMonthEnd)),
-    [prevMonthAtt, active, prevMonthStart, prevMonthEnd],
+    () => rangeStats(trendAtt, prevMonthStart, prevMonthEnd, expectedSessionsInRange(active, prevMonthStart, prevMonthEnd)),
+    [trendAtt, active, prevMonthStart, prevMonthEnd],
   )
   const newThisMonth = useMemo(() => active.filter((s) => s.date_joined && s.date_joined >= monthStart).length, [active, monthStart])
   const newLastMonth = useMemo(

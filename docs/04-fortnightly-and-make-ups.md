@@ -35,8 +35,8 @@ students instead of three, so a normal gap won't trigger it.
 2. On the day they make it up, press **+ Add to register**, choose
    **Catch-up**, and mark them Attended.
 
-The app matches each absence with one catch-up session that falls up to a week
-**before** or three weeks **after** it. A matched absence no longer counts
+The app matches each absence with one catch-up session at **any time after it**
+(there is no deadline) or up to a week before it. A matched absence no longer counts
 against the student and is labelled **Made up** in their attendance history. A
 catch-up can cover only one absence.
 

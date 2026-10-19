@@ -146,13 +146,18 @@ describe('make-up sessions', () => {
     expect(summariseAttendance(rows).missed).toBe(0)
   })
 
-  it('a catch-up far outside the window does not hide an absence', () => {
-    const rows = [row('2026-09-01', 'Absent'), row('2026-10-20', 'Completed', 'catch_up')]
+  it('has no deadline: a make-up months later still cancels the absence', () => {
+    const rows = [row('2026-09-01', 'Absent'), row('2027-01-20', 'Completed', 'catch_up')]
+    expect(summariseAttendance(rows).missed).toBe(0)
+  })
+
+  it('a catch-up more than a week BEFORE the absence does not cover it', () => {
+    const rows = [row('2026-08-01', 'Completed', 'catch_up'), row('2026-09-01', 'Absent')]
     expect(summariseAttendance(rows).missed).toBe(1)
   })
 
   it('a bonus catch-up with no absence never raises the percentage', () => {
-    const rows = [row('2026-09-01', 'Completed'), row('2026-09-08', 'Absent'), row('2026-09-30', 'Completed', 'special')]
+    const rows = [row('2026-08-01', 'Completed', 'special'), row('2026-09-01', 'Completed'), row('2026-09-08', 'Absent')]
     expect(attendancePercentage(rows)).toBe(50)
   })
 
@@ -220,5 +225,47 @@ describe('findUnmarkedSessions', () => {
     ]
     const out = findUnmarkedSessions(students, [{ student_id: 'amy', date: '2026-09-08' }], '2026-09-08', '2026-09-08')
     expect(out).toEqual([])
+  })
+})
+
+import { summariseRange } from '../src/lib/attendanceStats'
+import { closureName, isClosedDay } from '../src/lib/ukHolidays'
+
+describe('summariseRange', () => {
+  it('matches a make-up in the next period instead of reporting a miss', () => {
+    const rows = [row('2026-09-06', 'Absent'), row('2026-09-09', 'Completed', 'catch_up')]
+    expect(summariseRange(rows, '2026-08-31', '2026-09-06').missed).toBe(0)
+  })
+})
+
+describe('England & Wales closures', () => {
+  it('knows the 2026 bank holidays', () => {
+    expect(closureName('2026-01-01')).toBe("New Year's Day")
+    expect(closureName('2026-04-03')).toBe('Good Friday')
+    expect(closureName('2026-04-06')).toBe('Easter Monday')
+    expect(closureName('2026-05-04')).toBe('Early May bank holiday')
+    expect(closureName('2026-05-25')).toBe('Spring bank holiday')
+    expect(closureName('2026-08-31')).toBe('Summer bank holiday')
+    expect(closureName('2026-12-25')).toBe('Christmas Day')
+    expect(closureName('2026-12-28')).toBe('Boxing Day') // 26th is a Saturday
+  })
+
+  it('applies substitute days and other years', () => {
+    expect(closureName('2027-12-27')).toBe('Christmas Day') // 25th is a Saturday
+    expect(closureName('2027-12-28')).toBe('Boxing Day')
+    expect(closureName('2028-01-03')).toBe("New Year's Day") // 1st is a Saturday
+    expect(closureName('2027-03-26')).toBe('Good Friday')
+    expect(closureName('2027-05-31')).toBe('Spring bank holiday')
+  })
+
+  it('treats ordinary days as open', () => {
+    expect(isClosedDay('2026-10-19')).toBe(false)
+    expect(isClosedDay('2026-12-24')).toBe(false)
+  })
+
+  it('nobody is expected on a closure day, so nothing is flagged unmarked', () => {
+    const s = { preferred_day: 'Monday' }
+    expect(isExpectedOnDate(s, '2026-12-28')).toBe(false)
+    expect(isExpectedOnDate(s, '2026-12-21')).toBe(true)
   })
 })

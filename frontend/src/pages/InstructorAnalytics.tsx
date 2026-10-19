@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState, StatusBadge } from '../components/ui'
-import { todayISO, dayName, addDays, formatShortDate } from '../lib/dates'
+import { todayISO, addDays, formatShortDate } from '../lib/dates'
 import { parseLevelName } from '../lib/curriculum'
-import { attendancePercentage, attendanceFlag, FLAG_LABELS, summariseAttendance, isExpectedOnDate } from '../lib/attendanceStats'
+import { attendancePercentage, attendanceFlag, FLAG_LABELS, summariseRange, isExpectedOnDate } from '../lib/attendanceStats'
 import { AttendanceTrendChart, lastTwelveWeekStarts, weeklyAttendancePoints } from '../components/AnalyticsCharts'
 import type { Attendance, Student, StudentProgress } from '../types'
 
@@ -76,8 +76,7 @@ export default function InstructorAnalytics() {
     }
   }, [selectedStudentId])
 
-  const dow = dayName(today)
-  const expectedToday = useMemo(() => students.filter((s) => s.preferred_day === dow), [students, dow])
+  const expectedToday = useMemo(() => students.filter((s) => isExpectedOnDate(s, today)), [students, today])
   const expectedIds = useMemo(() => new Set(expectedToday.map((s) => s.id)), [expectedToday])
   const extraToday = useMemo(() => todayAttendance.filter((a) => !expectedIds.has(a.student_id)), [todayAttendance, expectedIds])
   const attMapToday = useMemo(() => new Map(todayAttendance.map((a) => [a.student_id, a])), [todayAttendance])
@@ -99,11 +98,11 @@ export default function InstructorAnalytics() {
       const d = addDays(weekStart, i)
       expected += students.filter((s) => isExpectedOnDate(s, d)).length
     }
-    const { attended, missed } = summariseAttendance(weekAttendance)
+    const { attended, missed } = summariseRange(trendAttendance, weekStart, today)
     const catchUp = weekAttendance.filter((a) => a.session_type === 'catch_up').length
-    const pct = attendancePercentage(weekAttendance)
+    const pct = attended + missed ? Math.round((attended / (attended + missed)) * 100) : null
     return { expected, attended, missed, catchUp, pct }
-  }, [weekAttendance, students, weekStart])
+  }, [weekAttendance, trendAttendance, students, weekStart, today])
 
   const trendPoints = useMemo(() => weeklyAttendancePoints(trendAttendance, weekStarts), [trendAttendance, weekStarts])
   const attendanceFollowups = useMemo(() => {

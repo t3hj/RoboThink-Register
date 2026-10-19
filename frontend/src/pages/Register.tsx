@@ -17,6 +17,7 @@ import { levelLabel } from '../lib/curriculum'
 import { loadCurriculum } from '../lib/curriculumData'
 import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
 import { isExpectedOnDate } from '../lib/attendanceStats'
+import { closureName } from '../lib/ukHolidays'
 import { registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
 import { requiresAssessmentResult } from '../lib/assessment'
 import { resolveFeedbackTarget } from '../lib/bulkActions'
@@ -404,6 +405,13 @@ export default function Register() {
           </>
         }
       />
+
+      {closureName(date) && (
+        <p className="mb-4 rounded-lg bg-[color:var(--rt-yellow-tint)] px-3 py-2 text-sm">
+          <span className="font-semibold">{closureName(date)}.</span> Centres are normally closed, so nobody is expected today.
+          If a session did run, use “+ Add to register” for the students who came.
+        </p>
+      )}
 
       {offWeek.length > 0 && (
         <details className="mb-4 text-sm text-slate-600 card px-3 py-2">

@@ -23,17 +23,25 @@
   --rt-amber: #de9b33;
 }
 
-/* Creative IQ uses its official yellow and green accents. */
+/* Creative IQ palette, sampled from creative-iq.co.uk: sunny yellow
+   (#f7e46d), deep olive green (#627f25) and the green-to-teal hero gradient. */
 [data-brand='creative_iq'] {
-  --rt-yellow: #ffe553;
-  --rt-yellow-tint: #fff9d6;
-  --rt-green: #568203;
-  --rt-green-tint: #edf4df;
-  --rt-blue: #568203;
-  --rt-blue-tint: #edf4df;
-  --rt-primary: #568203;
-  --rt-paper: #fbfaf5;
+  --rt-yellow: #f7e46d;
+  --rt-yellow-tint: #fcf6cf;
+  --rt-green: #627f25;
+  --rt-green-tint: #e9f1da;
+  --rt-blue: #4f9a8b;
+  --rt-blue-tint: #e0f0ec;
+  --rt-primary: #627f25;
+  --rt-paper: #f7faf1;
+  --cq-gradient: linear-gradient(135deg, #87b65f 0%, #649e9a 100%);
 }
+
+/* Creative IQ buttons are fully rounded pills, like the website's. */
+[data-brand='creative_iq'] .btn-primary,
+[data-brand='creative_iq'] .btn-ghost,
+[data-brand='creative_iq'] .nav-link,
+[data-brand='creative_iq'] .badge { border-radius: 9999px; }
 
 /* Thin four-colour brand stripe — a decorative identity mark, not a status
    indicator. Used once, at the very top of the app shell. */
@@ -238,4 +246,4 @@ input, select, textarea {
   }
 }
 
-[data-brand='creative_iq'] .brand-stripe { background: linear-gradient(90deg, var(--rt-yellow) 0 50%, var(--rt-green) 50% 100%); }
+[data-brand='creative_iq'] .brand-stripe { background: linear-gradient(90deg, #87b65f, #649e9a 60%, var(--rt-yellow)); }
