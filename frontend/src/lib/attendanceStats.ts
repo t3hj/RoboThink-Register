@@ -1,5 +1,6 @@
 import type { Attendance, AttendanceStatus, Student } from '../types'
 import { addDays, dayName, parseISODate } from './dates'
+import { isClosedDay } from './ukHolidays'
 
 type AttendanceLike = Pick<Attendance, 'status'> & Partial<Pick<Attendance, 'date' | 'session_type' | 'catch_up'>>
 
@@ -15,9 +16,9 @@ export type AttendanceKind = 'attended' | 'missed' | 'made_up' | 'extra' | 'pend
 
 /** An absence can be made up by a catch-up/special session up to this many
  *  days before it (e.g. a fortnightly student who doubles up the week before)
- *  or after it. */
+ *  or at ANY time after it — there is no deadline for make-ups. */
 export const MAKE_UP_DAYS_BEFORE = 7
-export const MAKE_UP_DAYS_AFTER = 21
+export const MAKE_UP_DAYS_AFTER = Infinity
 
 const isExtraSession = (r: AttendanceLike) => r.session_type === 'catch_up' || r.session_type === 'special' || r.catch_up === true
 const didAttend = (status: AttendanceStatus) => status === 'Arrived' || status === 'Completed'
@@ -73,8 +74,19 @@ export interface AttendanceSummary {
 }
 
 export function summariseAttendance(rows: AttendanceLike[]): AttendanceSummary {
+  return countKinds(classifyAttendance(rows))
+}
+
+/** Summary for just the rows dated from..to, but with absences matched to
+ *  make-ups across ALL the rows given — so an absence on the last day of a
+ *  week that is made up the following week is not reported as missed. */
+export function summariseRange<T extends AttendanceLike & { date: string }>(all: T[], from: string, to: string): AttendanceSummary {
+  return countKinds(classifyAttendance(all).filter((r) => r.date >= from && r.date <= to))
+}
+
+function countKinds(rows: { kind: AttendanceKind }[]): AttendanceSummary {
   const out: AttendanceSummary = { attended: 0, missed: 0, madeUp: 0, extra: 0 }
-  for (const { kind } of classifyAttendance(rows)) {
+  for (const { kind } of rows) {
     if (kind === 'attended') out.attended++
     else if (kind === 'missed') out.missed++
     else if (kind === 'made_up') out.madeUp++
@@ -162,6 +174,7 @@ type ScheduleFields = Pick<Student, 'preferred_day'> & Partial<Pick<Student, 'at
  *  off the register while the anchor is being set. */
 export function isExpectedOnDate(student: ScheduleFields, date: string): boolean {
   if (!student.preferred_day || student.preferred_day !== dayName(date)) return false
+  if (isClosedDay(date)) return false // bank holidays and Christmas: centres are shut
   if (student.attendance_pattern !== 'fortnightly' || !student.fortnight_anchor) return true
   return Math.abs(weeksApart(student.fortnight_anchor, date)) % 2 === 0
 }

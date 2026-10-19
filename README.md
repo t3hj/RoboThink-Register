@@ -80,7 +80,7 @@ shows the authorised curriculum data available to the signed-in staff member.
 ### Attendance counting, fortnightly students and make-ups
 
 Only sessions marked Attended or Absent count towards a student's attendance
-percentage. An Absent that is followed (up to three weeks later) or preceded (up
+percentage. An Absent that is followed (at any later date; there is no make-up deadline) or preceded (up
 to one week earlier) by an attended Catch-up or Special session is treated as
 made up and not counted against them; catch-ups never raise the percentage on
 their own. Students set to "Every other week" are expected only on their normal
