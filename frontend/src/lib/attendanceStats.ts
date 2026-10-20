@@ -164,7 +164,29 @@ function weeksApart(a: string, b: string): number {
   return Math.round((monday(b) - monday(a)) / (7 * 86_400_000))
 }
 
-type ScheduleFields = Pick<Student, 'preferred_day'> & Partial<Pick<Student, 'attendance_pattern' | 'fortnight_anchor'>>
+type ScheduleFields = Pick<Student, 'preferred_day'> & Partial<Pick<Student, 'attendance_pattern' | 'fortnight_anchor' | 'student_schedules' | 'preferred_time'>>
+
+/** A student's weekly sessions: their schedule rows when they have any,
+ *  otherwise the single preferred day/time. */
+export function weeklySlots(student: ScheduleFields): { day: string; time: string | null }[] {
+  const rows = (student.student_schedules ?? []).filter((r) => r.active !== false)
+  if (rows.length > 0) return rows.map((r) => ({ day: r.day_of_week, time: r.start_time }))
+  return student.preferred_day ? [{ day: student.preferred_day, time: student.preferred_time ?? null }] : []
+}
+
+const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+/** Human-readable list of a student's weekly sessions, e.g. "Fri 5:00 pm · Sat 9:00 am". */
+export function describeSlots(student: ScheduleFields, formatTime: (t: string) => string): string {
+  const slots = [...weeklySlots(student)].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day) || (a.time ?? '').localeCompare(b.time ?? ''))
+  return slots.map((s) => `${s.day.slice(0, 3)}${s.time ? ' ' + formatTime(s.time) : ''}`).join(' · ')
+}
+
+/** The session this student has on a given date, if any (ignores fortnightly weeks). */
+export function slotOnDate(student: ScheduleFields, date: string): { day: string; time: string | null } | null {
+  const day = dayName(date)
+  return weeklySlots(student).find((slot) => slot.day === day) ?? null
+}
 
 /** Whether a student is expected on a specific date. Weekly students are
  *  expected on their preferred day every week. Fortnightly students are
@@ -173,7 +195,7 @@ type ScheduleFields = Pick<Student, 'preferred_day'> & Partial<Pick<Student, 'at
  *  anchor yet is treated as expected every week, so nobody silently drops
  *  off the register while the anchor is being set. */
 export function isExpectedOnDate(student: ScheduleFields, date: string): boolean {
-  if (!student.preferred_day || student.preferred_day !== dayName(date)) return false
+  if (!slotOnDate(student, date)) return false
   if (isClosedDay(date)) return false // bank holidays and Christmas: centres are shut
   if (student.attendance_pattern !== 'fortnightly' || !student.fortnight_anchor) return true
   return Math.abs(weeksApart(student.fortnight_anchor, date)) % 2 === 0

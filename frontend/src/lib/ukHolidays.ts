@@ -81,6 +81,12 @@ function holidaysFor(year: number): Map<string, string> {
 /** Name of the closure on this YYYY-MM-DD date, or null if the centres are open. */
 export function closureName(date: string): string | null {
   const year = Number(date.slice(0, 4))
+  // The centres shut on the actual days, not just the substitute weekdays, so
+  // Christmas Day, Boxing Day and New Year's Day close even on a weekend.
+  const monthDay = date.slice(5)
+  if (monthDay === '12-25') return 'Christmas Day'
+  if (monthDay === '12-26') return 'Boxing Day'
+  if (monthDay === '01-01') return "New Year's Day"
   return EXTRA_CLOSED_DATES[date] ?? holidaysFor(year).get(date) ?? holidaysFor(year + 1).get(date) ?? null
 }
 

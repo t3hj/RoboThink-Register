@@ -30,7 +30,7 @@ export default function InstructorAnalytics() {
     setLoading(true)
     setError(null)
     const [sRes, pRes, taRes, waRes, trendRes] = await Promise.all([
-      supabase.from('students').select('*').eq('active', true).order('full_name'),
+      supabase.from('students').select('*, student_schedules(day_of_week,start_time,active)').eq('active', true).order('full_name'),
       supabase.from('student_progress').select('*'),
       supabase.from('attendance').select('*').eq('date', today),
       supabase.from('attendance').select('*').gte('date', weekStart).lte('date', today),

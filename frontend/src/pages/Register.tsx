@@ -16,7 +16,7 @@ import { todayISO, dayName, formatDisplayDate, addDays, formatTime12h, formatSho
 import { levelLabel } from '../lib/curriculum'
 import { loadCurriculum } from '../lib/curriculumData'
 import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
-import { isExpectedOnDate } from '../lib/attendanceStats'
+import { isExpectedOnDate, slotOnDate } from '../lib/attendanceStats'
 import { closureName } from '../lib/ukHolidays'
 import { registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
 import { requiresAssessmentResult } from '../lib/assessment'
@@ -88,12 +88,16 @@ export default function Register() {
 
     // Active students only — inactive students never appear in the normal
     // Register or its completeness counts.
+    // A student can have several weekly sessions, so find everyone with a
+    // session today from their schedule rows, plus anyone whose single
+    // preferred day is today (students without schedule rows).
+    const { data: slotRows } = await supabase.from('student_schedules').select('student_id').eq('day_of_week', dow).eq('active', true)
+    const slotIds = [...new Set((slotRows ?? []).map((r) => r.student_id as string))]
     let scheduledQuery = supabase
       .from('students')
-      .select('*, levels(name), subscriptions(name)')
-      .eq('preferred_day', dow)
+      .select('*, levels(name), subscriptions(name), student_schedules(day_of_week,start_time,active)')
       .eq('active', true)
-      .order('preferred_time')
+    scheduledQuery = slotIds.length > 0 ? scheduledQuery.or(`preferred_day.eq.${dow},id.in.(${slotIds.join(',')})`) : scheduledQuery.eq('preferred_day', dow)
     if (selectedCentreId) scheduledQuery = scheduledQuery.eq('centre_id', selectedCentreId)
     const { data: scheduled, error: schedErr } = await scheduledQuery
 
@@ -115,7 +119,10 @@ export default function Register() {
     const attendance = (att ?? []) as Attendance[]
     // Fortnightly students only appear in their "on" weeks. Off-week students
     // who nevertheless have an attendance row today are picked up as extras.
-    const scheduledAll = (scheduled ?? []) as Student[]
+    // Show each student at the time of TODAY's session, not their first one.
+    const scheduledAll = ((scheduled ?? []) as Student[])
+      .map((s) => ({ ...s, preferred_day: dow, preferred_time: slotOnDate(s, forDate)?.time ?? s.preferred_time }))
+      .sort((a, b) => (a.preferred_time ?? '').localeCompare(b.preferred_time ?? '') || a.full_name.localeCompare(b.full_name))
     const expectedToday = scheduledAll.filter((s) => isExpectedOnDate(s, forDate))
     const attendedIds = new Set(attendance.map((a) => a.student_id))
     setOffWeek(scheduledAll.filter((s) => !isExpectedOnDate(s, forDate) && !attendedIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name })))

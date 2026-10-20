@@ -269,3 +269,75 @@ describe('England & Wales closures', () => {
     expect(isExpectedOnDate(s, '2026-12-21')).toBe(true)
   })
 })
+
+import { weeklySlots, slotOnDate, describeSlots } from '../src/lib/attendanceStats'
+
+describe('students with several weekly sessions', () => {
+  const nia = {
+    preferred_day: 'Sunday',
+    preferred_time: '09:00',
+    attendance_pattern: 'fortnightly' as const,
+    fortnight_anchor: '2026-10-17',
+    student_schedules: [
+      { day_of_week: 'Saturday', start_time: '10:00:00', active: true },
+      { day_of_week: 'Sunday', start_time: '09:00:00', active: true },
+    ],
+  }
+  const rachel = {
+    preferred_day: 'Friday',
+    preferred_time: '17:00',
+    attendance_pattern: 'fortnightly' as const,
+    fortnight_anchor: '2026-10-09',
+    student_schedules: [
+      { day_of_week: 'Friday', start_time: '17:00:00', active: true },
+      { day_of_week: 'Saturday', start_time: '09:00:00', active: true },
+    ],
+  }
+
+  it('falls back to the single preferred day when there are no schedule rows', () => {
+    expect(weeklySlots({ preferred_day: 'Tuesday', preferred_time: '16:00' })).toEqual([{ day: 'Tuesday', time: '16:00' }])
+    expect(weeklySlots({ preferred_day: null })).toEqual([])
+  })
+
+  it('ignores inactive schedule rows', () => {
+    const s = { preferred_day: 'Monday', preferred_time: '16:00', student_schedules: [{ day_of_week: 'Monday', start_time: '10:00', active: false }] }
+    expect(weeklySlots(s)).toEqual([{ day: 'Monday', time: '16:00' }])
+  })
+
+  it('finds the right session time for a date', () => {
+    expect(slotOnDate(nia, '2026-10-17')?.time).toBe('10:00:00')
+    expect(slotOnDate(nia, '2026-10-18')?.time).toBe('09:00:00')
+    expect(slotOnDate(nia, '2026-10-19')).toBeNull()
+  })
+
+  it('Nia is expected on both days of her on week and neither in her off week', () => {
+    expect(isExpectedOnDate(nia, '2026-10-17')).toBe(true) // Sat
+    expect(isExpectedOnDate(nia, '2026-10-18')).toBe(true) // Sun
+    expect(isExpectedOnDate(nia, '2026-10-24')).toBe(false)
+    expect(isExpectedOnDate(nia, '2026-10-25')).toBe(false)
+    expect(isExpectedOnDate(nia, '2026-10-31')).toBe(true)
+    expect(isExpectedOnDate(nia, '2026-11-01')).toBe(true)
+  })
+
+  it('Rachel is on this week (23/24 Oct) and off next (30/31 Oct)', () => {
+    expect(isExpectedOnDate(rachel, '2026-10-09')).toBe(true)
+    expect(isExpectedOnDate(rachel, '2026-10-10')).toBe(true)
+    expect(isExpectedOnDate(rachel, '2026-10-16')).toBe(false)
+    expect(isExpectedOnDate(rachel, '2026-10-23')).toBe(true)
+    expect(isExpectedOnDate(rachel, '2026-10-24')).toBe(true)
+    expect(isExpectedOnDate(rachel, '2026-10-30')).toBe(false)
+  })
+
+  it('describes sessions in week order', () => {
+    expect(describeSlots(rachel, (t) => t.slice(0, 5))).toBe('Fri 17:00 · Sat 09:00')
+  })
+})
+
+describe('Christmas and New Year closures on weekends', () => {
+  it('closes the real days, not only the substitutes', () => {
+    expect(closureName('2026-12-26')).toBe('Boxing Day') // a Saturday
+    expect(closureName('2027-12-25')).toBe('Christmas Day') // a Saturday
+    expect(closureName('2028-01-01')).toBe("New Year's Day") // a Saturday
+    expect(isClosedDay('2026-12-27')).toBe(false)
+  })
+})

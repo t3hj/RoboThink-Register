@@ -14,7 +14,7 @@ import { formatShortDate, formatDisplayDate, formatTime12h } from '../lib/dates'
 import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
-import { attendancePercentage, classifyAttendance, groupAttendanceByMonth } from '../lib/attendanceStats'
+import { attendancePercentage, classifyAttendance, describeSlots, groupAttendanceByMonth } from '../lib/attendanceStats'
 import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import type {
   AttendedSession,
@@ -93,7 +93,7 @@ export default function StudentProfile() {
     setLoading(true)
     setError(null)
     const [sRes, pRes, planRes, lRes, rRes, aRes, pointRes, planHistoryRes, attRes, fRes, projectRes, ovRes, latestSessionRes, sessionsRes, curriculum] = await Promise.all([
-      supabase.from('students').select('*, levels(name), subscriptions(name), centres(name)').eq('id', id).maybeSingle(),
+      supabase.from('students').select('*, levels(name), subscriptions(name), centres(name), student_schedules(day_of_week,start_time,active)').eq('id', id).maybeSingle(),
       supabase.from('student_progress').select('*').eq('student_id', id).maybeSingle(),
       supabase
         .from('remediation_plans')
@@ -362,17 +362,17 @@ export default function StudentProfile() {
         title={student.full_name}
         subtitle={[
           progress ? levelLabel({ name: progress.level_name ?? '' }) : student.levels?.name ?? '—',
-          student.preferred_day ? `${student.preferred_day} ${student.preferred_time ?? ''}`.trim() : null,
+          describeSlots(student, formatTime12h) || null,
           student.parent_name,
         ]
           .filter(Boolean)
           .join(' · ')}
         accent="blue"
         actions={
-          role === 'admin' ? (
+          role === 'admin' || role === 'management' ? (
             <>
               <button className="btn-ghost" onClick={() => setEditing(true)}>Edit details</button>
-              <button className="btn-primary" onClick={openTransfer}>Transfer centre</button>
+              {role === 'admin' && <button className="btn-primary" onClick={openTransfer}>Transfer centre</button>}
             </>
           ) : undefined
         }
@@ -642,7 +642,7 @@ export default function StudentProfile() {
           ) : (
             <>
               <p className="text-sm text-slate-500 mb-3">
-                Scheduled: {student.preferred_day ?? '—'} {student.preferred_time ? formatTime12h(student.preferred_time) : ''}{student.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}
+                Scheduled: {describeSlots(student, formatTime12h) || '—'}{student.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}
                 {attendancePercentage(attendance) != null && <> · {attendancePercentage(attendance)}% attendance</>}
               </p>
               {groupAttendanceByMonth(classifyAttendance(attendance)).map(({ month, rows }) => (
