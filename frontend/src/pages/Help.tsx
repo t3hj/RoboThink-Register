@@ -15,16 +15,28 @@ interface Guide {
 const GUIDES: Guide[] = [
   {
     id: 'add-student',
-    title: 'Add a new student',
+    title: 'Add a new student (admins and managers)',
     summary: 'Do this once when a family joins. You can change any of it later.',
     steps: [
       'Open Students and press “+ Add student”.',
       'Enter the full name, the date they joined, their subscription and the centre.',
-      'Choose their normal day and session time. This is what puts them on that day’s register.',
+      'Under Weekly sessions, choose the day and time of each session. Use “+ Add another session” if they come more than once a week.',
       'If they come every other week, set “How often” to “Every other week” and pick any date in a week they attend.',
       'Choose their starting level and lesson, then press “Add student”.',
     ],
     tip: 'Pick the starting lesson carefully — the register recommends the next lesson from it.',
+  },
+  {
+    id: 'request-student',
+    title: 'Ask for a student to be added (instructors)',
+    summary: 'Instructors send a request. An admin or manager approves it before the student exists.',
+    steps: [
+      'Open Student requests and choose the centre.',
+      'Enter each student’s name, subscription, weekly sessions and how often they come. Use “+ Add another student” to request several at once.',
+      'Press “Send requests for approval”.',
+      'Check the list at the bottom of the page for pending, approved or declined, with the reason if declined.',
+    ],
+    tip: 'Admins and managers: open Student requests and press “Review & add”. The Add student form opens filled in, and the request is approved when you save it.',
   },
   {
     id: 'take-register',
@@ -44,12 +56,12 @@ const GUIDES: Guide[] = [
     title: 'Students who come every other week',
     summary: 'They are only expected in their “on” weeks, so their off weeks never count as a miss.',
     steps: [
-      'In Students, edit the student and set “How often” to “Every other week”.',
-      'Pick any date inside one of their “on” weeks. Every second week from then on is an “on” week.',
+      'An admin or manager edits the student and sets “How often” to “Every other week”.',
+      'They pick any date inside one of the student’s “on” weeks. Every second week from then on is an “on” week.',
+      'Under Weekly sessions they add both of the student’s sessions. In an on week each one is on the register and counts as a normal session.',
       'In their off weeks they are tucked into a note at the top of the register instead of the list.',
-      'If they do two sessions in their on week, mark the first on their normal day, then use “+ Add to register” on the other day and choose “Catch-up”.',
+      'If they turn up in an off week anyway, use “+ Add to register” and choose “Catch-up”.',
     ],
-    tip: 'If the fortnightly option is missing, ask an admin to apply the fortnightly attendance database update (see the admin guide).',
   },
   {
     id: 'makeups',

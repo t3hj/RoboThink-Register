@@ -13,7 +13,8 @@
 | Missed session | **Absent** on the day |
 | Making a session up | **+ Add to register**, **Catch-up**, Attended |
 | Extra one-off session | **+ Add to register**, **Special session** |
-| Every-other-week student | Edit student, **How often**, **Every other week** |
+| Every-other-week student | Admin/manager: edit student, **How often**, **Every other week**, add both sessions |
+| Need a new student added | Instructors: **Student requests**. Admins/managers: **Students**, **+ Add student** |
 | Didn't finish the lesson | Outcome **Not finished** |
 | Assessment | Record **PASS** or **FAIL** when completed |
 | Forgot a register | Dashboard, **Registers still to fill in** |

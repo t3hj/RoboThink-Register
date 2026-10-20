@@ -11,9 +11,9 @@
 
 | Role | Access |
 | --- | --- |
-| Instructor | Register, students, curriculum, progression, feedback and reports |
-| Management | Read-only management dashboard |
-| Admin | Everything above plus staff, corrections and wider centre access |
+| Instructor | Register, curriculum, progression, feedback, reports; can *request* students |
+| Management | Management dashboard; can add and edit students and approve requests at their centres |
+| Admin | Everything above plus staff, corrections, centre transfers and all centres |
 
 ## Centres
 
@@ -28,10 +28,10 @@ run on the live project; `migrations_pending_*` have not. The live Supabase sche
 is the source of truth. Review each file before applying it in the Supabase SQL
 editor.
 
-**Fortnightly attendance:** apply
-`db/migrations_pending_2026-10-18/001_fortnightly_attendance.sql`. Until then the
-app works as before and the *Every other week* option can't be saved. After
-applying it, set each fortnightly student's pattern by editing them.
+Migrations that add several sessions per student, manager access to students
+and student requests are in `db/migrations_pending_2026-10-20/` and
+`db/migrations_pending_2026-10-18/`. Check the folder names against what has
+already been run before applying anything.
 
 After applying any migration, check Row Level Security still blocks anonymous
 access and that instructors can only see their own centres.
