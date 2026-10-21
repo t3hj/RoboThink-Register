@@ -18,6 +18,8 @@
 | Didn't finish the lesson | Outcome **Not finished** |
 | Assessment | Record **PASS** or **FAIL** when completed |
 | Forgot a register | Dashboard, **Registers still to fill in** |
+| Student shows “No lesson set” | Open them, **Choose starting lesson** |
+| Bring in a venue from Pebble | Admin/manager: **Import from Pebble** |
 | Student left | Edit, set **Inactive** |
 
 **Remember**

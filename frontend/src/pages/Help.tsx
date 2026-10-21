@@ -27,6 +27,28 @@ const GUIDES: Guide[] = [
     tip: 'Pick the starting lesson carefully — the register recommends the next lesson from it.',
   },
   {
+    id: 'import-pebble',
+    title: 'Import a venue from Pebble (admins and managers)',
+    summary: 'Add many students at once from a Pebble register download.',
+    steps: [
+      'Download the activity register from Pebble as a spreadsheet (.xlsx).',
+      'Open Import from Pebble, choose the venue, then choose the file.',
+      'Check the day and start time, match the ticket to a subscription, and read the preview.',
+      'Press Import. Existing students are matched by name, so nobody is duplicated.',
+    ],
+    tip: 'Only name, date of birth, mobile, email and ticket are used. Medical, SEN and everything else in the file is ignored.',
+  },
+  {
+    id: 'starting-lesson',
+    title: 'Set a student’s starting lesson',
+    summary: 'Students imported from Pebble have no lesson until someone chooses it.',
+    steps: [
+      'Look for “No lesson set · choose” on the register, or Dashboard, then Students needing a starting lesson.',
+      'Open the student and choose their level and lesson under “Choose starting lesson”.',
+      'Press Save. This can only be done once; after that their lesson moves on as you record sessions.',
+    ],
+  },
+  {
     id: 'request-student',
     title: 'Ask for a student to be added (instructors)',
     summary: 'Instructors send a request. An admin or manager approves it before the student exists.',

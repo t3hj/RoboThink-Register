@@ -37,6 +37,7 @@ portal.
 - Bank-holiday and Christmas closures, so nobody is expected or flagged on those days.
 - Student requests: instructors ask for students to be added and admins or managers approve.
 - Managers can add and edit students at their centres.
+- Import a venue's students from a Pebble register spreadsheet (read in the browser; only name, DOB, mobile, email and ticket are used), then set each student's starting lesson.
 - Make-up tracking: an absence covered by a catch-up session is not counted against the student.
 - A dashboard list of expected sessions that were never marked.
 - In-app **Help & guides** page and written instructor guides in `docs/`.

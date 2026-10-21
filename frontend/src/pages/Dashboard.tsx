@@ -21,6 +21,7 @@ interface DashboardData {
   feedbackOutstanding: number
   unmarked: UnmarkedSession[]
   pendingRequests: number
+  needsLesson: number
 }
 
 export default function Dashboard() {
@@ -81,6 +82,7 @@ export default function Dashboard() {
       needsAction: (actionRes.data ?? []) as StudentRequiringAction[],
       feedbackOutstanding: feedbackRes.count ?? 0,
       pendingRequests: requestsRes.count ?? 0,
+      needsLesson: students.filter((s) => s.active && !s.current_lesson_id).length,
       unmarked: findUnmarkedSessions(students, (recentAttRes.data ?? []) as Attendance[], lookbackStart, yesterday),
     })
     setLoading(false)
@@ -187,6 +189,15 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+
+      {data.needsLesson > 0 && (
+        <Link to="/students?filter=needs-lesson" className="card card-hover p-4 mt-6 flex items-center justify-between gap-3 border-amber-200">
+          <span className="text-sm">
+            <span className="font-semibold">{data.needsLesson} student{data.needsLesson === 1 ? '' : 's'}</span> still need a starting lesson
+          </span>
+          <span className="btn-ghost text-xs">Choose</span>
+        </Link>
+      )}
 
       {role === 'admin' && data.pendingRequests > 0 && (
         <Link to="/requests" className="card card-hover p-4 mt-6 flex items-center justify-between gap-3 border-amber-200">

@@ -1,6 +1,6 @@
 import { useCentres } from '../lib/centres'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, SubscriptionBadge } from '../components/ui'
@@ -23,6 +23,8 @@ export default function Students() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [searchParams] = useSearchParams()
+  const [needsLessonOnly, setNeedsLessonOnly] = useState(searchParams.get('filter') === 'needs-lesson')
   const [dayFilter, setDayFilter] = useState('all')
   const [programmeFilter, setProgrammeFilter] = useState('all')
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('active')
@@ -62,6 +64,7 @@ export default function Students() {
     let out = rows
     const q = query.trim().toLowerCase()
     if (q) out = out.filter((r) => r.full_name.toLowerCase().includes(q) || (r.parent_name ?? '').toLowerCase().includes(q))
+    if (needsLessonOnly) out = out.filter((r) => !r.current_lesson_id)
     if (dayFilter !== 'all') out = out.filter((r) => weeklySlots(r).some((s) => s.day === dayFilter))
     if (programmeFilter !== 'all')
       out = out.filter((r) => parseLevelName(r.progress?.level_name ?? r.levels?.name ?? '').programme === programmeFilter)
@@ -83,7 +86,8 @@ export default function Students() {
       }
     })
     return sorted
-  }, [rows, query, dayFilter, programmeFilter, activeFilter, sort])
+  }, [rows, query, needsLessonOnly, dayFilter, programmeFilter, activeFilter, sort])
+  const needsLessonCount = useMemo(() => rows.filter((r) => r.active && !r.current_lesson_id).length, [rows])
 
   if (loading) return <LoadingPanel label="Loading students…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
@@ -115,6 +119,11 @@ export default function Students() {
           onChange={(e) => setQuery(e.target.value)}
           className="flex-1 min-w-[12rem] p-2 border border-slate-200 rounded-lg text-sm"
         />
+        {(needsLessonCount > 0 || needsLessonOnly) && (
+          <button type="button" className={needsLessonOnly ? 'btn-primary' : 'btn-ghost'} aria-pressed={needsLessonOnly} onClick={() => setNeedsLessonOnly((v) => !v)}>
+            Needs starting lesson ({needsLessonCount})
+          </button>
+        )}
         <select value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="p-2 border border-slate-200 rounded-lg text-sm" aria-label="Filter by day">
           <option value="all">All days</option>
           {days.map((d) => (
@@ -161,6 +170,7 @@ export default function Students() {
                   {s.progress?.current_lesson_number != null ? ` · Lesson ${s.progress.current_lesson_number}` : ''}
                   {s.progress?.total_lessons ? ` of ${s.progress.total_lessons}` : ''}
                 </div>
+                {!s.current_lesson_id && <span className="badge badge-assess self-start">Needs starting lesson</span>}
                 {pct != null && (
                   <div className="progress-track" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${s.full_name} curriculum progress`}>
                     <div className="progress-fill" style={{ width: `${pct}%` }} />

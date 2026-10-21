@@ -7,6 +7,7 @@ import ChangeLessonControl from '../components/ChangeLessonControl'
 import AssessmentPanel from '../components/AssessmentPanel'
 import FeedbackControl from '../components/FeedbackControl'
 import StudentForm from '../components/StudentForm'
+import StartingLessonCard from '../components/StartingLessonCard'
 import StudentProjectsPanel from '../components/StudentProjectsPanel'
 import { loadCurriculum } from '../lib/curriculumData'
 import { levelLabel } from '../lib/curriculum'
@@ -379,6 +380,10 @@ export default function StudentProfile() {
       />
       <Link to="/students" className="text-sm text-slate-500 hover:underline">← Back to students</Link>
 
+      {!student.current_lesson_id && (
+        <StartingLessonCard studentId={student.id} studentName={student.full_name} onDone={() => void load()} />
+      )}
+
       {/* Current lesson hero — the single most important fact on this page */}
       <section className="card card-accent-top p-5 my-5" style={{ ['--accent-color' as string]: 'var(--rt-blue)' }}>
         <div className="grid sm:grid-cols-2 gap-5">
@@ -471,9 +476,9 @@ export default function StudentProfile() {
           <h3 className="font-semibold mb-3">Details</h3>
           <dl className="text-sm space-y-2">
             <div><dt className="text-slate-500">Centre</dt><dd>{student.centres?.name ?? 'Centre unavailable'}</dd></div>
-            <div><dt className="text-slate-500">Date of birth</dt><dd>{student.date_of_birth ? formatDisplayDate(student.date_of_birth) : '—'}</dd></div>
+            {(role === 'admin' || role === 'management') && <div><dt className="text-slate-500">Date of birth</dt><dd>{student.date_of_birth ? formatDisplayDate(student.date_of_birth) : '—'}</dd></div>}
             <div><dt className="text-slate-500">Parent</dt><dd>{student.parent_name ?? '—'}</dd></div>
-            <div><dt className="text-slate-500">Contact</dt><dd>{student.parent_contact ?? '—'}</dd></div>
+            {(role === 'admin' || role === 'management') && <div><dt className="text-slate-500">Contact</dt><dd>{student.parent_contact ?? '—'}</dd></div>}
             <div><dt className="text-slate-500">Subscription</dt><dd>{student.subscriptions?.name ?? '—'}</dd></div>
             <div><dt className="text-slate-500">Joined</dt><dd>{student.date_joined ? formatDisplayDate(student.date_joined) : '—'}</dd></div>
             {student.notes && (

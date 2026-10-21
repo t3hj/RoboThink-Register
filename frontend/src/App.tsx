@@ -18,6 +18,7 @@ import ManagementDashboard from './pages/ManagementDashboard'
 import StaffManagement from './pages/StaffManagement'
 import Help from './pages/Help'
 import Requests from './pages/Requests'
+import ImportStudents from './pages/ImportStudents'
 import NotFound from './pages/NotFound'
 import type { Role } from './types'
 
@@ -30,6 +31,7 @@ const NAV: { to: string; label: string; end?: boolean; roles: Role[] }[] = [
   { to: '/register', label: "Today's Register", roles: ['admin', 'instructor'] },
   { to: '/students', label: 'Students', roles: ['admin', 'instructor', 'management'] },
   { to: '/requests', label: 'Student requests', roles: ['admin', 'instructor', 'management'] },
+  { to: '/import', label: 'Import from Pebble', roles: ['admin', 'management'] },
   { to: '/curriculum', label: 'Curriculum', roles: ['admin', 'instructor'] },
   { to: '/reports', label: 'Reports', roles: ['admin', 'instructor'] },
   { to: '/analytics', label: 'Analytics', roles: ['admin', 'instructor'] },
@@ -125,6 +127,7 @@ function Layout() {
             <Route path="/students" element={<RoleRoute roles={['admin', 'instructor', 'management']}><Students /></RoleRoute>} />
             <Route path="/students/:id" element={<RoleRoute roles={['admin', 'instructor', 'management']}><StudentProfile /></RoleRoute>} />
             <Route path="/requests" element={<RoleRoute roles={['admin', 'instructor', 'management']}><Requests /></RoleRoute>} />
+            <Route path="/import" element={<RoleRoute roles={['admin', 'management']}><ImportStudents /></RoleRoute>} />
             <Route path="/curriculum" element={<RoleRoute roles={['admin', 'instructor']}><Curriculum /></RoleRoute>} />
             <Route path="/reports" element={<RoleRoute roles={['admin', 'instructor']}><Reports /></RoleRoute>} />
             <Route path="/analytics" element={<RoleRoute roles={['admin', 'instructor']}><InstructorAnalytics /></RoleRoute>} />

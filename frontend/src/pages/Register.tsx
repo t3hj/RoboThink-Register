@@ -558,6 +558,9 @@ export default function Register() {
                               {s.attendance?.session_type === 'catch_up' && <span className="badge">Catch-up</span>}
                               {s.attendance?.session_type === 'special' && <span className="badge">Special session</span>}
                               {!s.attendance && !isExpectedOnDate(s, date) && <span className="badge">Catch-up</span>}
+                              {!s.current_lesson_id && (
+                                <Link to={`/students/${s.id}`} className="badge badge-assess hover:underline">No lesson set · choose</Link>
+                              )}
                             </div>
                             <div className="text-xs text-slate-500 flex flex-wrap gap-x-2">
                               <span>{s.progress ? levelLabel({ name: s.progress.level_name ?? '' }) : s.levels?.name ?? '—'}</span>

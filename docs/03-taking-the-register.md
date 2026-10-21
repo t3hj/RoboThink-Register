@@ -11,6 +11,13 @@
 To look at another day, use **Prev**, **Next** or the date box. Past days can be
 opened and corrected.
 
+## Students with no lesson yet
+
+A student imported from Pebble shows **No lesson set · choose** on the register.
+Open them, pick their level and lesson under **Choose starting lesson**, and
+save. You can only do this once. After that their lesson moves on as you record
+sessions.
+
 ## Marking attendance
 
 - **Attended**: the student has arrived.

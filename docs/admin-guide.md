@@ -33,6 +33,9 @@ and student requests are in `db/migrations_pending_2026-10-20/` and
 `db/migrations_pending_2026-10-18/`. Check the folder names against what has
 already been run before applying anything.
 
+`db/migrations_pending_2026-10-20/002_set_starting_lesson.sql` lets instructors set
+the starting lesson for a student who has none (used after a Pebble import).
+
 After applying any migration, check Row Level Security still blocks anonymous
 access and that instructors can only see their own centres.
 
