@@ -17,7 +17,7 @@ Edits update the linked records together, so progress and history stay in sync.
 ## FAQ
 
 **A student isn't on the register.**
-Check: is their **Normal day** correct? Are they **Active**? Is the right
+Check: is the day among their **Weekly sessions**? Are they **Active**? Is the right
 **Working centre** selected? Are they fortnightly and in an off week?
 
 **Why doesn't a student's attendance % change?**

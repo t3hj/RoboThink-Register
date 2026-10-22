@@ -20,10 +20,12 @@ interface DashboardData {
   needsAction: StudentRequiringAction[]
   feedbackOutstanding: number
   unmarked: UnmarkedSession[]
+  pendingRequests: number
+  needsLesson: number
 }
 
 export default function Dashboard() {
-  const { profile } = useAuth()
+  const { profile, role } = useAuth()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -35,8 +37,8 @@ export default function Dashboard() {
     const lookbackStart = addDays(today, -14)
     const yesterday = addDays(today, -1)
 
-    const [studentsRes, attendanceRes, lessonsRes, progressRes, actionRes, feedbackRes, recentAttRes] = await Promise.all([
-      supabase.from('students').select('*').order('full_name'),
+    const [studentsRes, attendanceRes, lessonsRes, progressRes, actionRes, feedbackRes, recentAttRes, requestsRes] = await Promise.all([
+      supabase.from('students').select('*, student_schedules(day_of_week,start_time,active)').order('full_name'),
       supabase.from('attendance').select('*').eq('date', today),
       supabase
         .from('lesson_records')
@@ -48,6 +50,7 @@ export default function Dashboard() {
       supabase.from('students_requiring_assessment_action').select('*'),
       supabase.from('feedback_sheets').select('id', { count: 'exact', head: true }).neq('status', 'given'),
       supabase.from('attendance').select('student_id,date').gte('date', lookbackStart).lte('date', yesterday),
+      supabase.from('student_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     ])
 
     if (studentsRes.error || recentAttRes.error || attendanceRes.error || lessonsRes.error || progressRes.error || actionRes.error || feedbackRes.error) {
@@ -78,6 +81,8 @@ export default function Dashboard() {
       totals: { total: students.length, active: students.filter((s) => s.active).length },
       needsAction: (actionRes.data ?? []) as StudentRequiringAction[],
       feedbackOutstanding: feedbackRes.count ?? 0,
+      pendingRequests: requestsRes.count ?? 0,
+      needsLesson: students.filter((s) => s.active && !s.current_lesson_id).length,
       unmarked: findUnmarkedSessions(students, (recentAttRes.data ?? []) as Attendance[], lookbackStart, yesterday),
     })
     setLoading(false)
@@ -184,6 +189,24 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+
+      {data.needsLesson > 0 && (
+        <Link to="/students?filter=needs-lesson" className="card card-hover p-4 mt-6 flex items-center justify-between gap-3 border-amber-200">
+          <span className="text-sm">
+            <span className="font-semibold">{data.needsLesson} student{data.needsLesson === 1 ? '' : 's'}</span> still need a starting lesson
+          </span>
+          <span className="btn-ghost text-xs">Choose</span>
+        </Link>
+      )}
+
+      {role === 'admin' && data.pendingRequests > 0 && (
+        <Link to="/requests" className="card card-hover p-4 mt-6 flex items-center justify-between gap-3 border-amber-200">
+          <span className="text-sm">
+            <span className="font-semibold">{data.pendingRequests} student request{data.pendingRequests === 1 ? '' : 's'}</span> waiting for review
+          </span>
+          <span className="btn-ghost text-xs">Review</span>
+        </Link>
+      )}
 
       <section className="card p-4 mt-6" aria-labelledby="unmarked-heading">
         <div className="flex items-center justify-between mb-1">

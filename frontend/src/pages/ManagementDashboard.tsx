@@ -64,7 +64,7 @@ export default function ManagementDashboard() {
     setLoading(true)
     setError(null)
     const [sRes, taRes, allRes, trendRes, ftRes] = await Promise.all([
-      supabase.from('students').select('*'),
+      supabase.from('students').select('*, student_schedules(day_of_week,start_time,active)'),
       supabase.from('attendance').select('*').eq('date', today),
       // Used for "long absence" detection — most recent attendance per student.
       supabase.from('attendance').select('*').order('date', { ascending: false }).limit(2000),

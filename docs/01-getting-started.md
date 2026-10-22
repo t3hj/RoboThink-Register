@@ -16,14 +16,15 @@ to a staff profile yet. Ask an admin (see the [admin guide](admin-guide.md)).
 | --- | --- |
 | Dashboard | Today at a glance, registers still to fill in, follow-ups |
 | Today's Register | Marking attendance and recording lessons |
-| Students | Finding, adding and editing students; each student's profile |
+| Students | Finding students; each student's profile. Admins and managers add and edit |
+| Student requests | Instructors ask for new students; admins and managers approve |
 | Curriculum | Browsing levels and lessons |
 | Reports | Lessons and progress over a date range |
 | Analytics | Attendance trends and students who may need a follow-up |
 | Help & guides | Short how-tos inside the app |
 
-Admins also see **Staff**; management staff see the **Management dashboard**
-(read-only).
+Admins also see **Staff** and the **Management dashboard**. Managers see the
+**Management dashboard** and can add students and approve requests.
 
 ## Your centre
 

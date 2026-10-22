@@ -1,11 +1,13 @@
 import { useCentres } from '../lib/centres'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, SubscriptionBadge } from '../components/ui'
 import StudentForm from '../components/StudentForm'
 import { levelLabel, parseLevelName } from '../lib/curriculum'
+import { describeSlots, weeklySlots } from '../lib/attendanceStats'
+import { formatTime12h } from '../lib/dates'
 import type { Student, StudentProgress } from '../types'
 
 type SortKey = 'name' | 'day' | 'level' | 'progress'
@@ -21,6 +23,8 @@ export default function Students() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [searchParams] = useSearchParams()
+  const [needsLessonOnly, setNeedsLessonOnly] = useState(searchParams.get('filter') === 'needs-lesson')
   const [dayFilter, setDayFilter] = useState('all')
   const [programmeFilter, setProgrammeFilter] = useState('all')
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('active')
@@ -30,7 +34,7 @@ export default function Students() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    let studentsQuery = supabase.from('students').select('*, levels(name), subscriptions(name), centres(name)').order('full_name')
+    let studentsQuery = supabase.from('students').select('*, levels(name), subscriptions(name), centres(name), student_schedules(day_of_week,start_time,active)').order('full_name')
     if (selectedCentreId) studentsQuery = studentsQuery.eq('centre_id', selectedCentreId)
     const [studentsRes, progressRes] = await Promise.all([
       studentsQuery,
@@ -50,7 +54,7 @@ export default function Students() {
     void load()
   }, [load])
 
-  const days = useMemo(() => [...new Set(rows.map((r) => r.preferred_day).filter(Boolean))] as string[], [rows])
+  const days = useMemo(() => [...new Set(rows.flatMap((r) => weeklySlots(r).map((s) => s.day)))], [rows])
   const programmes = useMemo(() => {
     const names = rows.map((r) => parseLevelName(r.progress?.level_name ?? r.levels?.name ?? '').programme).filter(Boolean)
     return [...new Set(names)]
@@ -60,7 +64,8 @@ export default function Students() {
     let out = rows
     const q = query.trim().toLowerCase()
     if (q) out = out.filter((r) => r.full_name.toLowerCase().includes(q) || (r.parent_name ?? '').toLowerCase().includes(q))
-    if (dayFilter !== 'all') out = out.filter((r) => r.preferred_day === dayFilter)
+    if (needsLessonOnly) out = out.filter((r) => !r.current_lesson_id)
+    if (dayFilter !== 'all') out = out.filter((r) => weeklySlots(r).some((s) => s.day === dayFilter))
     if (programmeFilter !== 'all')
       out = out.filter((r) => parseLevelName(r.progress?.level_name ?? r.levels?.name ?? '').programme === programmeFilter)
     if (activeFilter !== 'all') out = out.filter((r) => (activeFilter === 'active' ? r.active : !r.active))
@@ -81,7 +86,8 @@ export default function Students() {
       }
     })
     return sorted
-  }, [rows, query, dayFilter, programmeFilter, activeFilter, sort])
+  }, [rows, query, needsLessonOnly, dayFilter, programmeFilter, activeFilter, sort])
+  const needsLessonCount = useMemo(() => rows.filter((r) => r.active && !r.current_lesson_id).length, [rows])
 
   if (loading) return <LoadingPanel label="Loading students…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
@@ -93,10 +99,14 @@ export default function Students() {
         subtitle={`${visible.length} of ${rows.length} shown · ${isAllCentres ? 'All centres' : selectedCentre?.name ?? 'Centre unavailable'}`}
         accent="green"
         actions={
-          role === 'admin' ? (
+          role === 'admin' || role === 'management' ? (
             <button className="btn-primary" onClick={() => setShowForm(true)}>
               + Add student
             </button>
+          ) : role === 'instructor' ? (
+            <Link to="/requests" className="btn-primary">
+              Request new students
+            </Link>
           ) : undefined
         }
       />
@@ -109,6 +119,11 @@ export default function Students() {
           onChange={(e) => setQuery(e.target.value)}
           className="flex-1 min-w-[12rem] p-2 border border-slate-200 rounded-lg text-sm"
         />
+        {(needsLessonCount > 0 || needsLessonOnly) && (
+          <button type="button" className={needsLessonOnly ? 'btn-primary' : 'btn-ghost'} aria-pressed={needsLessonOnly} onClick={() => setNeedsLessonOnly((v) => !v)}>
+            Needs starting lesson ({needsLessonCount})
+          </button>
+        )}
         <select value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="p-2 border border-slate-200 rounded-lg text-sm" aria-label="Filter by day">
           <option value="all">All days</option>
           {days.map((d) => (
@@ -155,12 +170,13 @@ export default function Students() {
                   {s.progress?.current_lesson_number != null ? ` · Lesson ${s.progress.current_lesson_number}` : ''}
                   {s.progress?.total_lessons ? ` of ${s.progress.total_lessons}` : ''}
                 </div>
+                {!s.current_lesson_id && <span className="badge badge-assess self-start">Needs starting lesson</span>}
                 {pct != null && (
                   <div className="progress-track" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${s.full_name} curriculum progress`}>
                     <div className="progress-fill" style={{ width: `${pct}%` }} />
                   </div>
                 )}
-                <div className="text-sm text-slate-500">{s.preferred_day ?? '—'} · {s.preferred_time ?? '—'}</div>
+                <div className="text-sm text-slate-500">{describeSlots(s, formatTime12h) || '—'}{s.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}</div>
                 <div className="mt-auto flex items-center justify-between">
                   <SubscriptionBadge subscriptionId={s.subscription_id} />
                   <span className="text-xs text-slate-400">{s.parent_name}</span>

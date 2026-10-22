@@ -83,6 +83,9 @@ export interface Student {
   attendance_pattern?: 'weekly' | 'fortnightly' | null
   /** Any date inside one of a fortnightly student's "on" weeks. */
   fortnight_anchor?: string | null
+  /** The student's weekly sessions (day + start time). When absent, the single
+   *  preferred_day/preferred_time pair is their only session. */
+  student_schedules?: StudentScheduleSlot[] | null
   created_at: string
   // Joined relations (when requested via select with foreign key hints)
   levels?: { name: string; slug: string; sort_order: number } | null
@@ -347,4 +350,38 @@ export interface TermTimeFollowup {
   updated_by: string | null
   // joined
   students?: { full_name: string } | null
+}
+
+export interface StudentScheduleSlot {
+  day_of_week: string
+  start_time: string
+  active?: boolean
+  week_pattern?: string
+}
+
+/** What an instructor submits when asking for a student to be added. */
+export interface StudentRequestPayload {
+  full_name: string
+  subscription_id: number | null
+  slots: { day: string; time: string }[]
+  attendance_pattern: 'weekly' | 'fortnightly'
+  fortnight_anchor: string | null
+  notes: string | null
+}
+
+export interface StudentRequest {
+  id: string
+  centre_id: string
+  brand: string
+  requested_by: string
+  status: 'pending' | 'approved' | 'rejected'
+  payload: StudentRequestPayload
+  review_note: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_student_id: string | null
+  created_at: string
+  // Joined relations
+  centres?: { name: string } | null
+  requester?: { full_name: string } | null
 }

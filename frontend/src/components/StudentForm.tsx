@@ -7,14 +7,15 @@ import { loadCurriculum } from '../lib/curriculumData'
 import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import { useBrand } from '../lib/brand'
-import type { Level, Lesson, Student, Subscription } from '../types'
-
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+import SessionSlotsEditor, { initialSlots, validSlots, type SlotInput } from './SessionSlotsEditor'
+import type { Level, Lesson, Student, StudentRequestPayload, Subscription } from '../types'
 
 interface Props {
   student?: Student | null
+  /** Pre-fills a new student from an approved request. */
+  prefill?: { payload: StudentRequestPayload; centreId: string } | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (saved?: { id: string }) => void
 }
 
 /** Create/edit modal. Minimum info needed to actually run the register:
@@ -23,28 +24,31 @@ interface Props {
  *  RoboThink Register doesn't need them. Existing historical values are
  *  left untouched in the database; this form simply never asks for or
  *  shows them, on create or edit. */
-export default function StudentForm({ student, onClose, onSaved }: Props) {
+export default function StudentForm({ student, prefill, onClose, onSaved }: Props) {
   const { notify } = useToast()
   const { activeCentres, selectedCentreId } = useCentres()
   const { activeBrand } = useBrand()
   const isEdit = Boolean(student)
 
-  const [fullName, setFullName] = useState(student?.full_name ?? '')
+  const [fullName, setFullName] = useState(student?.full_name ?? prefill?.payload.full_name ?? '')
   const [joined, setJoined] = useState(student?.date_joined ?? todayISO())
-  const [preferredDay, setPreferredDay] = useState(student?.preferred_day ?? '')
-  const [preferredTime, setPreferredTime] = useState(student?.preferred_time ?? '')
-  const [pattern, setPattern] = useState<'weekly' | 'fortnightly'>(student?.attendance_pattern === 'fortnightly' ? 'fortnightly' : 'weekly')
-  const [anchor, setAnchor] = useState(student?.fortnight_anchor ?? '')
+  const [slots, setSlots] = useState<SlotInput[]>(() =>
+    prefill && prefill.payload.slots.length > 0 ? prefill.payload.slots.map((x) => ({ day: x.day, time: x.time })) : initialSlots(student),
+  )
+  const [pattern, setPattern] = useState<'weekly' | 'fortnightly'>(
+    (student?.attendance_pattern ?? prefill?.payload.attendance_pattern) === 'fortnightly' ? 'fortnightly' : 'weekly',
+  )
+  const [anchor, setAnchor] = useState(student?.fortnight_anchor ?? prefill?.payload.fortnight_anchor ?? '')
   // Only send the fortnightly columns once the database has them (an edited
   // student already carries them) or when fortnightly is actually chosen, so
   // the form keeps working before the migration is applied.
   const patternColumns = student?.attendance_pattern !== undefined || pattern === 'fortnightly'
     ? { attendance_pattern: pattern, fortnight_anchor: pattern === 'fortnightly' ? anchor || null : null }
     : {}
-  const [subscriptionId, setSubscriptionId] = useState<number | ''>(student?.subscription_id ?? '')
-  const [notes, setNotes] = useState(student?.notes ?? '')
+  const [subscriptionId, setSubscriptionId] = useState<number | ''>(student?.subscription_id ?? prefill?.payload.subscription_id ?? '')
+  const [notes, setNotes] = useState(student?.notes ?? prefill?.payload.notes ?? '')
   const [active, setActive] = useState(student?.active ?? true)
-  const [centreId, setCentreId] = useState<string | null>(student?.centre_id ?? selectedCentreId)
+  const [centreId, setCentreId] = useState<string | null>(student?.centre_id ?? prefill?.centreId ?? selectedCentreId)
 
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [levels, setLevels] = useState<Level[]>([])
@@ -84,10 +88,16 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
       notify('Full name is required.', 'error')
       return
     }
-    if (pattern === 'fortnightly' && (!preferredDay || !anchor)) {
-      notify('A fortnightly student needs a normal day and an "on" week date.', 'error')
+    const sessions = validSlots(slots)
+    if (slots.some((x) => (x.day && !x.time) || (!x.day && x.time))) {
+      notify('Each session needs both a day and a time.', 'error')
       return
     }
+    if (pattern === 'fortnightly' && (sessions.length === 0 || !anchor)) {
+      notify('A fortnightly student needs at least one session and an "on" week date.', 'error')
+      return
+    }
+    const primary = sessions[0]
     setBusy(true)
     if (isEdit && student) {
       const { error } = await supabase
@@ -95,21 +105,24 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
         .update({
           full_name: fullName.trim(),
           date_joined: joined || null,
-          preferred_day: preferredDay || null,
-          preferred_time: preferredTime || null,
+          preferred_day: primary?.day ?? null,
+          preferred_time: primary?.time ?? null,
           ...patternColumns,
           subscription_id: subscriptionId === '' ? null : subscriptionId,
           notes: notes || null,
           active,
         })
         .eq('id', student.id)
-      setBusy(false)
       if (error) {
+        setBusy(false)
         notify(error.message, 'error')
         return
       }
-      notify('Student updated', 'success')
-      onSaved()
+      const syncError = await syncSessions(student.id, sessions)
+      setBusy(false)
+      if (syncError) notify(`Details saved, but the sessions could not be updated: ${syncError}`, 'error')
+      else notify('Student updated', 'success')
+      onSaved({ id: student.id })
       return
     }
 
@@ -130,26 +143,47 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
       notify('Choose a centre.', 'error')
       return
     }
-    const { error } = await supabase.from('students').insert({
+    const { data: created, error } = await supabase.from('students').insert({
       full_name: fullName.trim(),
       brand: activeBrand,
       date_joined: joined || null,
-      preferred_day: preferredDay || null,
-      preferred_time: preferredTime || null,
+      preferred_day: primary?.day ?? null,
+      preferred_time: primary?.time ?? null,
       ...patternColumns,
       subscription_id: subscriptionId,
       current_level_id: levelId,
       current_lesson_id: lesson.id,
       centre_id: centreId,
       active: true,
-    })
-    setBusy(false)
-    if (error) {
-      notify(error.message, 'error')
+    }).select('id').single()
+    if (error || !created) {
+      setBusy(false)
+      notify(error?.message ?? 'Could not add the student.', 'error')
       return
     }
-    notify(`${fullName.trim()} added`, 'success')
-    onSaved()
+    const syncError = await syncSessions(created.id as string, sessions)
+    setBusy(false)
+    if (syncError) notify(`${fullName.trim()} was added, but the sessions could not be saved: ${syncError}`, 'error')
+    else notify(`${fullName.trim()} added`, 'success')
+    onSaved({ id: created.id as string })
+  }
+
+  /** Replaces the student's schedule rows with the sessions in the form.
+   *  Returns an error message, or null on success. */
+  async function syncSessions(studentId: string, sessions: SlotInput[]): Promise<string | null> {
+    const del = await supabase.from('student_schedules').delete().eq('student_id', studentId)
+    if (del.error) return del.error.message
+    if (sessions.length === 0) return null
+    const ins = await supabase.from('student_schedules').insert(
+      sessions.map((x) => ({
+        student_id: studentId,
+        day_of_week: x.day,
+        start_time: x.time,
+        week_pattern: pattern === 'fortnightly' ? 'A' : 'EVERY_WEEK',
+        active: true,
+      })),
+    )
+    return ins.error?.message ?? null
   }
 
   return (
@@ -198,21 +232,7 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
             )}
           </label>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="text-sm block">
-              <span className="block text-slate-500 mb-1">Normal day</span>
-              <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={preferredDay} onChange={(e) => setPreferredDay(e.target.value)} disabled={busy}>
-                <option value="">—</option>
-                {DAYS.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm block">
-              <span className="block text-slate-500 mb-1">Normal session time</span>
-              <input type="time" className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={preferredTime} onChange={(e) => setPreferredTime(e.target.value)} disabled={busy} />
-            </label>
-          </div>
+          <SessionSlotsEditor slots={slots} onChange={setSlots} disabled={busy} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="text-sm block">
@@ -241,7 +261,7 @@ export default function StudentForm({ student, onClose, onSaved }: Props) {
           {pattern === 'fortnightly' && (
             <p className="text-xs text-slate-500 -mt-1">
               They show on the register every second week from that date and are not counted absent in their off weeks.
-              If they do two sessions in their on week, add the second with “+ Add to register” as a catch-up.
+              If they come for two sessions in their on week, add both under Weekly sessions.
             </p>
           )}
 

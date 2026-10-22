@@ -7,6 +7,7 @@ import ChangeLessonControl from '../components/ChangeLessonControl'
 import AssessmentPanel from '../components/AssessmentPanel'
 import FeedbackControl from '../components/FeedbackControl'
 import StudentForm from '../components/StudentForm'
+import StartingLessonCard from '../components/StartingLessonCard'
 import StudentProjectsPanel from '../components/StudentProjectsPanel'
 import { loadCurriculum } from '../lib/curriculumData'
 import { levelLabel } from '../lib/curriculum'
@@ -14,7 +15,7 @@ import { formatShortDate, formatDisplayDate, formatTime12h } from '../lib/dates'
 import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
-import { attendancePercentage, classifyAttendance, groupAttendanceByMonth } from '../lib/attendanceStats'
+import { attendancePercentage, classifyAttendance, describeSlots, groupAttendanceByMonth } from '../lib/attendanceStats'
 import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import type {
   AttendedSession,
@@ -93,7 +94,7 @@ export default function StudentProfile() {
     setLoading(true)
     setError(null)
     const [sRes, pRes, planRes, lRes, rRes, aRes, pointRes, planHistoryRes, attRes, fRes, projectRes, ovRes, latestSessionRes, sessionsRes, curriculum] = await Promise.all([
-      supabase.from('students').select('*, levels(name), subscriptions(name), centres(name)').eq('id', id).maybeSingle(),
+      supabase.from('students').select('*, levels(name), subscriptions(name), centres(name), student_schedules(day_of_week,start_time,active)').eq('id', id).maybeSingle(),
       supabase.from('student_progress').select('*').eq('student_id', id).maybeSingle(),
       supabase
         .from('remediation_plans')
@@ -362,22 +363,26 @@ export default function StudentProfile() {
         title={student.full_name}
         subtitle={[
           progress ? levelLabel({ name: progress.level_name ?? '' }) : student.levels?.name ?? '—',
-          student.preferred_day ? `${student.preferred_day} ${student.preferred_time ?? ''}`.trim() : null,
+          describeSlots(student, formatTime12h) || null,
           student.parent_name,
         ]
           .filter(Boolean)
           .join(' · ')}
         accent="blue"
         actions={
-          role === 'admin' ? (
+          role === 'admin' || role === 'management' ? (
             <>
               <button className="btn-ghost" onClick={() => setEditing(true)}>Edit details</button>
-              <button className="btn-primary" onClick={openTransfer}>Transfer centre</button>
+              {role === 'admin' && <button className="btn-primary" onClick={openTransfer}>Transfer centre</button>}
             </>
           ) : undefined
         }
       />
       <Link to="/students" className="text-sm text-slate-500 hover:underline">← Back to students</Link>
+
+      {!student.current_lesson_id && (
+        <StartingLessonCard studentId={student.id} studentName={student.full_name} onDone={() => void load()} />
+      )}
 
       {/* Current lesson hero — the single most important fact on this page */}
       <section className="card card-accent-top p-5 my-5" style={{ ['--accent-color' as string]: 'var(--rt-blue)' }}>
@@ -471,9 +476,9 @@ export default function StudentProfile() {
           <h3 className="font-semibold mb-3">Details</h3>
           <dl className="text-sm space-y-2">
             <div><dt className="text-slate-500">Centre</dt><dd>{student.centres?.name ?? 'Centre unavailable'}</dd></div>
-            <div><dt className="text-slate-500">Date of birth</dt><dd>{student.date_of_birth ? formatDisplayDate(student.date_of_birth) : '—'}</dd></div>
+            {(role === 'admin' || role === 'management') && <div><dt className="text-slate-500">Date of birth</dt><dd>{student.date_of_birth ? formatDisplayDate(student.date_of_birth) : '—'}</dd></div>}
             <div><dt className="text-slate-500">Parent</dt><dd>{student.parent_name ?? '—'}</dd></div>
-            <div><dt className="text-slate-500">Contact</dt><dd>{student.parent_contact ?? '—'}</dd></div>
+            {(role === 'admin' || role === 'management') && <div><dt className="text-slate-500">Contact</dt><dd>{student.parent_contact ?? '—'}</dd></div>}
             <div><dt className="text-slate-500">Subscription</dt><dd>{student.subscriptions?.name ?? '—'}</dd></div>
             <div><dt className="text-slate-500">Joined</dt><dd>{student.date_joined ? formatDisplayDate(student.date_joined) : '—'}</dd></div>
             {student.notes && (
@@ -642,7 +647,7 @@ export default function StudentProfile() {
           ) : (
             <>
               <p className="text-sm text-slate-500 mb-3">
-                Scheduled: {student.preferred_day ?? '—'} {student.preferred_time ? formatTime12h(student.preferred_time) : ''}{student.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}
+                Scheduled: {describeSlots(student, formatTime12h) || '—'}{student.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}
                 {attendancePercentage(attendance) != null && <> · {attendancePercentage(attendance)}% attendance</>}
               </p>
               {groupAttendanceByMonth(classifyAttendance(attendance)).map(({ month, rows }) => (

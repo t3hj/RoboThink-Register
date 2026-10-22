@@ -7,26 +7,26 @@ week they attend.
 
 ### Setting it up
 
-1. Edit the student and set **How often** to **Every other week**.
+1. An admin or manager edits the student and sets **How often** to **Every other
+   week**.
 2. Pick any date inside a week they attend. Every second week from that date is
    an "on" week.
-3. Keep their **Normal day** set to the first of their two days.
+3. Under **Weekly sessions**, add **both** of their sessions (for example
+   Saturday 10:00 and Sunday 09:00).
 
 ### What happens
 
-- In "on" weeks they appear on the register on their normal day.
+- In "on" weeks they appear on the register on each of their session days, at
+  that day's time. Each session counts as a normal session: mark it Attended or
+  Absent.
 - In "off" weeks they do **not** appear, and are **not** counted as absent. The
   register shows a line such as "2 fortnightly students are off this week" that
   you can open to see who.
-- For the second session in their "on" week, open that day's register, press
+- If one turns up in an "off" week, open that day's register, press
   **+ Add to register**, choose **Catch-up** and mark them Attended as normal.
-- If one turns up in an "off" week, add them the same way.
 
 The "no attendance recently" warning on Analytics waits five weeks for these
 students instead of three, so a normal gap won't trigger it.
-
-> If you cannot see the **How often** option, an admin needs to apply the
-> fortnightly database update first (see the admin guide).
 
 ## Missed a session and made it up
 
@@ -51,5 +51,5 @@ sessions, misses 1 and makes it up shows 100%.
 | Student missed, no make-up booked | Mark **Absent** |
 | Student missed, made up two weeks later | Mark **Absent** on the day, then **Catch-up** attended later |
 | Fortnightly student, off week | Nothing. They aren't expected |
-| Fortnightly student, second session in their week | **+ Add to register**, **Catch-up** |
+| Fortnightly student, two sessions in their week | Both are on the register in their on week. Mark each one |
 | Student changes to every week | Edit them, set **How often** back to **Every week** |
