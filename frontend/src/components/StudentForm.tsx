@@ -9,6 +9,7 @@ import { useCentres } from '../lib/centres'
 import { useBrand } from '../lib/brand'
 import SessionSlotsEditor, { initialSlots, validSlots, type SlotInput } from './SessionSlotsEditor'
 import type { Level, Lesson, Student, StudentRequestPayload, Subscription } from '../types'
+import { ModalOverlay } from './ui'
 
 interface Props {
   student?: Student | null
@@ -187,7 +188,7 @@ export default function StudentForm({ student, prefill, onClose, onSaved }: Prop
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start sm:items-center justify-center bg-black/40 p-2 sm:p-4 overflow-y-auto overscroll-contain" onClick={onClose}>
+    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-2 sm:p-4 overflow-y-auto overscroll-contain" onClose={onClose}>
       <div className="card p-4 sm:p-5 max-w-lg w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain my-2 sm:my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit student' : 'Add student'}>
         <h3 className="font-semibold mb-4">{isEdit ? 'Edit student' : 'Add student'}</h3>
 
@@ -311,6 +312,6 @@ export default function StudentForm({ student, prefill, onClose, onSaved }: Prop
           <BusyButton busy={busy} className="btn-primary w-full sm:w-auto" onClick={() => void save()}>{isEdit ? 'Save changes' : 'Add student'}</BusyButton>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

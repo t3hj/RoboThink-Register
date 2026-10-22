@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { useToast } from './Toast'
 import { BusyButton } from './ui'
 import { eligibleForMarkAttended, eligibleForMarkAbsent, summarizeBulkResults, type BulkCandidate } from '../lib/bulkActions'
+import { ModalOverlay } from './ui'
 
 interface Props {
   target: 'Arrived' | 'Absent'
@@ -59,7 +60,7 @@ export default function BulkAttendanceModal({ target, candidates, date, dayLabel
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
+    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose}>
       <div className="card p-5 max-w-md w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Bulk mark ${target}`}>
         <h3 className="font-semibold mb-1">Mark {target === 'Arrived' ? 'Attended' : 'Absent'}?</h3>
         <p className="text-sm text-slate-500 mb-3">Apply to {candidates.length} student{candidates.length === 1 ? '' : 's'}?</p>
@@ -94,6 +95,6 @@ export default function BulkAttendanceModal({ target, candidates, date, dayLabel
           </BusyButton>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

@@ -6,6 +6,7 @@ import { BusyButton } from './ui'
 import { FEEDBACK_OPTIONS } from '../lib/feedback'
 import { eligibleForFeedback, summarizeBulkResults, type BulkCandidate } from '../lib/bulkActions'
 import type { FeedbackStatus } from '../types'
+import { ModalOverlay } from './ui'
 
 interface FeedbackCandidate extends BulkCandidate {
   /** The feedback_sheets.id belonging to this student's target session for
@@ -73,7 +74,7 @@ export default function BulkFeedbackModal({ candidates, onDone, onClose }: Props
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
+    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose}>
       <div className="card p-5 max-w-md w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Bulk feedback">
         <h3 className="font-semibold mb-1">Bulk feedback status</h3>
         <p className="text-xs text-slate-500 mb-3">
@@ -129,6 +130,6 @@ export default function BulkFeedbackModal({ candidates, onDone, onClose }: Props
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ModalOverlay } from '../components/ui'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
@@ -677,7 +678,7 @@ export default function StudentProfile() {
       </div>
 
       {lessonEdit && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => !lessonEditBusy && setLessonEdit(null)}>
+        <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={() => !lessonEditBusy && setLessonEdit(null)}>
           <div className="card p-5 max-w-lg w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Edit lesson history">
             <h3 className="font-semibold mb-1">Edit lesson history</h3>
             <p className="text-sm text-slate-500 mb-4">Changing this entry also updates its linked session, so register history and progression stay in sync.</p>
@@ -693,11 +694,11 @@ export default function StudentProfile() {
             </div>
             <div className="flex justify-end gap-2 mt-5"><button className="btn-ghost" onClick={() => setLessonEdit(null)} disabled={lessonEditBusy}>Cancel</button><button className="btn-primary" onClick={() => void saveLessonHistoryEdit()} disabled={lessonEditBusy || !lessonEdit.date || !lessonEdit.lessonId}>{lessonEditBusy ? 'Saving…' : 'Save changes'}</button></div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {assessmentHistoryEdit && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => !assessmentHistoryBusy && setAssessmentHistoryEdit(null)}>
+        <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={() => !assessmentHistoryBusy && setAssessmentHistoryEdit(null)}>
           <div className="card p-5 max-w-lg w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={assessmentHistoryEdit.kind === 'convert' ? 'Convert lesson to assessment' : 'Edit assessment history'}>
             <h3 className="font-semibold mb-1">{assessmentHistoryEdit.kind === 'convert' ? 'Convert lesson to assessment' : 'Correct assessment history'}</h3>
             <p className="text-sm text-slate-500 mb-4">
@@ -755,11 +756,11 @@ export default function StudentProfile() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {addSessionOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => !addSessionBusy && setAddSessionOpen(false)}>
+        <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={() => !addSessionBusy && setAddSessionOpen(false)}>
           <div className="card p-5 max-w-lg w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add lesson session">
             <h3 className="font-semibold mb-1">Add lesson session</h3>
             <p className="text-sm text-slate-500 mb-4">This records a session and feedback entry. A completed lesson can update lesson progression.</p>
@@ -775,7 +776,7 @@ export default function StudentProfile() {
             </div>
             <div className="flex justify-end gap-2 mt-5"><button className="btn-ghost" onClick={() => setAddSessionOpen(false)} disabled={addSessionBusy}>Cancel</button><button className="btn-primary" onClick={() => void saveAddedLessonSession()} disabled={addSessionBusy || !historyAdd.date || !historyAdd.lessonId}>{addSessionBusy ? 'Saving…' : 'Add session'}</button></div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {editing && (
@@ -790,7 +791,7 @@ export default function StudentProfile() {
       )}
 
       {transferOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => !transferBusy && setTransferOpen(false)}>
+        <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={() => !transferBusy && setTransferOpen(false)}>
           <div className="card p-5 max-w-md w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Transfer student to another centre">
             <h3 className="font-semibold mb-2">Transfer {student.full_name}</h3>
             <p className="text-sm text-slate-600 mb-4">
@@ -818,7 +819,7 @@ export default function StudentProfile() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   )

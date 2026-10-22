@@ -2,6 +2,8 @@ import React from 'react'
 import type { AttendanceStatus } from '../types'
 import { friendlyMessage } from '../lib/errors'
 import { RobotIdle } from './RobotArt'
+import { createPortal } from 'react-dom'
+import { useEffect, useRef } from 'react'
 
 /** Coloured status badge for attendance states. Colour is never the only
  *  signal — the status word itself is always shown. */
@@ -146,7 +148,7 @@ export function ConfirmDialog({
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={onCancel}>
+    <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={onCancel}>
       <div className="card p-5 max-w-sm w-full" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <h3 className="font-semibold mb-2">{title}</h3>
         <p className="text-sm text-slate-600 mb-4">{message}</p>
@@ -159,7 +161,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 
@@ -175,5 +177,41 @@ export function BusyButton({
     <button className={className} disabled={disabled || busy} {...rest}>
       {busy ? 'Saving…' : children}
     </button>
+  )
+}
+
+
+let openOverlays = 0
+
+/** Full-screen dimmed overlay for dialogs. Rendered on document.body so no
+ *  page wrapper, transform or overflow can displace it; locks page scrolling
+ *  while open and closes on Escape or a click on the backdrop. The dialog
+ *  itself should stop click propagation (all existing dialogs do). */
+export function ModalOverlay({ className = '', onClose, children }: { className?: string; onClose: () => void; children: React.ReactNode }) {
+  // Keep the latest onClose without re-running the effect on every render
+  // (callers pass inline arrow functions).
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  useEffect(() => {
+    openOverlays++
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeRef.current()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      openOverlays--
+      if (openOverlays === 0) document.body.style.overflow = previous
+    }
+  }, [])
+
+  return createPortal(
+    <div className={`fixed inset-0 z-40 ${className}`} onClick={() => closeRef.current()}>
+      {children}
+    </div>,
+    document.body,
   )
 }

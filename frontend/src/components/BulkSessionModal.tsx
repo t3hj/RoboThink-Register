@@ -6,6 +6,7 @@ import { levelLabel } from '../lib/curriculum'
 import { NOT_FINISHED_REASONS, nearbyLessonNumbers, validateLeftAside } from '../lib/attendedSessionsUi'
 import { eligibleForSession, mostCommonLessonId, summarizeBulkResults, type BulkCandidate } from '../lib/bulkActions'
 import type { Lesson, LeftAsideReason, Level, SessionOutcome } from '../types'
+import { ModalOverlay } from './ui'
 
 interface SessionCandidate extends BulkCandidate {
   currentLessonId: string | null
@@ -120,7 +121,7 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
   const title = mode === 'not_finished' ? 'Bulk Not Finished' : 'Bulk Lesson / Outcome'
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
+    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose}>
       <div className="card p-5 max-w-lg w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <h3 className="font-semibold mb-1">{title}</h3>
         <p className="text-xs text-slate-500 mb-3">
@@ -283,6 +284,6 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
