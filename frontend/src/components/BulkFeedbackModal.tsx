@@ -77,13 +77,13 @@ export default function BulkFeedbackModal({ candidates, onDone, onClose }: Props
     <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose} dismissible={!busy}>
       <div className="card p-5 max-w-md w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Bulk feedback">
         <h3 className="font-semibold mb-1">Bulk feedback status</h3>
-        <p className="text-xs text-slate-500 mb-3">
+        <p className="text-xs text-slate-600 mb-3">
           Only updates each student's session for the selected date — never their full feedback history.
         </p>
 
         {step === 'configure' && (
           <label className="text-sm block mb-3">
-            <span className="block text-slate-500 mb-1">Set status to</span>
+            <span className="block text-slate-600 mb-1">Set status to</span>
             <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={status} onChange={(e) => setStatus(e.target.value as FeedbackStatus)}>
               {FEEDBACK_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -107,7 +107,7 @@ export default function BulkFeedbackModal({ candidates, onDone, onClose }: Props
             {skipped.length > 0 && (
               <div>
                 <div className="text-sm font-medium mb-1">{skipped.length} will be skipped</div>
-                <ul className="text-sm text-slate-500 max-h-32 overflow-y-auto">
+                <ul className="text-sm text-slate-600 max-h-32 overflow-y-auto">
                   {skipped.map(({ candidate, reason }) => <li key={candidate.id}>{candidate.full_name} — {reason}</li>)}
                 </ul>
               </div>

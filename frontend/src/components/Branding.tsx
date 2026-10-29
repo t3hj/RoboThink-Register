@@ -60,7 +60,7 @@ export function MascotCrew({ className = '' }: { className?: string }) {
       {MASCOTS.map((mascot) => (
         <div key={mascot.name} className="min-w-0 text-center" title={`${mascot.name}: ${mascot.description}`}>
           <MascotPortrait name={mascot.name} className="w-8 h-8 mx-auto" />
-          <span className="block truncate text-[9px] leading-tight font-semibold text-slate-500">{mascot.name}</span>
+          <span className="block truncate text-[9px] leading-tight font-semibold text-slate-600">{mascot.name}</span>
         </div>
       ))}
     </div>

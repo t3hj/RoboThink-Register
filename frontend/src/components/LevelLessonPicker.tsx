@@ -48,7 +48,7 @@ export default function LevelLessonPicker({ levels, lessons, levelId, lessonNumb
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <label className="text-sm">
-        <span className="block text-slate-500 mb-1">Programme</span>
+        <span className="block text-slate-600 mb-1">Programme</span>
         <select
           className="w-full p-2 border border-slate-200 rounded-lg text-sm"
           value={programme}
@@ -65,7 +65,7 @@ export default function LevelLessonPicker({ levels, lessons, levelId, lessonNumb
 
       {hasTerms && (
         <label className="text-sm">
-          <span className="block text-slate-500 mb-1">Term</span>
+          <span className="block text-slate-600 mb-1">Term</span>
           <select
             className="w-full p-2 border border-slate-200 rounded-lg text-sm"
             value={effectiveLevel?.id ?? ''}
@@ -82,7 +82,7 @@ export default function LevelLessonPicker({ levels, lessons, levelId, lessonNumb
       )}
 
       <label className="text-sm">
-        <span className="block text-slate-500 mb-1">Lesson</span>
+        <span className="block text-slate-600 mb-1">Lesson</span>
         <select
           className="w-full p-2 border border-slate-200 rounded-lg text-sm"
           value={lessonNumber ?? ''}

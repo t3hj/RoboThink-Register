@@ -117,7 +117,7 @@ export default function Dashboard() {
           </Link>
         }
       />
-      <p className="text-sm text-slate-500 -mt-3 mb-4 flex items-center gap-2">
+      <p className="text-sm text-slate-600 -mt-3 mb-4 flex items-center gap-2">
         <RobotWave className="w-9 h-9 -ml-1" />
         Signed in as <span className="font-medium">{profile?.name ?? 'staff'}</span>
       </p>
@@ -154,7 +154,7 @@ export default function Dashboard() {
                       <Link to={`/students/${s.id}`} className="font-medium hover:underline truncate block">
                         {s.full_name}
                       </Link>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-slate-600">
                         {s.preferred_time} · Lesson {s.progress?.current_lesson_number ?? '—'}
                       </div>
                     </div>
@@ -178,11 +178,11 @@ export default function Dashboard() {
                     <Link to={`/students/${l.student_id}`} className="font-medium hover:underline truncate block">
                       Lesson {l.lesson_number}
                     </Link>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-slate-600">
                       {l.levels?.name ?? `Level ${l.level_id}`} · {l.profiles?.name ?? 'Unassigned'}
                     </div>
                   </div>
-                  <span className="text-xs text-slate-500 whitespace-nowrap">{l.date}</span>
+                  <span className="text-xs text-slate-600 whitespace-nowrap">{l.date}</span>
                 </li>
               ))}
             </ul>
@@ -213,7 +213,7 @@ export default function Dashboard() {
           <h3 id="unmarked-heading" className="font-semibold">Registers still to fill in</h3>
           <span className={`badge ${data.unmarked.length > 0 ? 'badge-assess' : ''}`}>{data.unmarked.length}</span>
         </div>
-        <p className="text-xs text-slate-500 mb-3">
+        <p className="text-xs text-slate-600 mb-3">
           Students who were expected in the last 14 days but have no attendance mark at all. Nothing is counted against
           them until you mark Attended or Absent.
         </p>
@@ -225,7 +225,7 @@ export default function Dashboard() {
               <li key={`${student.id}-${date}`} className="py-2 flex items-center justify-between gap-3 text-sm">
                 <div className="min-w-0">
                   <Link to={`/students/${student.id}`} className="font-medium hover:underline truncate block">{student.full_name}</Link>
-                  <span className="text-xs text-slate-500">{dayName(date)} {formatDisplayDate(date)}</span>
+                  <span className="text-xs text-slate-600">{dayName(date)} {formatDisplayDate(date)}</span>
                 </div>
                 <Link to={`/register?date=${date}`} className="btn-ghost text-xs whitespace-nowrap">Open register</Link>
               </li>
@@ -233,7 +233,7 @@ export default function Dashboard() {
           </ul>
         )}
         {data.unmarked.length > 12 && (
-          <p className="text-xs text-slate-500 mt-2">Showing the 12 most recent of {data.unmarked.length}.</p>
+          <p className="text-xs text-slate-600 mt-2">Showing the 12 most recent of {data.unmarked.length}.</p>
         )}
       </section>
 
@@ -250,7 +250,7 @@ export default function Dashboard() {
               <li key={`${a.student_id}-${a.action}`} className="py-2 flex items-center justify-between gap-3 text-sm">
                 <div>
                   <Link to={`/students/${a.student_id}`} className="font-medium hover:underline">{a.full_name}</Link>
-                  <span className="text-slate-500"> · {a.current_level}</span>
+                  <span className="text-slate-600"> · {a.current_level}</span>
                 </div>
                 <span className="badge badge-assess">{a.action}</span>
               </li>
@@ -264,19 +264,19 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4 text-sm">
           <div className="bg-slate-50 rounded-lg p-3">
             <div className="text-xl font-bold">{data.totals.total}</div>
-            <div className="text-slate-500">Total students</div>
+            <div className="text-slate-600">Total students</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3">
             <div className="text-xl font-bold">{data.totals.active}</div>
-            <div className="text-slate-500">Active</div>
+            <div className="text-slate-600">Active</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3">
             <div className="text-xl font-bold">{completedToday}</div>
-            <div className="text-slate-500">Lessons done today</div>
+            <div className="text-slate-600">Lessons done today</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3">
             <div className="text-xl font-bold">{notMarked}</div>
-            <div className="text-slate-500">Awaiting register mark</div>
+            <div className="text-slate-600">Awaiting register mark</div>
           </div>
         </div>
         <Link to="/students" className="text-sm text-[color:var(--rt-primary)] font-medium hover:underline">

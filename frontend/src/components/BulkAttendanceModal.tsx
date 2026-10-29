@@ -63,7 +63,7 @@ export default function BulkAttendanceModal({ target, candidates, date, dayLabel
     <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose} dismissible={!busy}>
       <div className="card p-5 max-w-md w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Bulk mark ${target}`}>
         <h3 className="font-semibold mb-1">Mark {target === 'Arrived' ? 'Attended' : 'Absent'}?</h3>
-        <p className="text-sm text-slate-500 mb-3">Apply to {candidates.length} student{candidates.length === 1 ? '' : 's'}?</p>
+        <p className="text-sm text-slate-600 mb-3">Apply to {candidates.length} student{candidates.length === 1 ? '' : 's'}?</p>
 
         {eligible.length > 0 && (
           <div className="mb-3">
@@ -76,7 +76,7 @@ export default function BulkAttendanceModal({ target, candidates, date, dayLabel
         {skipped.length > 0 && (
           <div className="mb-3">
             <div className="text-sm font-medium mb-1">{skipped.length} will be skipped</div>
-            <ul className="text-sm text-slate-500 max-h-32 overflow-y-auto">
+            <ul className="text-sm text-slate-600 max-h-32 overflow-y-auto">
               {skipped.map(({ candidate, reason }) => <li key={candidate.id}>{candidate.full_name} — {reason}</li>)}
             </ul>
           </div>

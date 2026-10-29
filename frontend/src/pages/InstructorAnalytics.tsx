@@ -152,12 +152,12 @@ export default function InstructorAnalytics() {
           <div className="flex items-center justify-between gap-3 mb-3">
             <div>
               <h3 id="attendance-followup-title" className="font-semibold">Students to follow up</h3>
-              <p className="text-xs text-slate-500 mt-1">Flags repeated recent absences and scheduled students without recent attendance.</p>
+              <p className="text-xs text-slate-600 mt-1">Flags repeated recent absences and scheduled students without recent attendance.</p>
             </div>
             <span className="badge badge-assess">{attendanceFollowups.length}</span>
           </div>
           {attendanceFollowups.length === 0 ? (
-            <p className="text-sm text-slate-400 py-5">No attendance follow-ups flagged right now.</p>
+            <p className="text-sm text-slate-600 py-5">No attendance follow-ups flagged right now.</p>
           ) : (
             <ul className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
               {attendanceFollowups.slice(0, 12).map(({ student, flag }) => (
@@ -168,7 +168,7 @@ export default function InstructorAnalytics() {
               ))}
             </ul>
           )}
-          {attendanceFollowups.length > 12 && <p className="text-xs text-slate-400 mt-2">Showing 12 of {attendanceFollowups.length}; use the student list to see the rest.</p>}
+          {attendanceFollowups.length > 12 && <p className="text-xs text-slate-600 mt-2">Showing 12 of {attendanceFollowups.length}; use the student list to see the rest.</p>}
         </section>
       </div>
 
@@ -197,12 +197,12 @@ export default function InstructorAnalytics() {
         <section className="card p-4">
           <h3 className="font-semibold mb-3">Student overview</h3>
           <dl className="text-sm space-y-1.5">
-            <div className="flex justify-between"><dt className="text-slate-500">Total active students</dt><dd className="font-medium">{students.length}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Currently attending (arrived)</dt><dd className="font-medium">{overview.currentlyAttending}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">New in last 30 days</dt><dd className="font-medium">{overview.newRecently}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Total active students</dt><dd className="font-medium">{students.length}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Currently attending (arrived)</dt><dd className="font-medium">{overview.currentlyAttending}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">New in last 30 days</dt><dd className="font-medium">{overview.newRecently}</dd></div>
           </dl>
           <div className="mt-3 pt-3 border-t border-slate-100">
-            <div className="text-xs uppercase text-slate-400 mb-1.5">By programme</div>
+            <div className="text-xs uppercase text-slate-600 mb-1.5">By programme</div>
             {overview.byLevel.map(([name, count]) => (
               <div key={name} className="flex justify-between text-sm py-0.5">
                 <span>{name}</span><span className="font-medium">{count}</span>
@@ -225,12 +225,12 @@ export default function InstructorAnalytics() {
             ))}
           </select>
           {historyLoading ? (
-            <div className="text-sm text-slate-400">Loading…</div>
+            <div className="text-sm text-slate-600">Loading…</div>
           ) : selectedStudent ? (
             <>
               <div className="flex items-center gap-3 mb-3">
                 <div className="text-2xl font-bold">{selectedPct == null ? '—' : `${selectedPct}%`}</div>
-                <div className="text-sm text-slate-500">attendance ({studentHistory.length} recent sessions)</div>
+                <div className="text-sm text-slate-600">attendance ({studentHistory.length} recent sessions)</div>
               </div>
               {selectedFlag && (
                 <div className="badge badge-assess mb-3">{FLAG_LABELS[selectedFlag]}</div>
@@ -241,7 +241,7 @@ export default function InstructorAnalytics() {
               <ul className="max-h-48 overflow-y-auto divide-y divide-slate-100 text-sm">
                 {studentHistory.map((a) => (
                   <li key={a.id} className="py-1.5 flex items-center justify-between">
-                    <span>{formatShortDate(a.date)}{a.session_type !== 'regular' && <span className="text-slate-400"> · {a.session_type === 'catch_up' ? 'catch-up' : 'special'}</span>}</span>
+                    <span>{formatShortDate(a.date)}{a.session_type !== 'regular' && <span className="text-slate-600"> · {a.session_type === 'catch_up' ? 'catch-up' : 'special'}</span>}</span>
                     <StatusBadge status={a.status} />
                   </li>
                 ))}

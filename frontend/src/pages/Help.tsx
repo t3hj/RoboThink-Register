@@ -149,7 +149,7 @@ export default function Help() {
         {GUIDES.map((guide, index) => (
           <section key={guide.id} id={guide.id} className="card card-accent-top p-4 sm:p-5 scroll-mt-6" style={{ '--accent-color': ['var(--rt-yellow)', 'var(--rt-green)', 'var(--rt-blue)', 'var(--rt-red)'][index % 4] } as React.CSSProperties}>
             <h2 className="text-lg font-semibold">{guide.title}</h2>
-            <p className="text-sm text-slate-500 mb-3">{guide.summary}</p>
+            <p className="text-sm text-slate-600 mb-3">{guide.summary}</p>
             <ol className="list-decimal pl-5 space-y-1.5 text-sm">
               {guide.steps.map((step) => <li key={step}>{step}</li>)}
             </ol>

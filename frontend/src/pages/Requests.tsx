@@ -165,8 +165,8 @@ export default function Requests() {
                     <li key={r.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="font-medium">{r.payload.full_name}</div>
-                        <div className="text-xs text-slate-500">{summary(r.payload)}</div>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-slate-600">{summary(r.payload)}</div>
+                        <div className="text-xs text-slate-600">
                           {r.centres?.name ?? centreName(r.centre_id) ?? 'Centre'} · requested by {r.requester?.full_name ?? 'staff'} · {r.created_at.slice(0, 10)}
                         </div>
                         {r.payload.notes && <div className="text-xs text-slate-600 mt-1">Note: {r.payload.notes}</div>}
@@ -184,13 +184,13 @@ export default function Requests() {
 
           <section className="card p-4 mb-6" aria-labelledby="new-heading">
             <h2 id="new-heading" className="font-semibold mb-1">{canReview ? 'Add students in bulk by request' : 'Request new students'}</h2>
-            <p className="text-xs text-slate-500 mb-3">
+            <p className="text-xs text-slate-600 mb-3">
               You can request several students at once. Nothing is added until an admin or manager approves it.
               {canReview && ' To add a student straight away, use Students, then Add student.'}
             </p>
 
             <label className="text-sm block mb-3 max-w-sm">
-              <span className="block text-slate-500 mb-1">Centre</span>
+              <span className="block text-slate-600 mb-1">Centre</span>
               <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={centreId} onChange={(e) => setCentreId(e.target.value)} disabled={sending}>
                 <option value="">— Choose a centre —</option>
                 {activeCentres.map((c) => (
@@ -210,11 +210,11 @@ export default function Requests() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="text-sm block">
-                      <span className="block text-slate-500 mb-1">Full name</span>
+                      <span className="block text-slate-600 mb-1">Full name</span>
                       <input className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={d.full_name} onChange={(e) => updateDraft(i, { full_name: e.target.value })} disabled={sending} />
                     </label>
                     <label className="text-sm block">
-                      <span className="block text-slate-500 mb-1">Subscription</span>
+                      <span className="block text-slate-600 mb-1">Subscription</span>
                       <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={d.subscription_id} onChange={(e) => updateDraft(i, { subscription_id: e.target.value === '' ? '' : Number(e.target.value) })} disabled={sending}>
                         <option value="">— Choose —</option>
                         {subscriptions.map((s) => (
@@ -226,7 +226,7 @@ export default function Requests() {
                   <SessionSlotsEditor slots={d.slots} onChange={(slots) => updateDraft(i, { slots })} disabled={sending} />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="text-sm block">
-                      <span className="block text-slate-500 mb-1">How often</span>
+                      <span className="block text-slate-600 mb-1">How often</span>
                       <select
                         className="w-full p-2 border border-slate-200 rounded-lg text-sm"
                         value={d.pattern}
@@ -242,13 +242,13 @@ export default function Requests() {
                     </label>
                     {d.pattern === 'fortnightly' && (
                       <label className="text-sm block">
-                        <span className="block text-slate-500 mb-1">A week they attend (any date in it)</span>
+                        <span className="block text-slate-600 mb-1">A week they attend (any date in it)</span>
                         <input type="date" className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={d.anchor} onChange={(e) => updateDraft(i, { anchor: e.target.value })} disabled={sending} />
                       </label>
                     )}
                   </div>
                   <label className="text-sm block">
-                    <span className="block text-slate-500 mb-1">Note for the reviewer (optional, e.g. starting level)</span>
+                    <span className="block text-slate-600 mb-1">Note for the reviewer (optional, e.g. starting level)</span>
                     <input className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={d.notes} onChange={(e) => updateDraft(i, { notes: e.target.value })} disabled={sending} />
                   </label>
                 </div>
@@ -273,7 +273,7 @@ export default function Requests() {
                   <li key={r.id} className="py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
                     <div className="min-w-0">
                       <span className="font-medium">{r.payload.full_name}</span>
-                      <span className="text-xs text-slate-500"> · {summary(r.payload)} · {r.created_at.slice(0, 10)}</span>
+                      <span className="text-xs text-slate-600"> · {summary(r.payload)} · {r.created_at.slice(0, 10)}</span>
                       {r.status === 'rejected' && r.review_note && <div className="text-xs text-rose-700">Declined: {r.review_note}</div>}
                     </div>
                     <span className={`badge badge-dot capitalize ${STATUS_STYLE[r.status]}`}>{r.status}</span>

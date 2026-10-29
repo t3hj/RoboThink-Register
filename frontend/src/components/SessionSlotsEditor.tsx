@@ -20,7 +20,7 @@ export default function SessionSlotsEditor({ slots, onChange, disabled }: Props)
   const update = (index: number, patch: Partial<SlotInput>) => onChange(slots.map((s, i) => (i === index ? { ...s, ...patch } : s)))
   return (
     <fieldset className="space-y-2" disabled={disabled}>
-      <legend className="text-sm text-slate-500 mb-1">Weekly sessions</legend>
+      <legend className="text-sm text-slate-600 mb-1">Weekly sessions</legend>
       {slots.map((slot, index) => (
         <div key={index} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
           <select

@@ -31,7 +31,7 @@ export default function AppNavigation({ items }: { items: { to: string; label: s
             {menuOpen ? 'Close menu' : 'Menu'}
           </button>
         </div>
-        <p className="hidden lg:block text-xs text-slate-500 -mt-2 mb-3">Register &amp; Progress</p>
+        <p className="hidden lg:block text-xs text-slate-600 -mt-2 mb-3">Register &amp; Progress</p>
 
         {/* Centre context stays visible even when the mobile menu is closed. */}
         {!loading && !error && (activeCentres.length > 0 || assignedCentres.length > 0) && (
@@ -58,7 +58,7 @@ export default function AppNavigation({ items }: { items: { to: string; label: s
           </nav>
           <div className="mt-4 pt-3 border-t border-slate-100">
             <div className="text-sm font-medium break-words">{profile?.name ?? 'Signed in'}</div>
-            <div className="text-xs text-slate-500 capitalize mb-2">{profile?.role ?? 'staff'}</div>
+            <div className="text-xs text-slate-600 capitalize mb-2">{profile?.role ?? 'staff'}</div>
             <button onClick={() => void signOut()} className="btn-ghost w-full text-sm">Sign out</button>
           </div>
         </div>

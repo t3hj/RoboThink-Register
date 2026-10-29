@@ -379,7 +379,7 @@ export default function StudentProfile() {
           ) : undefined
         }
       />
-      <Link to="/students" className="text-sm text-slate-500 hover:underline">← Back to students</Link>
+      <Link to="/students" className="text-sm text-slate-600 hover:underline">← Back to students</Link>
 
       {!student.current_lesson_id && (
         <StartingLessonCard studentId={student.id} studentName={student.full_name} onDone={() => void load()} />
@@ -389,17 +389,17 @@ export default function StudentProfile() {
       <section className="card card-accent-top p-5 my-5" style={{ ['--accent-color' as string]: 'var(--rt-blue)' }}>
         <div className="grid sm:grid-cols-2 gap-5">
           <div>
-            <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Current lesson</div>
+            <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Current lesson</div>
             <div className="text-xl font-bold text-[color:var(--rt-ink)]">
               {progress?.current_lesson_number != null
                 ? `${levelLabel({ name: progress.level_name ?? '' })} — Lesson ${progress.current_lesson_number}`
                 : 'Curriculum complete'}
             </div>
             {progress?.current_lesson_title && (
-              <div className="text-sm text-slate-500 mt-0.5">{progress.current_lesson_title}</div>
+              <div className="text-sm text-slate-600 mt-0.5">{progress.current_lesson_title}</div>
             )}
             {lastOverride && (
-              <div className="mt-2 inline-flex items-center gap-1.5 text-xs bg-[color:var(--rt-blue-tint)] text-[color:var(--rt-blue)] rounded-full px-2.5 py-1">
+              <div className="mt-2 inline-flex items-center gap-1.5 text-xs bg-[color:var(--rt-blue-tint)] text-[color:var(--rt-link)] rounded-full px-2.5 py-1">
                 <span aria-hidden>✎</span>
                 Manually set by {lastOverride.profiles?.name ?? 'an admin'} on {formatShortDate(lastOverride.created_at)}
                 {lastOverride.reason ? `: "${lastOverride.reason}"` : ''}
@@ -407,13 +407,13 @@ export default function StudentProfile() {
             )}
           </div>
           <div>
-            <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Next lesson</div>
+            <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Next lesson</div>
             <div className="text-xl font-semibold text-slate-600">
               {progress?.next_lesson_number != null
                 ? `${levelLabel({ name: progress.level_name ?? '' })} — Lesson ${progress.next_lesson_number}`
                 : '—'}
             </div>
-            {progress?.next_lesson_title && <div className="text-sm text-slate-500 mt-0.5">{progress.next_lesson_title}</div>}
+            {progress?.next_lesson_title && <div className="text-sm text-slate-600 mt-0.5">{progress.next_lesson_title}</div>}
           </div>
         </div>
         {(role === 'admin' || role === 'instructor') && (
@@ -466,7 +466,7 @@ export default function StudentProfile() {
         />
         <StatCard value={absent} label="Absences" tone={absent > 2 ? 'bad' : undefined} />
       </div>
-      <p className="-mt-3 mb-5 text-xs text-slate-500">
+      <p className="-mt-3 mb-5 text-xs text-slate-600">
         Assessments and project sessions count toward attendance, but not toward curriculum lesson completion or lesson progression.
       </p>
 
@@ -476,14 +476,14 @@ export default function StudentProfile() {
         <div className="card p-4">
           <h3 className="font-semibold mb-3">Details</h3>
           <dl className="text-sm space-y-2">
-            <div><dt className="text-slate-500">Centre</dt><dd>{student.centres?.name ?? 'Centre unavailable'}</dd></div>
-            {(role === 'admin' || role === 'management') && <div><dt className="text-slate-500">Date of birth</dt><dd>{student.date_of_birth ? formatDisplayDate(student.date_of_birth) : '—'}</dd></div>}
-            <div><dt className="text-slate-500">Parent</dt><dd>{student.parent_name ?? '—'}</dd></div>
-            {(role === 'admin' || role === 'management') && <div><dt className="text-slate-500">Contact</dt><dd>{student.parent_contact ?? '—'}</dd></div>}
-            <div><dt className="text-slate-500">Subscription</dt><dd>{student.subscriptions?.name ?? '—'}</dd></div>
-            <div><dt className="text-slate-500">Joined</dt><dd>{student.date_joined ? formatDisplayDate(student.date_joined) : '—'}</dd></div>
+            <div><dt className="text-slate-600">Centre</dt><dd>{student.centres?.name ?? 'Centre unavailable'}</dd></div>
+            {(role === 'admin' || role === 'management') && <div><dt className="text-slate-600">Date of birth</dt><dd>{student.date_of_birth ? formatDisplayDate(student.date_of_birth) : '—'}</dd></div>}
+            <div><dt className="text-slate-600">Parent</dt><dd>{student.parent_name ?? '—'}</dd></div>
+            {(role === 'admin' || role === 'management') && <div><dt className="text-slate-600">Contact</dt><dd>{student.parent_contact ?? '—'}</dd></div>}
+            <div><dt className="text-slate-600">Subscription</dt><dd>{student.subscriptions?.name ?? '—'}</dd></div>
+            <div><dt className="text-slate-600">Joined</dt><dd>{student.date_joined ? formatDisplayDate(student.date_joined) : '—'}</dd></div>
             {student.notes && (
-              <div><dt className="text-slate-500">Notes</dt><dd className="whitespace-pre-wrap">{student.notes}</dd></div>
+              <div><dt className="text-slate-600">Notes</dt><dd className="whitespace-pre-wrap">{student.notes}</dd></div>
             )}
           </dl>
         </div>
@@ -500,11 +500,11 @@ export default function StudentProfile() {
               }}>+ Add session</button>
             )}
           </div>
-          <p className="text-xs text-slate-500 mb-3">Learning history lists curriculum lessons, assessment results and remediation. Recorded sessions below shows each visit, including assessment and project sessions.</p>
+          <p className="text-xs text-slate-600 mb-3">Learning history lists curriculum lessons, assessment results and remediation. Recorded sessions below shows each visit, including assessment and project sessions.</p>
           {(assessments.length > 0 || remediationLessons.length > 0) && (
             <>
               <h4 className="font-medium mb-2">Assessments & remediation</h4>
-              <p className="text-xs text-slate-400 mb-2">The latest curriculum assessment can be corrected here before remediation sessions or a later assessment depend on it.</p>
+              <p className="text-xs text-slate-600 mb-2">The latest curriculum assessment can be corrected here before remediation sessions or a later assessment depend on it.</p>
               <ul className="divide-y divide-slate-100">
                 {assessments.map((a) => {
                   const point = assessmentPoints.find((item) => item.id === a.assessment_point_id)
@@ -517,13 +517,13 @@ export default function StudentProfile() {
                         <span className={`font-medium ${a.passed ? 'text-emerald-700' : 'text-rose-700'}`}>
                           {a.passed ? 'PASS' : 'FAIL'}
                         </span>
-                        <span className="text-slate-500"> · {assessmentLesson ? `Assessment ${assessmentLesson.lesson_number}: ${assessmentLesson.title}` : a.type} · attempt {a.attempt_number}</span>
+                        <span className="text-slate-600"> · {assessmentLesson ? `Assessment ${assessmentLesson.lesson_number}: ${assessmentLesson.title}` : a.type} · attempt {a.attempt_number}</span>
                       </div>
                       <div className="flex items-center justify-end gap-3 text-xs">
-                        <span className="text-slate-500 sm:whitespace-nowrap sm:text-right">{formatShortDate(a.date)} · {a.profiles?.name ?? 'Unassigned'}</span>
+                        <span className="text-slate-600 sm:whitespace-nowrap sm:text-right">{formatShortDate(a.date)} · {a.profiles?.name ?? 'Unassigned'}</span>
                         {(role === 'admin' || role === 'instructor') && isCurriculumSession && isLatestAssessment && (
                           <button
-                            className="text-[color:var(--rt-blue)] hover:underline"
+                            className="text-[color:var(--rt-link)] hover:underline"
                             onClick={() => openAssessmentHistoryEditor(a)}
                           >Edit</button>
                         )}
@@ -535,9 +535,9 @@ export default function StudentProfile() {
                   <li key={r.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
                     <div>
                       <span className="font-medium">Remediation lesson {r.lesson_number}</span>
-                      {r.topic && <span className="text-slate-500"> · {r.topic}</span>}
+                      {r.topic && <span className="text-slate-600"> · {r.topic}</span>}
                     </div>
-                    <div className="text-slate-500 text-xs sm:whitespace-nowrap sm:text-right">
+                    <div className="text-slate-600 text-xs sm:whitespace-nowrap sm:text-right">
                       {formatShortDate(r.date)} · {r.profiles?.name ?? 'Unassigned'}
                     </div>
                   </li>
@@ -553,16 +553,16 @@ export default function StudentProfile() {
                 <li key={l.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
                   <div className="min-w-0">
                     <span className="font-medium">Lesson {l.lesson_number}{l.lessons?.title ? `: ${l.lessons.title}` : ''}</span>
-                    <span className="text-slate-500"> · {l.levels?.name ?? `Level ${l.level_id}`}</span>
+                    <span className="text-slate-600"> · {l.levels?.name ?? `Level ${l.level_id}`}</span>
                     {l.status !== 'completed' && <span className="badge ml-2">Not finished</span>}
                   </div>
                   <div className="flex items-center justify-end gap-3 text-xs">
-                    <span className="text-slate-500 sm:whitespace-nowrap sm:text-right">{formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}</span>
+                    <span className="text-slate-600 sm:whitespace-nowrap sm:text-right">{formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}</span>
                     {(role === 'admin' || role === 'instructor') && (
                       <div className="flex items-center gap-3 shrink-0">
-                        <button className="text-[color:var(--rt-blue)] hover:underline" onClick={() => setLessonEdit({ id: l.id, date: l.date, lessonId: l.lesson_id ?? curriculumLessons.find((lesson) => lesson.level_id === l.level_id && lesson.lesson_number === l.lesson_number)?.id ?? '', outcome: l.status === 'completed' ? 'completed' : 'not_finished' })}>Edit</button>
+                        <button className="text-[color:var(--rt-link)] hover:underline" onClick={() => setLessonEdit({ id: l.id, date: l.date, lessonId: l.lesson_id ?? curriculumLessons.find((lesson) => lesson.level_id === l.level_id && lesson.lesson_number === l.lesson_number)?.id ?? '', outcome: l.status === 'completed' ? 'completed' : 'not_finished' })}>Edit</button>
                         <button
-                          className="text-[color:var(--rt-blue)] hover:underline"
+                          className="text-[color:var(--rt-link)] hover:underline"
                           onClick={() => setAssessmentHistoryEdit({
                             kind: 'convert',
                             id: l.id,
@@ -581,9 +581,9 @@ export default function StudentProfile() {
           )}
 
           <h4 className="font-medium mt-5 mb-2">Recorded sessions</h4>
-          <p className="text-xs text-slate-500 mb-2">Assessment results are shown in Learning history above. Assessment and remediation sessions cannot be removed here. Removing other sessions also removes linked feedback; attendance for that date remains marked as attended.</p>
+          <p className="text-xs text-slate-600 mb-2">Assessment results are shown in Learning history above. Assessment and remediation sessions cannot be removed here. Removing other sessions also removes linked feedback; attendance for that date remains marked as attended.</p>
           {historySessions.length === 0 ? (
-            <p className="text-sm text-slate-400">No session entries recorded yet.</p>
+            <p className="text-sm text-slate-600">No session entries recorded yet.</p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {historySessions.map((session) => {
@@ -598,13 +598,13 @@ export default function StudentProfile() {
                   <li key={session.id} className="py-2 flex items-center justify-between gap-3 text-sm">
                     <div className="min-w-0">
                       <span className="font-medium">{title}</span>
-                      <span className="text-slate-500"> · session {session.session_number} · {formatShortDate(session.date)}</span>
+                      <span className="text-slate-600"> · session {session.session_number} · {formatShortDate(session.date)}</span>
                       {linkedAssessment && <span className="badge ml-2">Assessment session</span>}
                       {session.outcome === 'not_finished' && <span className="badge ml-2">Not finished</span>}
                     </div>
                     {(role === 'admin' || role === 'instructor') && (
                       assessmentOrRemediation
-                        ? <span className="text-xs text-slate-400">Protected record</span>
+                        ? <span className="text-xs text-slate-600">Protected record</span>
                         : <button className="text-xs text-rose-700 hover:underline" disabled={removeSessionId === session.id} onClick={() => void removeHistorySession(session)}>{removeSessionId === session.id ? 'Removing…' : 'Remove'}</button>
                     )}
                   </li>
@@ -626,10 +626,10 @@ export default function StudentProfile() {
                     <div>
                       <span className="font-medium">{lessonNum != null ? `Lesson ${lessonNum}` : 'Lesson'}</span>
                       {f.attended_sessions && f.attended_sessions.session_number > 1 && (
-                        <span className="text-slate-400"> · session {f.attended_sessions.session_number}</span>
+                        <span className="text-slate-600"> · session {f.attended_sessions.session_number}</span>
                       )}
                       {f.attended_sessions?.outcome === 'not_finished' && <span className="badge ml-1">Not finished</span>}
-                      {sessionDate && <span className="text-slate-500 text-xs"> · {formatShortDate(sessionDate)}</span>}
+                      {sessionDate && <span className="text-slate-600 text-xs"> · {formatShortDate(sessionDate)}</span>}
                     </div>
                     {f.status === 'given' ? (
                       <span className="badge">Given</span>
@@ -647,13 +647,13 @@ export default function StudentProfile() {
             <EmptyState title="No attendance recorded yet" />
           ) : (
             <>
-              <p className="text-sm text-slate-500 mb-3">
+              <p className="text-sm text-slate-600 mb-3">
                 Scheduled: {describeSlots(student, formatTime12h) || '—'}{student.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}
                 {attendancePercentage(attendance) != null && <> · {attendancePercentage(attendance)}% attendance</>}
               </p>
               {groupAttendanceByMonth(classifyAttendance(attendance)).map(({ month, rows }) => (
                 <div key={month} className="mb-4">
-                  <div className="text-xs uppercase tracking-wide text-slate-400 mb-1.5">{month}</div>
+                  <div className="text-xs uppercase tracking-wide text-slate-600 mb-1.5">{month}</div>
                   <ul className="divide-y divide-slate-100">
                     {rows.map((a) => (
                       <li key={a.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
@@ -664,7 +664,7 @@ export default function StudentProfile() {
                           {a.kind === 'made_up' && <span className="badge bg-[color:var(--rt-green-tint)] text-emerald-800">Made up</span>}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500">{a.time_in ?? '–'} → {a.time_out ?? '–'}</span>
+                          <span className="text-xs text-slate-600">{a.time_in ?? '–'} → {a.time_out ?? '–'}</span>
                           <StatusBadge status={a.status} />
                         </div>
                       </li>
@@ -681,16 +681,16 @@ export default function StudentProfile() {
         <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={() => !lessonEditBusy && setLessonEdit(null)}>
           <div className="card p-5 max-w-lg w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Edit lesson history">
             <h3 className="font-semibold mb-1">Edit lesson history</h3>
-            <p className="text-sm text-slate-500 mb-4">Changing this entry also updates its linked session, so register history and progression stay in sync.</p>
+            <p className="text-sm text-slate-600 mb-4">Changing this entry also updates its linked session, so register history and progression stay in sync.</p>
             <div className="space-y-3">
-              <label className="block text-sm"><span className="block text-slate-500 mb-1">Date</span><input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.date} onChange={(event) => setLessonEdit({ ...lessonEdit, date: event.target.value })} disabled={lessonEditBusy} /></label>
+              <label className="block text-sm"><span className="block text-slate-600 mb-1">Date</span><input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.date} onChange={(event) => setLessonEdit({ ...lessonEdit, date: event.target.value })} disabled={lessonEditBusy} /></label>
               <label className="block text-sm">
-                <span className="block text-slate-500 mb-1">Lesson</span>
+                <span className="block text-slate-600 mb-1">Lesson</span>
                 <select className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.lessonId} onChange={(event) => setLessonEdit({ ...lessonEdit, lessonId: event.target.value })} disabled={lessonEditBusy}>
                   {levels.map((level) => <optgroup key={level.id} label={level.name}>{curriculumLessons.filter((lesson) => lesson.level_id === level.id && lesson.lesson_kind === 'normal').sort((a, b) => a.lesson_number - b.lesson_number).map((lesson) => <option key={lesson.id} value={lesson.id}>Lesson {lesson.lesson_number}: {lesson.title}</option>)}</optgroup>)}
                 </select>
               </label>
-              <label className="block text-sm"><span className="block text-slate-500 mb-1">Outcome</span><select className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.outcome} onChange={(event) => setLessonEdit({ ...lessonEdit, outcome: event.target.value as 'completed' | 'not_finished' })} disabled={lessonEditBusy}><option value="completed">Completed</option><option value="not_finished">Not finished</option></select></label>
+              <label className="block text-sm"><span className="block text-slate-600 mb-1">Outcome</span><select className="w-full p-2 border border-slate-200 rounded-lg" value={lessonEdit.outcome} onChange={(event) => setLessonEdit({ ...lessonEdit, outcome: event.target.value as 'completed' | 'not_finished' })} disabled={lessonEditBusy}><option value="completed">Completed</option><option value="not_finished">Not finished</option></select></label>
             </div>
             <div className="flex justify-end gap-2 mt-5"><button className="btn-ghost" onClick={() => setLessonEdit(null)} disabled={lessonEditBusy}>Cancel</button><button className="btn-primary" onClick={() => void saveLessonHistoryEdit()} disabled={lessonEditBusy || !lessonEdit.date || !lessonEdit.lessonId}>{lessonEditBusy ? 'Saving…' : 'Save changes'}</button></div>
           </div>
@@ -701,15 +701,15 @@ export default function StudentProfile() {
         <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={() => !assessmentHistoryBusy && setAssessmentHistoryEdit(null)}>
           <div className="card p-5 max-w-lg w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={assessmentHistoryEdit.kind === 'convert' ? 'Convert lesson to assessment' : 'Edit assessment history'}>
             <h3 className="font-semibold mb-1">{assessmentHistoryEdit.kind === 'convert' ? 'Convert lesson to assessment' : 'Correct assessment history'}</h3>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-slate-600 mb-4">
               {assessmentHistoryEdit.kind === 'convert'
                 ? 'This replaces the normal lesson record with an assessment session, preserving the date and linked feedback.'
                 : 'This updates the assessment and its linked session. Edits are blocked after remediation sessions or later assessments depend on this attempt.'}
             </p>
             <div className="space-y-3">
-              <label className="block text-sm"><span className="block text-slate-500 mb-1">Date</span><input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={assessmentHistoryEdit.date} onChange={(event) => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, date: event.target.value })} disabled={assessmentHistoryBusy} /></label>
+              <label className="block text-sm"><span className="block text-slate-600 mb-1">Date</span><input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={assessmentHistoryEdit.date} onChange={(event) => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, date: event.target.value })} disabled={assessmentHistoryBusy} /></label>
               <label className="block text-sm">
-                <span className="block text-slate-500 mb-1">Assessment</span>
+                <span className="block text-slate-600 mb-1">Assessment</span>
                 <select className="w-full p-2 border border-slate-200 rounded-lg" value={assessmentHistoryEdit.lessonId} onChange={(event) => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, lessonId: event.target.value })} disabled={assessmentHistoryBusy}>
                   <option value="">Choose an assessment</option>
                   {levels.map((level) => {
@@ -725,7 +725,7 @@ export default function StudentProfile() {
                 </select>
               </label>
               <fieldset className="text-sm">
-                <legend className="block text-slate-500 mb-1">Result</legend>
+                <legend className="block text-slate-600 mb-1">Result</legend>
                 <div className="flex gap-2">
                   {(['PASS', 'FAIL'] as const).map((result) => (
                     <button key={result} type="button" className={`flex-1 px-3 py-2 rounded-lg font-medium ${assessmentHistoryEdit.result === result ? result === 'PASS' ? 'btn-primary' : 'bg-rose-600 text-white' : 'btn-ghost'}`} onClick={() => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, result, remediationPath: assessmentHistoryEdit.remediationPath || 'remediation_lessons' })} disabled={assessmentHistoryBusy}>{result}</button>
@@ -763,16 +763,16 @@ export default function StudentProfile() {
         <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={() => !addSessionBusy && setAddSessionOpen(false)}>
           <div className="card p-5 max-w-lg w-full" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add lesson session">
             <h3 className="font-semibold mb-1">Add lesson session</h3>
-            <p className="text-sm text-slate-500 mb-4">This records a session and feedback entry. A completed lesson can update lesson progression.</p>
+            <p className="text-sm text-slate-600 mb-4">This records a session and feedback entry. A completed lesson can update lesson progression.</p>
             <div className="space-y-3">
-              <label className="block text-sm"><span className="block text-slate-500 mb-1">Date</span><input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={historyAdd.date} onChange={(event) => setHistoryAdd({ ...historyAdd, date: event.target.value })} disabled={addSessionBusy} /></label>
+              <label className="block text-sm"><span className="block text-slate-600 mb-1">Date</span><input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={historyAdd.date} onChange={(event) => setHistoryAdd({ ...historyAdd, date: event.target.value })} disabled={addSessionBusy} /></label>
               <label className="block text-sm">
-                <span className="block text-slate-500 mb-1">Lesson</span>
+                <span className="block text-slate-600 mb-1">Lesson</span>
                 <select className="w-full p-2 border border-slate-200 rounded-lg" value={historyAdd.lessonId} onChange={(event) => setHistoryAdd({ ...historyAdd, lessonId: event.target.value })} disabled={addSessionBusy}>
                   {levels.map((level) => <optgroup key={level.id} label={level.name}>{curriculumLessons.filter((lesson) => lesson.level_id === level.id && lesson.lesson_kind === 'normal').sort((a, b) => a.lesson_number - b.lesson_number).map((lesson) => <option key={lesson.id} value={lesson.id}>Lesson {lesson.lesson_number}: {lesson.title}</option>)}</optgroup>)}
                 </select>
               </label>
-              <label className="block text-sm"><span className="block text-slate-500 mb-1">Outcome</span><select className="w-full p-2 border border-slate-200 rounded-lg" value={historyAdd.outcome} onChange={(event) => setHistoryAdd({ ...historyAdd, outcome: event.target.value as 'completed' | 'not_finished' })} disabled={addSessionBusy}><option value="completed">Completed</option><option value="not_finished">Not finished</option></select></label>
+              <label className="block text-sm"><span className="block text-slate-600 mb-1">Outcome</span><select className="w-full p-2 border border-slate-200 rounded-lg" value={historyAdd.outcome} onChange={(event) => setHistoryAdd({ ...historyAdd, outcome: event.target.value as 'completed' | 'not_finished' })} disabled={addSessionBusy}><option value="completed">Completed</option><option value="not_finished">Not finished</option></select></label>
             </div>
             <div className="flex justify-end gap-2 mt-5"><button className="btn-ghost" onClick={() => setAddSessionOpen(false)} disabled={addSessionBusy}>Cancel</button><button className="btn-primary" onClick={() => void saveAddedLessonSession()} disabled={addSessionBusy || !historyAdd.date || !historyAdd.lessonId}>{addSessionBusy ? 'Saving…' : 'Add session'}</button></div>
           </div>
@@ -799,7 +799,7 @@ export default function StudentProfile() {
             </p>
             <div className="space-y-3">
               <label className="block text-sm">
-                <span className="block text-slate-500 mb-1">Destination centre</span>
+                <span className="block text-slate-600 mb-1">Destination centre</span>
                 <select className="w-full p-2 border border-slate-200 rounded-lg" value={transferCentreId} onChange={(event) => setTransferCentreId(event.target.value)} disabled={transferBusy}>
                   <option value="">— Choose an active centre —</option>
                   {activeCentres.filter((centre) => centre.id !== student.centre_id).map((centre) => (
@@ -808,7 +808,7 @@ export default function StudentProfile() {
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="block text-slate-500 mb-1">Effective date</span>
+                <span className="block text-slate-600 mb-1">Effective date</span>
                 <input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={transferDate} onChange={(event) => setTransferDate(event.target.value)} disabled={transferBusy} required />
               </label>
             </div>

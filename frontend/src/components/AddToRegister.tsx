@@ -96,7 +96,7 @@ export default function AddToRegister({ date, dayLabel, excludeIds, onAdded, onC
     <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose} dismissible={!busy}>
       <div className="card p-5 max-w-md w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add student to today's register">
         <h3 className="font-semibold mb-1">Add to today's register</h3>
-        <p className="text-xs text-slate-500 mb-4">Their normal day/time won't change — this only adds today's session.</p>
+        <p className="text-xs text-slate-600 mb-4">Their normal day/time won't change — this only adds today's session.</p>
 
         {!selected ? (
           <>
@@ -110,9 +110,9 @@ export default function AddToRegister({ date, dayLabel, excludeIds, onAdded, onC
               aria-label="Search students"
             />
             {loading ? (
-              <div className="text-sm text-slate-400 py-4 text-center">Loading students…</div>
+              <div className="text-sm text-slate-600 py-4 text-center">Loading students…</div>
             ) : results.length === 0 ? (
-              <div className="text-sm text-slate-400 py-4 text-center">No matching students.</div>
+              <div className="text-sm text-slate-600 py-4 text-center">No matching students.</div>
             ) : (
               <ul className="max-h-64 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-lg">
                 {results.map((s) => (
@@ -122,7 +122,7 @@ export default function AddToRegister({ date, dayLabel, excludeIds, onAdded, onC
                       onClick={() => setSelected(s)}
                     >
                       {s.full_name}
-                      <span className="text-slate-400"> · {s.preferred_day ?? 'no set day'}</span>
+                      <span className="text-slate-600"> · {s.preferred_day ?? 'no set day'}</span>
                     </button>
                   </li>
                 ))}
@@ -133,10 +133,10 @@ export default function AddToRegister({ date, dayLabel, excludeIds, onAdded, onC
           <>
             <div className="mb-3 flex items-center justify-between bg-slate-50 rounded-lg p-2.5">
               <span className="font-medium text-sm">{selected.full_name}</span>
-              <button className="text-xs text-slate-500 hover:underline" onClick={() => setSelected(null)}>Change</button>
+              <button className="text-xs text-slate-600 hover:underline" onClick={() => setSelected(null)}>Change</button>
             </div>
             <fieldset className="mb-4">
-              <legend className="text-sm text-slate-500 mb-1.5">Reason</legend>
+              <legend className="text-sm text-slate-600 mb-1.5">Reason</legend>
               <div className="space-y-1.5">
                 {REASONS.map((r) => (
                   <label key={r.value} className="flex items-start gap-2 text-sm p-2 border border-slate-200 rounded-lg has-[:checked]:border-[color:var(--rt-blue)] has-[:checked]:bg-[color:var(--rt-blue-tint)] cursor-pointer">
@@ -150,7 +150,7 @@ export default function AddToRegister({ date, dayLabel, excludeIds, onAdded, onC
                     />
                     <span>
                       <span className="font-medium block">{r.label}</span>
-                      <span className="text-xs text-slate-500">{r.hint}</span>
+                      <span className="text-xs text-slate-600">{r.hint}</span>
                     </span>
                   </label>
                 ))}

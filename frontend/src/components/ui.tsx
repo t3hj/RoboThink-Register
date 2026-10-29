@@ -39,7 +39,7 @@ export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: ()
       <div className="text-rose-700 font-medium mb-1">Something went wrong</div>
       <div className="text-sm text-rose-600 mb-3">{friendly}</div>
       {friendly !== message && (
-        <details className="text-xs text-rose-400 mb-3">
+        <details className="text-xs text-rose-700 mb-3">
           <summary className="cursor-pointer select-none">Technical details</summary>
           <div className="mt-1 font-mono">{message}</div>
         </details>
@@ -55,7 +55,7 @@ export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: ()
 
 export function LoadingPanel({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div className="card p-8 text-center text-slate-500" role="status" aria-live="polite">
+    <div className="card p-8 text-center text-slate-600" role="status" aria-live="polite">
       <div className="inline-block w-6 h-6 border-2 border-slate-300 border-t-[color:var(--rt-primary)] rounded-full animate-spin mb-3" />
       <div className="text-sm">{label}</div>
     </div>
@@ -71,7 +71,7 @@ export function EmptyState({ title, hint, robot }: { title: string; hint?: strin
         </div>
       )}
       <div className="font-medium text-slate-700 mb-1">{title}</div>
-      {hint && <div className="text-sm text-slate-500">{hint}</div>}
+      {hint && <div className="text-sm text-slate-600">{hint}</div>}
     </div>
   )
 }
@@ -106,7 +106,7 @@ export function PageHeader({
     >
       <div>
         <h1 className="text-2xl font-semibold">{title}</h1>
-        {subtitle && <div className="text-sm text-slate-500 mt-0.5">{subtitle}</div>}
+        {subtitle && <div className="text-sm text-slate-600 mt-0.5">{subtitle}</div>}
       </div>
       {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
     </div>
@@ -123,7 +123,7 @@ export function StatCard({ value, label, tone }: { value: React.ReactNode; label
   return (
     <div className="card card-accent-top p-4 text-center" style={{ '--accent-color': accent } as React.CSSProperties}>
       <div className={`text-3xl font-bold tabular-nums ${toneClass}`}>{value}</div>
-      <div className="text-sm text-slate-500 mt-1">{label}</div>
+      <div className="text-sm text-slate-600 mt-1">{label}</div>
     </div>
   )
 }

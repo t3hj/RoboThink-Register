@@ -79,7 +79,7 @@ export default function ChangeLessonControl({ studentId, levels, lessons, curren
         disabled={busy}
       />
       <label className="text-sm block mt-3">
-        <span className="block text-slate-500 mb-1">Reason (required)</span>
+        <span className="block text-slate-600 mb-1">Reason (required)</span>
         <input
           type="text"
           className="w-full p-2 border border-slate-200 rounded-lg text-sm"

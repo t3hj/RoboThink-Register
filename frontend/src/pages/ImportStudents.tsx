@@ -206,7 +206,7 @@ export default function ImportStudents() {
       <section className="card p-4 mb-5">
         <div className="grid sm:grid-cols-2 gap-4">
           <label className="text-sm block">
-            <span className="block text-slate-500 mb-1">1. Which venue is this register for?</span>
+            <span className="block text-slate-600 mb-1">1. Which venue is this register for?</span>
             <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={centreId} onChange={(e) => setCentreId(e.target.value)} disabled={busy}>
               <option value="">— Choose a centre —</option>
               {activeCentres.map((c) => (
@@ -215,11 +215,11 @@ export default function ImportStudents() {
             </select>
           </label>
           <label className="text-sm block">
-            <span className="block text-slate-500 mb-1">2. Pebble register (.xlsx)</span>
+            <span className="block text-slate-600 mb-1">2. Pebble register (.xlsx)</span>
             <input type="file" accept=".xlsx" className="w-full text-sm" onChange={(e) => void onFile(e.target.files?.[0])} disabled={busy || !centreId} />
           </label>
         </div>
-        <p className="text-xs text-slate-500 mt-3">
+        <p className="text-xs text-slate-600 mt-3">
           The file is read in your browser and is not uploaded. Only the child’s name, date of birth, mobile, email and
           ticket type are used. Medical, SEN, photo permission, year group, marketing opt-in and everything else in the
           file is ignored.
@@ -232,32 +232,32 @@ export default function ImportStudents() {
         <>
           <section className="card p-4 mb-5">
             <h2 className="font-semibold mb-1">3. Check the session</h2>
-            <p className="text-xs text-slate-500 mb-3">
+            <p className="text-xs text-slate-600 mb-3">
               {fileName}{parsed.meta.activity ? ` · ${parsed.meta.activity}` : ''}. Each student gets this weekly session. Correct it if the file is wrong.
             </p>
             <div className="grid grid-cols-2 gap-3 max-w-md">
               <label className="text-sm block">
-                <span className="block text-slate-500 mb-1">Day</span>
+                <span className="block text-slate-600 mb-1">Day</span>
                 <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy}>
                   <option value="">None</option>
                   {DAYS.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
               </label>
               <label className="text-sm block">
-                <span className="block text-slate-500 mb-1">Start time</span>
+                <span className="block text-slate-600 mb-1">Start time</span>
                 <input type="time" className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={time} onChange={(e) => setTime(e.target.value)} disabled={busy} />
               </label>
             </div>
             {!slot?.time && <p className="text-xs text-amber-700 mt-2">Without a day and time, students are added but won’t appear on any register until you set their sessions.</p>}
             {parsed.ignoredColumns.length > 0 && (
-              <p className="text-xs text-slate-500 mt-3">Not imported: {parsed.ignoredColumns.join(', ')}.</p>
+              <p className="text-xs text-slate-600 mt-3">Not imported: {parsed.ignoredColumns.join(', ')}.</p>
             )}
           </section>
 
           {creates.length > 0 && (
             <section className="card p-4 mb-5">
               <h2 className="font-semibold mb-1">4. Match tickets to subscriptions</h2>
-              <p className="text-xs text-slate-500 mb-3">Only needed for new students.</p>
+              <p className="text-xs text-slate-600 mb-3">Only needed for new students.</p>
               <div className="space-y-2">
                 {tickets.map((t) => (
                   <label key={t} className="text-sm grid sm:grid-cols-2 gap-2 items-center">
@@ -275,7 +275,7 @@ export default function ImportStudents() {
           <section className="card p-4 mb-5">
             <h2 className="font-semibold mb-3">Preview</h2>
             {!existing ? (
-              <div className="text-sm text-slate-400">Checking existing students…</div>
+              <div className="text-sm text-slate-600">Checking existing students…</div>
             ) : plans.length === 0 ? (
               <EmptyState title="No students found" />
             ) : (
@@ -291,7 +291,7 @@ export default function ImportStudents() {
                     <li key={p.row.rowNumber} className="py-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
                         <span className="font-medium">{p.row.name}</span>
-                        <span className="text-xs text-slate-500"> · {p.row.ticket ?? 'no ticket'}</span>
+                        <span className="text-xs text-slate-600"> · {p.row.ticket ?? 'no ticket'}</span>
                         {(p.reason || p.row.warnings.length > 0) && (
                           <div className="text-xs text-amber-700">{[p.reason, ...p.row.warnings].filter(Boolean).join(' · ')}</div>
                         )}

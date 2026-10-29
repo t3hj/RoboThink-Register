@@ -110,13 +110,13 @@ export default function StudentProjectsPanel({
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
           <h3 className="font-semibold">Projects</h3>
-          <p className="text-xs text-slate-500">Track independent work alongside this student’s lessons.</p>
+          <p className="text-xs text-slate-600">Track independent work alongside this student’s lessons.</p>
         </div>
         <button className="btn-ghost text-sm" onClick={openNew}>Add project</button>
       </div>
 
       {projects.length === 0 ? (
-        <p className="text-sm text-slate-500">No projects recorded yet.</p>
+        <p className="text-sm text-slate-600">No projects recorded yet.</p>
       ) : (
         <ul className="divide-y divide-slate-100">
           {projects.map((project) => (
@@ -127,7 +127,7 @@ export default function StudentProjectsPanel({
                   <span className="badge">{statuses.find((status) => status.value === project.status)?.label ?? project.status}</span>
                 </div>
                 {project.description && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{project.description}</p>}
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-600 mt-1">
                   Started {formatDisplayDate(project.start_date)}
                   {project.target_end_date ? ` · Target ${formatDisplayDate(project.target_end_date)}` : ''}
                   {project.completed_date ? ` · Completed ${formatDisplayDate(project.completed_date)}` : ''}
@@ -146,30 +146,30 @@ export default function StudentProjectsPanel({
         <form className="mt-4 pt-4 border-t border-slate-100 space-y-3" onSubmit={(event) => void save(event)}>
           <h4 className="font-medium">{editing === 'new' ? 'Add project' : 'Edit project'}</h4>
           <label className="block text-sm">
-            <span className="block text-slate-500 mb-1">Project name</span>
+            <span className="block text-slate-600 mb-1">Project name</span>
             <input className="w-full p-2 border border-slate-200 rounded-lg" value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required />
           </label>
           <label className="block text-sm">
-            <span className="block text-slate-500 mb-1">Description</span>
+            <span className="block text-slate-600 mb-1">Description</span>
             <textarea className="w-full p-2 border border-slate-200 rounded-lg" rows={3} value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} />
           </label>
           <div className="grid sm:grid-cols-2 gap-3">
             <label className="block text-sm">
-              <span className="block text-slate-500 mb-1">Start date</span>
+              <span className="block text-slate-600 mb-1">Start date</span>
               <input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={values.startDate} onChange={(event) => setValues({ ...values, startDate: event.target.value })} required />
             </label>
             <label className="block text-sm">
-              <span className="block text-slate-500 mb-1">Target end date</span>
+              <span className="block text-slate-600 mb-1">Target end date</span>
               <input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={values.targetEndDate} onChange={(event) => setValues({ ...values, targetEndDate: event.target.value })} min={values.startDate} />
             </label>
             <label className="block text-sm">
-              <span className="block text-slate-500 mb-1">Status</span>
+              <span className="block text-slate-600 mb-1">Status</span>
               <select className="w-full p-2 border border-slate-200 rounded-lg" value={values.status} onChange={(event) => setValues({ ...values, status: event.target.value as StudentProjectStatus })}>
                 {statuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
               </select>
             </label>
             <label className="block text-sm">
-              <span className="block text-slate-500 mb-1">Completion date</span>
+              <span className="block text-slate-600 mb-1">Completion date</span>
               <input type="date" className="w-full p-2 border border-slate-200 rounded-lg" value={values.completedDate} onChange={(event) => setValues({ ...values, completedDate: event.target.value })} min={values.startDate} />
             </label>
           </div>

@@ -79,15 +79,15 @@ export default function Curriculum() {
                         aria-expanded={open}
                       >
                         <div>
-                          <h3 className={`font-semibold ${open ? 'text-[color:var(--rt-blue)]' : ''}`}>{term ? `Term ${term}` : level.name}</h3>
-                          <div className="text-xs text-slate-500">{level.lessons.length} lessons</div>
+                          <h3 className={`font-semibold ${open ? 'text-[color:var(--rt-link)]' : ''}`}>{term ? `Term ${term}` : level.name}</h3>
+                          <div className="text-xs text-slate-600">{level.lessons.length} lessons</div>
                         </div>
-                        <span className="text-slate-400" aria-hidden>{open ? '▾' : '▸'}</span>
+                        <span className="text-slate-600" aria-hidden>{open ? '▾' : '▸'}</span>
                       </button>
                       {open && (
                         <div className="border-t border-slate-100">
                           {level.lessons.length === 0 ? (
-                            <div className="p-4 text-sm text-slate-500">No lessons defined for this level yet.</div>
+                            <div className="p-4 text-sm text-slate-600">No lessons defined for this level yet.</div>
                           ) : (
                             <ol className="divide-y divide-slate-100">
                               {level.lessons.map((lesson) => (
@@ -105,8 +105,8 @@ export default function Curriculum() {
                                     {lesson.objectives && (
                                       <div className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap">{lesson.objectives}</div>
                                     )}
-                                    {lesson.materials && <div className="text-xs text-slate-500 mt-1">Materials: {lesson.materials}</div>}
-                                    {lesson.notes && <div className="text-xs text-slate-400 mt-1 whitespace-pre-wrap">{lesson.notes}</div>}
+                                    {lesson.materials && <div className="text-xs text-slate-600 mt-1">Materials: {lesson.materials}</div>}
+                                    {lesson.notes && <div className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{lesson.notes}</div>}
                                   </div>
                                 </li>
                               ))}

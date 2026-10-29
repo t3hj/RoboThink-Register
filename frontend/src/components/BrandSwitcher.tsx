@@ -11,7 +11,7 @@ export default function BrandSwitcher() {
 
   return (
     <div className="brand-switcher mb-4" role="group" aria-label="Switch organisation">
-      <span className="block text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">Organisation</span>
+      <span className="block text-[10px] uppercase tracking-wider font-semibold text-slate-600 mb-1.5">Organisation</span>
       <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
         {BRANDS.map((brand) => (
           <button

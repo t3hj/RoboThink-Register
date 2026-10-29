@@ -452,11 +452,11 @@ export default function Register() {
             <option value="missing_details">Missing session details</option>
           </select>
           {(query || statusFilter !== 'all') && <button className="btn-ghost" onClick={() => { setQuery(''); setStatusFilter('all') }}>Clear filters</button>}
-          <span className="text-xs text-slate-500" role="status">Showing {visibleRoster.length} of {roster.length}</span>
+          <span className="text-xs text-slate-600" role="status">Showing {visibleRoster.length} of {roster.length}</span>
         </div>
       </section>
 
-      {loading && <p className="mb-3 text-sm text-slate-500" role="status">Updating register… Your unfinished entries are kept.</p>}
+      {loading && <p className="mb-3 text-sm text-slate-600" role="status">Updating register… Your unfinished entries are kept.</p>}
       {error && (
         <div className="mb-4">
           <p className="mb-2 text-sm text-slate-600">The register could not refresh. Your unfinished entries are still here; retry to see the latest saved records.</p>
@@ -476,7 +476,7 @@ export default function Register() {
           <summary className="cursor-pointer select-none">
             {offWeek.length} fortnightly student{offWeek.length === 1 ? ' is' : 's are'} off this week
           </summary>
-          <p className="mt-2 text-slate-500">
+          <p className="mt-2 text-slate-600">
             {offWeek.map((s) => s.full_name).join(', ')}. They are not counted as absent. If one turns up anyway, use
             “+ Add to register”.
           </p>
@@ -484,7 +484,7 @@ export default function Register() {
       )}
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <span className="badge bg-[color:var(--rt-blue-tint)] text-[color:var(--rt-blue)]" aria-label="Register completeness">
+        <span className="badge bg-[color:var(--rt-blue-tint)] text-[color:var(--rt-link)]" aria-label="Register completeness">
           {completeness.recorded} / {completeness.total} recorded
         </span>
         {completeness.notEntered > 0 && (
@@ -514,7 +514,7 @@ export default function Register() {
                 {' — use build '}
                 <strong>{s.mostRecentSession?.left_aside_identifier}</strong>
                 {' to finish the lesson'}
-                {s.mostRecentSession?.date && <span className="text-slate-400"> (left {formatShortDate(s.mostRecentSession.date)})</span>}
+                {s.mostRecentSession?.date && <span className="text-slate-600"> (left {formatShortDate(s.mostRecentSession.date)})</span>}
               </li>
             ))}
           </ul>
@@ -546,7 +546,7 @@ export default function Register() {
 
       {visibleRoster.length > 0 && (
         <div className="flex items-center gap-2 mb-3 px-1">
-          <label className="flex items-center gap-1.5 text-sm text-slate-500">
+          <label className="flex items-center gap-1.5 text-sm text-slate-600">
             <input
               type="checkbox"
               aria-label="Select all visible students"
@@ -572,8 +572,8 @@ export default function Register() {
         <div className="flex flex-col gap-4">
           {timeGroups.map(([time, entries]) => (
             <div key={time || 'no-time'} className={entries.some((student) => visibleIds.has(student.id)) ? '' : 'hidden'}>
-              <h3 className="text-sm font-semibold text-slate-500 mb-2 px-1">
-                {formatTime12h(time)} <span className="text-slate-400 font-normal">· {entries.filter((student) => visibleIds.has(student.id)).length} shown</span>
+              <h3 className="text-sm font-semibold text-slate-600 mb-2 px-1">
+                {formatTime12h(time)} <span className="text-slate-600 font-normal">· {entries.filter((student) => visibleIds.has(student.id)).length} shown</span>
               </h3>
               <div className="card divide-y divide-slate-100">
                 {entries.map((s) => {
@@ -611,7 +611,7 @@ export default function Register() {
                               )}
                             </div>
                             <p className="mt-0.5 text-sm text-slate-700 break-words">{expected ? `Lesson ${expected.lesson_number} — ${expected.title}` : 'No recommended lesson set'}</p>
-                            <div className="mt-1 text-xs text-slate-500 flex items-center flex-wrap gap-x-2 gap-y-1">
+                            <div className="mt-1 text-xs text-slate-600 flex items-center flex-wrap gap-x-2 gap-y-1">
                               <span>{levelLabel({ name: levels.find((level) => level.id === expected?.level_id)?.name ?? s.progress?.level_name ?? s.levels?.name ?? '—' })}</span>
                               <SubscriptionBadge subscriptionId={s.subscription_id} />
                             </div>

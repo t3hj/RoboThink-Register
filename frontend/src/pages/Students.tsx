@@ -164,7 +164,7 @@ export default function Students() {
                   <div className="font-medium truncate">{s.full_name}</div>
                   <span className={`badge ${s.active ? 'badge-arrived' : 'badge-absent'}`}>{s.active ? 'Active' : 'Inactive'}</span>
                 </div>
-                <div className="text-sm text-slate-500">
+                <div className="text-sm text-slate-600">
                   {s.centres?.name ?? 'Centre unavailable'} ·{' '}
                   {s.progress ? levelLabel({ name: s.progress.level_name ?? '' }) : s.levels?.name ?? '—'}
                   {s.progress?.current_lesson_number != null ? ` · Lesson ${s.progress.current_lesson_number}` : ''}
@@ -176,10 +176,10 @@ export default function Students() {
                     <div className="progress-fill" style={{ width: `${pct}%` }} />
                   </div>
                 )}
-                <div className="text-sm text-slate-500">{describeSlots(s, formatTime12h) || '—'}{s.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}</div>
+                <div className="text-sm text-slate-600">{describeSlots(s, formatTime12h) || '—'}{s.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}</div>
                 <div className="mt-auto flex items-center justify-between">
                   <SubscriptionBadge subscriptionId={s.subscription_id} />
-                  <span className="text-xs text-slate-400">{s.parent_name}</span>
+                  <span className="text-xs text-slate-600">{s.parent_name}</span>
                 </div>
               </Link>
             )

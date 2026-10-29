@@ -124,7 +124,7 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
     <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose} dismissible={!busy}>
       <div className="card p-5 max-w-lg w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <h3 className="font-semibold mb-1">{title}</h3>
-        <p className="text-xs text-slate-500 mb-3">
+        <p className="text-xs text-slate-600 mb-3">
           Records a new session for each Attended student selected — existing sessions are never edited by this.
         </p>
 
@@ -137,7 +137,7 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
                   {(['recommended', 'nearby', 'all'] as const).map((scope) => (
                     <button
                       key={scope}
-                      className={`min-h-9 px-2.5 py-1 rounded-full ${lessonScope === scope ? 'bg-[color:var(--rt-blue)] text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
+                      className={`min-h-9 px-2.5 py-1 rounded-full ${lessonScope === scope ? 'bg-[color:var(--rt-blue)] text-white' : 'bg-white border border-slate-200 text-slate-600'}`}
                       onClick={() => setLessonScope(scope)}
                     >
                       {scope === 'recommended' ? 'Recommended' : scope === 'nearby' ? 'Nearby' : 'All lessons'}
@@ -151,7 +151,7 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
                   onClick={() => setLessonId(recommendedLesson.id)}
                 >
                   Lesson {recommendedLesson.lesson_number}: {recommendedLesson.title}
-                  <span className="block text-xs text-slate-500">Most common current lesson among selected students</span>
+                  <span className="block text-xs text-slate-600">Most common current lesson among selected students</span>
                 </button>
               )}
               {lessonScope === 'nearby' && (
@@ -195,7 +195,7 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
             {outcome === 'not_finished' && (
               <div className="bg-slate-50 rounded-lg p-2.5">
                 <label className="text-sm block mb-2">
-                  <span className="block text-slate-500 mb-1">Reason (applies to anyone left aside below)</span>
+                  <span className="block text-slate-600 mb-1">Reason (applies to anyone left aside below)</span>
                   <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={reason} onChange={(e) => setReason(e.target.value as LeftAsideReason)}>
                     <option value="">— Choose —</option>
                     {NOT_FINISHED_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
@@ -203,11 +203,11 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
                 </label>
                 {reason === 'other' && (
                   <label className="text-sm block mb-2">
-                    <span className="block text-slate-500 mb-1">Note</span>
+                    <span className="block text-slate-600 mb-1">Note</span>
                     <input type="text" className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={note} onChange={(e) => setNote(e.target.value)} />
                   </label>
                 )}
-                <div className="text-xs text-slate-500 mb-1.5">Build/laptop left aside — set individually per student:</div>
+                <div className="text-xs text-slate-600 mb-1.5">Build/laptop left aside — set individually per student:</div>
                 <ul className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
                   {eligible.map((c) => {
                     const la = studentLeftAside(c.id)
@@ -234,7 +234,7 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
             )}
 
             {selectedLesson && (
-              <p className="text-xs text-slate-500">Selected: Lesson {selectedLesson.lesson_number}: {selectedLesson.title}</p>
+              <p className="text-xs text-slate-600">Selected: Lesson {selectedLesson.lesson_number}: {selectedLesson.title}</p>
             )}
           </div>
         )}
@@ -251,7 +251,7 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
                     return (
                       <li key={c.id}>
                         {c.full_name}
-                        {la?.leftAside && <span className="text-slate-400"> — build {la.identifier} left aside</span>}
+                        {la?.leftAside && <span className="text-slate-600"> — build {la.identifier} left aside</span>}
                       </li>
                     )
                   })}
@@ -261,7 +261,7 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
             {skipped.length > 0 && (
               <div>
                 <div className="text-sm font-medium mb-1">{skipped.length} will be skipped</div>
-                <ul className="text-sm text-slate-500 max-h-32 overflow-y-auto">
+                <ul className="text-sm text-slate-600 max-h-32 overflow-y-auto">
                   {skipped.map(({ candidate, reason: r }) => <li key={candidate.id}>{candidate.full_name} — {r}</li>)}
                 </ul>
               </div>

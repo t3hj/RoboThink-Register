@@ -50,12 +50,12 @@ export default function StartingLessonCard({ studentId, studentName, onDone }: P
   return (
     <section className="card card-accent-top p-5 my-5" style={{ ['--accent-color' as string]: 'var(--rt-yellow)' }}>
       <h2 className="text-lg font-semibold">Choose {studentName}’s starting lesson</h2>
-      <p className="text-sm text-slate-500 mb-3">
+      <p className="text-sm text-slate-600 mb-3">
         This student has no lesson yet. Pick the level and lesson they are on now. After this, their lesson moves on
         automatically as you record sessions.
       </p>
       {levels.length === 0 ? (
-        <div className="text-sm text-slate-400">Loading curriculum…</div>
+        <div className="text-sm text-slate-600">Loading curriculum…</div>
       ) : (
         <LevelLessonPicker
           levels={levels}

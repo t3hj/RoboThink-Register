@@ -40,7 +40,7 @@ export default function Auth() {
           <div className="mb-5">
             <RoboThinkLogo className="w-52 max-w-full" />
             <h1 className="text-xl font-semibold mt-3">Register &amp; Progress</h1>
-            <p className="text-sm text-slate-500">Staff sign-in</p>
+            <p className="text-sm text-slate-600">Staff sign-in</p>
           </div>
           <MascotCrew className="mb-6 rounded-xl bg-slate-50 p-3" />
           {!supabaseConfigured && (
@@ -62,7 +62,7 @@ export default function Auth() {
                 onChange={(e) => setEmail(e.target.value)}
               />
             </label>
-            <p id="sign-in-help" className="text-sm text-slate-500">Use your staff email. We’ll send you a secure sign-in link; no password is needed.</p>
+            <p id="sign-in-help" className="text-sm text-slate-600">Use your staff email. We’ll send you a secure sign-in link; no password is needed.</p>
             <button type="submit" disabled={sending || !supabaseConfigured} className="btn-primary w-full">
               {sending ? 'Sending…' : 'Send sign-in link'}
             </button>
@@ -72,7 +72,7 @@ export default function Auth() {
               {message}
             </p>
           )}
-          <p className="mt-6 text-xs text-slate-400">
+          <p className="mt-6 text-xs text-slate-600">
             Access is restricted to authorised staff. If you need access or cannot sign in, please contact your administrator.
           </p>
         </div>

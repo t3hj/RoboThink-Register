@@ -338,14 +338,14 @@ export default function SessionEntryRow({
           Attended
         </button>
         <button
-          className={`text-sm px-3 py-2 rounded-lg font-medium min-w-[5.5rem] ${state === 'absent' ? 'bg-[color:var(--rt-red)] text-white' : 'btn-ghost'}`}
+          className={`text-sm px-3 py-2 rounded-lg font-medium min-w-[5.5rem] ${state === 'absent' ? 'bg-[color:var(--rt-danger)] text-white' : 'btn-ghost'}`}
           disabled={busy}
           aria-pressed={state === 'absent'}
           onClick={() => void markAbsent()}
         >
           Absent
         </button>
-        {state === 'not_entered' && <span className="text-xs text-slate-400">Not entered yet</span>}
+        {state === 'not_entered' && <span className="text-xs text-slate-600">Not entered yet</span>}
       </div>
 
       {(state === 'attended' || sessionsToday.length > 0 || draft != null) && (
@@ -369,11 +369,11 @@ export default function SessionEntryRow({
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div>
                     <span className="font-medium">Session {s.session_number}</span>
-                    <span className="text-slate-500"> · {s.project_id && !lesson ? `Project: ${projects.find((project) => project.id === s.project_id)?.name ?? 'Project'}` : lesson ? `${requiresAssessmentResult(lesson) ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
+                    <span className="text-slate-600"> · {s.project_id && !lesson ? `Project: ${projects.find((project) => project.id === s.project_id)?.name ?? 'Project'}` : lesson ? `${requiresAssessmentResult(lesson) ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
                     {s.outcome === 'not_finished' && !requiresAssessmentResult(lesson) && <span className="badge ml-1.5">Not finished</span>}
                     {s.left_aside && <span className="badge badge-assess ml-1.5">Build {s.left_aside_identifier} left aside</span>}
                   </div>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
                     <span>Project</span>
                     <select
                       className="p-1.5 border border-slate-200 rounded-md bg-white text-slate-700"
@@ -393,7 +393,7 @@ export default function SessionEntryRow({
                       ? <span className="badge">Not finished</span>
                       : <span className="badge badge-assess">{s.assessment_records?.[0]?.result ?? 'No result saved'}</span>
                   ) : (
-                    <button className="text-xs text-slate-500 hover:underline" onClick={() => {
+                    <button className="text-xs text-slate-600 hover:underline" onClick={() => {
                       if (editingSessionId === s.id) { setDraft(null); setEditingSessionId(null) }
                       else startEdit(s)
                     }}>
@@ -432,7 +432,7 @@ export default function SessionEntryRow({
           {activeDraft.activity === 'project' && (
             <>
               <label className="block text-sm">
-                <span className="block text-slate-500 mb-1">Project worked on</span>
+                <span className="block text-slate-600 mb-1">Project worked on</span>
                 <select className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white" value={activeDraft.projectId} onChange={(event) => setDraft({ ...activeDraft, projectId: event.target.value })}>
                   <option value="">— Choose an active project —</option>
                   {draftProjects.filter((project) => project.status === 'active' || project.id === activeDraft.projectId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
@@ -456,7 +456,7 @@ export default function SessionEntryRow({
                 {(['recommended', 'nearby', 'all'] as const).map((scope) => (
                   <button
                     key={scope}
-                    className={`min-h-9 px-2.5 py-1 rounded-full ${lessonScope === scope ? 'bg-[color:var(--rt-blue)] text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
+                    className={`min-h-9 px-2.5 py-1 rounded-full ${lessonScope === scope ? 'bg-[color:var(--rt-primary)] text-white' : 'bg-white border border-slate-200 text-slate-600'}`}
                     onClick={() => setLessonScope(scope)}
                   >
                     {scope === 'recommended' ? 'Recommended' : scope === 'nearby' ? 'Nearby' : 'All lessons'}
@@ -467,7 +467,7 @@ export default function SessionEntryRow({
 
             {draftProjects.length > 0 && (
               <label className="block mb-2 text-sm">
-                <span className="block text-xs text-slate-500 mb-1">Project worked on in this session</span>
+                <span className="block text-xs text-slate-600 mb-1">Project worked on in this session</span>
                 <select
                   className="w-full p-2 border border-slate-200 rounded-lg text-sm bg-white"
                   value={activeDraft.projectId}
@@ -485,12 +485,12 @@ export default function SessionEntryRow({
                 onClick={() => setDraft({ ...activeDraft, lessonId: recommendedLesson.id, assessmentResult: '', remediationPath: '' })}
               >
                 {requiresAssessmentResult(recommendedLesson) ? 'Assessment' : 'Lesson'} {recommendedLesson.lesson_number}: {recommendedLesson.title}
-                <span className="block text-xs text-slate-500">Student's current expected lesson</span>
+                <span className="block text-xs text-slate-600">Student's current expected lesson</span>
               </button>
             )}
 
             {lessonScope === 'recommended' && !recommendedLesson && expectedLesson === null && (
-              <p className="text-xs text-slate-500">No next curriculum lesson is available from the recorded history. Choose All lessons to record a catch-up or correction.</p>
+              <p className="text-xs text-slate-600">No next curriculum lesson is available from the recorded history. Choose All lessons to record a catch-up or correction.</p>
             )}
 
             {lessonScope === 'nearby' && (
@@ -643,7 +643,7 @@ export default function SessionEntryRow({
               {activeDraft.leftAside && (
                 <div className="flex flex-col gap-2">
                   <label className="text-sm block">
-                    <span className="block text-slate-500 mb-1">Identifier</span>
+                    <span className="block text-slate-600 mb-1">Identifier</span>
                     <input
                       type="text"
                       placeholder="e.g. B12, Laptop 7, 23"
@@ -653,7 +653,7 @@ export default function SessionEntryRow({
                     />
                   </label>
                   <label className="text-sm block">
-                    <span className="block text-slate-500 mb-1">Reason</span>
+                    <span className="block text-slate-600 mb-1">Reason</span>
                     <select
                       className="w-full p-2 border border-slate-200 rounded-lg text-sm"
                       value={activeDraft.reason}
@@ -667,7 +667,7 @@ export default function SessionEntryRow({
                   </label>
                   {activeDraft.reason === 'other' && (
                     <label className="text-sm block">
-                      <span className="block text-slate-500 mb-1">Note</span>
+                      <span className="block text-slate-600 mb-1">Note</span>
                       <input
                         type="text"
                         className="w-full p-2 border border-slate-200 rounded-lg text-sm"

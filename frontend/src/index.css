@@ -17,6 +17,8 @@
   --rt-blue-tint: #e1eafd;
 
   --rt-primary: var(--rt-blue);
+  --rt-link: #1d4ed8;
+  --rt-danger: #b91c1c;
   --rt-ink: #182238;
   --rt-ink-soft: #4b5568;
   --rt-paper: #f6f3ec;
@@ -33,6 +35,7 @@
   --rt-blue: #4f9a8b;
   --rt-blue-tint: #e0f0ec;
   --rt-primary: #627f25;
+  --rt-link: #28665b;
   --rt-paper: #f7faf1;
   --cq-gradient: linear-gradient(135deg, #87b65f 0%, #649e9a 100%);
 }
@@ -249,3 +252,6 @@ input, select, textarea {
 }
 
 [data-brand='creative_iq'] .brand-stripe { background: linear-gradient(90deg, #87b65f, #649e9a 60%, var(--rt-yellow)); }
+
+/* Placeholder hints remain readable against the white form-control surface. */
+input::placeholder, textarea::placeholder { color: #64748b; opacity: 1; }

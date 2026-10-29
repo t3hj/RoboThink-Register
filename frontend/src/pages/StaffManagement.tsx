@@ -132,7 +132,7 @@ export default function StaffManagement() {
 
       <section className="card p-4 mb-5">
         <h2 className="font-semibold mb-1">Centres and venues</h2>
-        <p className="text-xs text-slate-500 mb-3">Adding here places the venue under {BRAND_LABELS[activeBrand]}.</p>
+        <p className="text-xs text-slate-600 mb-3">Adding here places the venue under {BRAND_LABELS[activeBrand]}.</p>
         <form className="flex gap-2 mb-4" onSubmit={(event) => { event.preventDefault(); void addCentre() }}>
           <input className="flex-1 p-2 border border-slate-200 rounded-lg text-sm" placeholder="New centre or venue name" value={newCentreName} onChange={(event) => setNewCentreName(event.target.value)} disabled={savingId === 'new-centre'} />
           <button className="btn-primary" type="submit" disabled={savingId === 'new-centre' || !newCentreName.trim()}>Add venue</button>
@@ -143,7 +143,7 @@ export default function StaffManagement() {
               <div key={centre.id} className="py-2 flex items-center justify-between gap-3">
                 <div>
                   <div className="font-medium text-sm">{centre.name}</div>
-                  <div className="text-xs text-slate-500">{centre.active ? 'Active' : 'Inactive'}</div>
+                  <div className="text-xs text-slate-600">{centre.active ? 'Active' : 'Inactive'}</div>
                 </div>
                 <button className="btn-ghost text-sm" onClick={() => void toggleCentre(centre)} disabled={savingId === centre.id}>
                   {centre.active ? 'Deactivate' : 'Activate'}
@@ -187,7 +187,7 @@ export default function StaffManagement() {
           <div key={p.id} className="p-3 flex items-center justify-between gap-3 flex-wrap">
             <div>
               <div className="font-medium text-sm">{p.name}</div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-slate-600">
                 {p.email ?? '—'}{!p.auth_id && <span className="ml-1.5">(no login — historical/seed record)</span>}
               </div>
             </div>

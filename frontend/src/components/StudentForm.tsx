@@ -194,12 +194,12 @@ export default function StudentForm({ student, prefill, onClose, onSaved }: Prop
 
         <div className="space-y-3">
           <label className="text-sm block">
-            <span className="block text-slate-500 mb-1">Student name</span>
+            <span className="block text-slate-600 mb-1">Student name</span>
             <input className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={busy} autoFocus />
           </label>
 
           <label className="text-sm block">
-            <span className="block text-slate-500 mb-1">Subscription</span>
+            <span className="block text-slate-600 mb-1">Subscription</span>
             <select
               className="w-full p-2 border border-slate-200 rounded-lg text-sm"
               value={subscriptionId}
@@ -214,7 +214,7 @@ export default function StudentForm({ student, prefill, onClose, onSaved }: Prop
           </label>
 
           <label className="text-sm block">
-            <span className="block text-slate-500 mb-1">Centre</span>
+            <span className="block text-slate-600 mb-1">Centre</span>
             {isEdit ? (
               <div className="p-2 bg-slate-50 rounded-lg text-slate-700">{student?.centres?.name ?? 'Centre unavailable'}</div>
             ) : (
@@ -237,7 +237,7 @@ export default function StudentForm({ student, prefill, onClose, onSaved }: Prop
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="text-sm block">
-              <span className="block text-slate-500 mb-1">How often</span>
+              <span className="block text-slate-600 mb-1">How often</span>
               <select
                 className="w-full p-2 border border-slate-200 rounded-lg text-sm"
                 value={pattern}
@@ -254,27 +254,27 @@ export default function StudentForm({ student, prefill, onClose, onSaved }: Prop
             </label>
             {pattern === 'fortnightly' && (
               <label className="text-sm block">
-                <span className="block text-slate-500 mb-1">A week they attend (any date in it)</span>
+                <span className="block text-slate-600 mb-1">A week they attend (any date in it)</span>
                 <input type="date" className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={anchor} onChange={(e) => setAnchor(e.target.value)} disabled={busy} />
               </label>
             )}
           </div>
           {pattern === 'fortnightly' && (
-            <p className="text-xs text-slate-500 -mt-1">
+            <p className="text-xs text-slate-600 -mt-1">
               They show on the register every second week from that date and are not counted absent in their off weeks.
               If they come for two sessions in their on week, add both under Weekly sessions.
             </p>
           )}
 
           <label className="text-sm block">
-            <span className="block text-slate-500 mb-1">Date joined</span>
+            <span className="block text-slate-600 mb-1">Date joined</span>
             <input type="date" className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={joined} onChange={(e) => setJoined(e.target.value)} disabled={busy} />
           </label>
 
           <div>
-            <span className="block text-slate-500 text-sm mb-1">{isEdit ? 'Level' : 'Level & starting lesson'}</span>
+            <span className="block text-slate-600 text-sm mb-1">{isEdit ? 'Level' : 'Level & starting lesson'}</span>
             {loadingCurriculum ? (
-              <div className="text-sm text-slate-400">Loading curriculum…</div>
+              <div className="text-sm text-slate-600">Loading curriculum…</div>
             ) : isEdit ? (
               <div className="text-sm text-slate-600 bg-slate-50 rounded-lg p-2">
                 Use "Change current lesson" on the student's page to move them — this form only sets the level on creation.
@@ -295,7 +295,7 @@ export default function StudentForm({ student, prefill, onClose, onSaved }: Prop
           </div>
 
           <label className="text-sm block">
-            <span className="block text-slate-500 mb-1">Notes <span className="text-slate-400">(optional)</span></span>
+            <span className="block text-slate-600 mb-1">Notes <span className="text-slate-600">(optional)</span></span>
             <textarea className="w-full p-2 border border-slate-200 rounded-lg text-sm" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} />
           </label>
 

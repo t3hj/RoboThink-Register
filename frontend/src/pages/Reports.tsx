@@ -136,7 +136,7 @@ export default function Reports() {
     <li key={label} className="py-1.5 text-sm">
       <div className="flex justify-between mb-0.5">
         <span className="truncate">{label}</span>
-        <span className="text-slate-500 ml-2 shrink-0">{count}</span>
+        <span className="text-slate-600 ml-2 shrink-0">{count}</span>
       </div>
       <div className="h-1.5 bg-slate-100 rounded-full">
         <div
@@ -160,7 +160,7 @@ export default function Reports() {
 
       <div className="flex flex-wrap items-end gap-2 mb-6">
         <label className="text-sm">
-          <span className="block text-slate-500 mb-1">Period</span>
+          <span className="block text-slate-600 mb-1">Period</span>
           <select
             value={range}
             onChange={(e) => setRange(e.target.value as Range)}
@@ -175,17 +175,17 @@ export default function Reports() {
         {range === 'custom' && (
           <>
             <label className="text-sm">
-              <span className="block text-slate-500 mb-1">From</span>
+              <span className="block text-slate-600 mb-1">From</span>
               <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="p-2 border border-slate-200 rounded-lg text-sm" />
             </label>
             <label className="text-sm">
-              <span className="block text-slate-500 mb-1">To</span>
+              <span className="block text-slate-600 mb-1">To</span>
               <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="p-2 border border-slate-200 rounded-lg text-sm" />
             </label>
           </>
         )}
         <label className="text-sm">
-          <span className="block text-slate-500 mb-1">Student</span>
+          <span className="block text-slate-600 mb-1">Student</span>
           <select
             value={studentFilter}
             onChange={(e) => setStudentFilter(e.target.value)}

@@ -24,7 +24,7 @@ export default function LessonsToday({ roster, levels }: { roster: RosterLike[];
 
   return (
     <CollapsiblePanel title="Lessons to be done today" countLabel={`${programmes.reduce((count, programme) => count + programme.groups.length, 0)} folders${projects.length ? ` · ${projects.length} projects` : ''}`} accent="yellow">
-      <p className="text-xs text-slate-500 mb-3">Pull these lesson folders before the session starts.</p>
+      <p className="text-xs text-slate-600 mb-3">Pull these lesson folders before the session starts.</p>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
         {programmes.map(({ programme, groups: programmeGroups }) => {
           return (
@@ -36,12 +36,12 @@ export default function LessonsToday({ roster, levels }: { roster: RosterLike[];
                 const showTermHeader = term != null && term !== prevTerm
                 return (
                   <div key={`${g.levelId}-${g.lessonNumber}`} className="mt-1.5">
-                    {showTermHeader && <div className="text-xs text-slate-400 mt-1.5 first:mt-0">Term {term}</div>}
+                    {showTermHeader && <div className="text-xs text-slate-600 mt-1.5 first:mt-0">Term {term}</div>}
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-medium">
                         Lesson {g.lessonNumber}{g.lessonTitle ? ` — ${g.lessonTitle}` : ''}
                       </span>
-                      <span className="text-xs text-slate-400">· {g.students.length} student{g.students.length === 1 ? '' : 's'}</span>
+                      <span className="text-xs text-slate-600">· {g.students.length} student{g.students.length === 1 ? '' : 's'}</span>
                     </div>
                     <ul className="ml-1 text-sm text-slate-600">
                       {g.students.map((st) => (

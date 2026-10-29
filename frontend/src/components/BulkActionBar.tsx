@@ -28,8 +28,8 @@ export default function BulkActionBar({
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="font-medium text-sm">{count} student{count === 1 ? '' : 's'} selected</span>
         <div className="flex gap-2">
-          <button className="text-xs text-slate-500 hover:underline" onClick={onSelectAll}>Select all</button>
-          <button className="text-xs text-slate-500 hover:underline" onClick={onClear}>Clear</button>
+          <button className="text-xs text-slate-600 hover:underline" onClick={onSelectAll}>Select all</button>
+          <button className="text-xs text-slate-600 hover:underline" onClick={onClear}>Clear</button>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">

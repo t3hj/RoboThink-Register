@@ -216,7 +216,7 @@ export default function ManagementDashboard() {
         <StatCard value={todayStats.newToday.length} label="New students today" />
       </div>
       {todayStats.newToday.length > 0 && (
-        <p className="text-sm text-slate-500 -mt-4 mb-6">
+        <p className="text-sm text-slate-600 -mt-4 mb-6">
           First time today: {todayStats.newToday.map((s) => s.full_name).join(', ')}
         </p>
       )}
@@ -225,7 +225,7 @@ export default function ManagementDashboard() {
         <section className="card p-4">
           <h3 className="font-semibold mb-3">Did not attend today</h3>
           {todayStats.didNotAttend.length === 0 ? (
-            <p className="text-sm text-slate-400">Everyone expected today has arrived.</p>
+            <p className="text-sm text-slate-600">Everyone expected today has arrived.</p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {todayStats.didNotAttend.map((s) => (
@@ -239,7 +239,7 @@ export default function ManagementDashboard() {
         <section className="card p-4">
           <h3 className="font-semibold mb-3">Catch-up / special sessions today</h3>
           {todayStats.catchUpStudents.length === 0 ? (
-            <p className="text-sm text-slate-400">None today.</p>
+            <p className="text-sm text-slate-600">None today.</p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {todayStats.catchUpStudents.map((s) => (
@@ -255,9 +255,9 @@ export default function ManagementDashboard() {
       <h2 className="text-lg font-semibold mb-3">Scheduled by session time</h2>
       <div className="grid md:grid-cols-2 gap-6 mb-6">
         <section className="card p-4">
-          <h3 className="font-semibold mb-3 text-sm text-slate-500 uppercase tracking-wide">Weekday</h3>
+          <h3 className="font-semibold mb-3 text-sm text-slate-600 uppercase tracking-wide">Weekday</h3>
           {sessionBreakdown.weekday.length === 0 ? (
-            <p className="text-sm text-slate-400">No weekday schedules set.</p>
+            <p className="text-sm text-slate-600">No weekday schedules set.</p>
           ) : (
             <ul className="space-y-2">
               {sessionBreakdown.weekday.map((b) => (
@@ -270,9 +270,9 @@ export default function ManagementDashboard() {
           )}
         </section>
         <section className="card p-4">
-          <h3 className="font-semibold mb-3 text-sm text-slate-500 uppercase tracking-wide">Weekend</h3>
+          <h3 className="font-semibold mb-3 text-sm text-slate-600 uppercase tracking-wide">Weekend</h3>
           {sessionBreakdown.weekend.length === 0 ? (
-            <p className="text-sm text-slate-400">No weekend schedules set.</p>
+            <p className="text-sm text-slate-600">No weekend schedules set.</p>
           ) : (
             <ul className="space-y-2">
               {sessionBreakdown.weekend.map((b) => (
@@ -290,24 +290,24 @@ export default function ManagementDashboard() {
         <section className="card p-4">
           <h3 className="font-semibold mb-3">This week</h3>
           <dl className="text-sm space-y-1.5">
-            <div className="flex justify-between"><dt className="text-slate-500">Expected sessions</dt><dd className="font-medium">{week.expected} {delta(week.expected, prevWeek.expected)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Attended</dt><dd className="font-medium">{week.attended} {delta(week.attended, prevWeek.attended)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Missed</dt><dd className="font-medium">{week.missed} {delta(week.missed, prevWeek.missed)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Attendance %</dt><dd className="font-medium">{week.pct == null ? '—' : `${week.pct}%`} {delta(week.pct, prevWeek.pct)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Catch-up sessions</dt><dd className="font-medium">{week.catchUp} {delta(week.catchUp, prevWeek.catchUp)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Active students</dt><dd className="font-medium">{active.length}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Expected sessions</dt><dd className="font-medium">{week.expected} {delta(week.expected, prevWeek.expected)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Attended</dt><dd className="font-medium">{week.attended} {delta(week.attended, prevWeek.attended)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Missed</dt><dd className="font-medium">{week.missed} {delta(week.missed, prevWeek.missed)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Attendance %</dt><dd className="font-medium">{week.pct == null ? '—' : `${week.pct}%`} {delta(week.pct, prevWeek.pct)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Catch-up sessions</dt><dd className="font-medium">{week.catchUp} {delta(week.catchUp, prevWeek.catchUp)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Active students</dt><dd className="font-medium">{active.length}</dd></div>
           </dl>
         </section>
 
         <section className="card p-4">
           <h3 className="font-semibold mb-3">This month</h3>
           <dl className="text-sm space-y-1.5">
-            <div className="flex justify-between"><dt className="text-slate-500">Total sessions</dt><dd className="font-medium">{month.attended + month.missed} {delta(month.attended + month.missed, prevMonth.attended + prevMonth.missed)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Attendance %</dt><dd className="font-medium">{month.pct == null ? '—' : `${month.pct}%`} {delta(month.pct, prevMonth.pct)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Missed</dt><dd className="font-medium">{month.missed} {delta(month.missed, prevMonth.missed)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Catch-up/special</dt><dd className="font-medium">{month.catchUp} {delta(month.catchUp, prevMonth.catchUp)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">New students</dt><dd className="font-medium">{newThisMonth} {delta(newThisMonth, newLastMonth)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-500">Appear to have stopped attending</dt><dd className="font-medium">{movement.longAbsent.length}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Total sessions</dt><dd className="font-medium">{month.attended + month.missed} {delta(month.attended + month.missed, prevMonth.attended + prevMonth.missed)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Attendance %</dt><dd className="font-medium">{month.pct == null ? '—' : `${month.pct}%`} {delta(month.pct, prevMonth.pct)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Missed</dt><dd className="font-medium">{month.missed} {delta(month.missed, prevMonth.missed)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Catch-up/special</dt><dd className="font-medium">{month.catchUp} {delta(month.catchUp, prevMonth.catchUp)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">New students</dt><dd className="font-medium">{newThisMonth} {delta(newThisMonth, newLastMonth)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Appear to have stopped attending</dt><dd className="font-medium">{movement.longAbsent.length}</dd></div>
           </dl>
         </section>
       </div>
@@ -315,19 +315,19 @@ export default function ManagementDashboard() {
       <div className="grid md:grid-cols-2 gap-6 mb-6">
         <section className="card p-4">
           <h3 className="font-semibold mb-3">Student movement</h3>
-          <div className="text-xs uppercase text-slate-400 mb-1">New (last 30 days) — {movement.newStudents.length}</div>
+          <div className="text-xs uppercase text-slate-600 mb-1">New (last 30 days) — {movement.newStudents.length}</div>
           {movement.newStudents.length === 0 ? (
-            <p className="text-sm text-slate-400 mb-3">None</p>
+            <p className="text-sm text-slate-600 mb-3">None</p>
           ) : (
             <ul className="text-sm mb-3">
               {movement.newStudents.slice(0, 8).map((s) => (
-                <li key={s.id}><Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link> <span className="text-slate-400">· joined {s.date_joined && formatShortDate(s.date_joined)}</span></li>
+                <li key={s.id}><Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link> <span className="text-slate-600">· joined {s.date_joined && formatShortDate(s.date_joined)}</span></li>
               ))}
             </ul>
           )}
-          <div className="text-xs uppercase text-slate-400 mb-1">Declining attendance — {movement.declining.length}</div>
+          <div className="text-xs uppercase text-slate-600 mb-1">Declining attendance — {movement.declining.length}</div>
           {movement.declining.length === 0 ? (
-            <p className="text-sm text-slate-400 mb-3">None</p>
+            <p className="text-sm text-slate-600 mb-3">None</p>
           ) : (
             <ul className="text-sm mb-3">
               {movement.declining.slice(0, 8).map((s) => (
@@ -335,9 +335,9 @@ export default function ManagementDashboard() {
               ))}
             </ul>
           )}
-          <div className="text-xs uppercase text-slate-400 mb-1">May have stopped attending — {movement.longAbsent.length}</div>
+          <div className="text-xs uppercase text-slate-600 mb-1">May have stopped attending — {movement.longAbsent.length}</div>
           {movement.longAbsent.length === 0 ? (
-            <p className="text-sm text-slate-400">None</p>
+            <p className="text-sm text-slate-600">None</p>
           ) : (
             <ul className="text-sm">
               {movement.longAbsent.slice(0, 8).map((s) => (
@@ -361,7 +361,7 @@ export default function ManagementDashboard() {
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div>
                       <Link to={`/students/${f.student_id}`} className="font-medium hover:underline">{f.students?.full_name ?? 'Student'}</Link>
-                      <span className="text-slate-500"> · {f.lessons_completed_in_block} lessons completed</span>
+                      <span className="text-slate-600"> · {f.lessons_completed_in_block} lessons completed</span>
                     </div>
                     {role === 'admin' ? (
                       <select
