@@ -77,6 +77,7 @@ export default function SessionEntryRow({
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   function reportError(message: string) { setActionError(message) }
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [lessonScope, setLessonScope] = useState<'recommended' | 'nearby' | 'all'>('recommended')
@@ -100,6 +101,7 @@ export default function SessionEntryRow({
   const activeDraft: Draft | null = draft ?? (showBlankFormAutomatically ? blankDraft(defaultLessonId) : null)
 
   function startDraft() {
+    setDetailsOpen(true)
     setActionError(null)
     setDraft(blankDraft(defaultLessonId))
     setEditingSessionId(null)
@@ -107,6 +109,7 @@ export default function SessionEntryRow({
   }
 
   function startEdit(session: AttendedSession) {
+    setDetailsOpen(true)
     setActionError(null)
     setEditingSessionId(session.id)
     setDraft({
@@ -152,7 +155,10 @@ export default function SessionEntryRow({
     setBusy(true)
     const ok = await upsertAttendance({ status: attendance?.status === 'Completed' ? 'Completed' : 'Arrived' })
     setBusy(false)
-    if (ok) onChanged()
+    if (ok) {
+      if (sessionsToday.length === 0) setDetailsOpen(true)
+      onChanged()
+    }
   }
 
   async function markAbsent() {
@@ -211,6 +217,7 @@ export default function SessionEntryRow({
       setBusy(false)
       setDraft(null)
       setEditingSessionId(null)
+      if (attendanceSaved) setDetailsOpen(false)
       notify(
         attendanceSaved
           ? editingSessionId ? 'Project session updated' : `Project session recorded for ${student.full_name}`
@@ -269,6 +276,7 @@ export default function SessionEntryRow({
     setBusy(false)
     setDraft(null)
     setEditingSessionId(null)
+    if (attendanceSaved) setDetailsOpen(false)
     notify(
       attendanceSaved
         ? requiresAssessmentResult(selectedForSave)
@@ -324,6 +332,7 @@ export default function SessionEntryRow({
         <button
           className={`text-sm px-3 py-2 rounded-lg font-medium min-w-[5.5rem] ${state === 'attended' ? 'btn-primary' : 'btn-ghost'}`}
           disabled={busy}
+          aria-pressed={state === 'attended'}
           onClick={() => void markAttended()}
         >
           Attended
@@ -331,6 +340,7 @@ export default function SessionEntryRow({
         <button
           className={`text-sm px-3 py-2 rounded-lg font-medium min-w-[5.5rem] ${state === 'absent' ? 'bg-[color:var(--rt-red)] text-white' : 'btn-ghost'}`}
           disabled={busy}
+          aria-pressed={state === 'absent'}
           onClick={() => void markAbsent()}
         >
           Absent
@@ -338,6 +348,16 @@ export default function SessionEntryRow({
         {state === 'not_entered' && <span className="text-xs text-slate-400">Not entered yet</span>}
       </div>
 
+      {(state === 'attended' || sessionsToday.length > 0 || draft != null) && (
+        <details className="group rounded-lg border border-slate-200" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
+          <summary className="flex cursor-pointer list-none items-center gap-2 p-2.5 text-sm [&::-webkit-details-marker]:hidden" aria-label={`Session details for ${student.full_name}`}>
+            <span className="flex-1 font-medium">Session details</span>
+            <span className={`badge ${draft || sessionsToday.length === 0 ? 'badge-assess' : ''}`}>
+              {draft ? 'Unsaved changes' : sessionsToday.length > 0 ? `${sessionsToday.length} recorded${sessionsToday.at(-1)?.outcome === 'not_finished' ? ' · not finished' : ''}` : 'Needs recording'}
+            </span>
+            <span className="text-slate-600 group-open:rotate-180" aria-hidden>⌄</span>
+          </summary>
+          <div className="flex flex-col gap-3 border-t border-slate-100 p-2.5 sm:p-3">
       {/* Existing sessions for this date */}
       {sessionsToday.length > 0 && (
         <ul className="flex flex-col gap-2">
@@ -373,7 +393,10 @@ export default function SessionEntryRow({
                       ? <span className="badge">Not finished</span>
                       : <span className="badge badge-assess">{s.assessment_records?.[0]?.result ?? 'No result saved'}</span>
                   ) : (
-                    <button className="text-xs text-slate-500 hover:underline" onClick={() => (editingSessionId === s.id ? setDraft(null) : startEdit(s))}>
+                    <button className="text-xs text-slate-500 hover:underline" onClick={() => {
+                      if (editingSessionId === s.id) { setDraft(null); setEditingSessionId(null) }
+                      else startEdit(s)
+                    }}>
                       {editingSessionId === s.id ? 'Cancel' : 'Edit'}
                     </button>
                   )}
@@ -667,6 +690,7 @@ export default function SessionEntryRow({
               onClick={() => {
                 setDraft(null)
                 setEditingSessionId(null)
+                setDetailsOpen(false)
               }}
             >
               Cancel
@@ -676,6 +700,9 @@ export default function SessionEntryRow({
             </BusyButton>
           </div>
         </div>
+      )}
+          </div>
+        </details>
       )}
     </div>
   )
