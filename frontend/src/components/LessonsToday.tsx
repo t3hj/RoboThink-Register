@@ -1,3 +1,4 @@
+import CollapsiblePanel from './CollapsiblePanel'
 import { Link } from 'react-router-dom'
 import type { Lesson, Level, StudentProgress } from '../types'
 import { groupLessonsToday, groupProjectsToday } from '../lib/lessonsToday'
@@ -22,10 +23,7 @@ export default function LessonsToday({ roster, levels }: { roster: RosterLike[];
   if (programmes.length === 0 && projects.length === 0) return null
 
   return (
-    <section className="card card-accent-top p-4 mb-5" style={{ ['--accent-color' as string]: 'var(--rt-yellow)' }}>
-      <h3 className="font-semibold mb-1 flex items-center gap-2">
-        <span aria-hidden>📁</span> Lessons to be done today
-      </h3>
+    <CollapsiblePanel title="Lessons to be done today" countLabel={`${programmes.reduce((count, programme) => count + programme.groups.length, 0)} folders${projects.length ? ` · ${projects.length} projects` : ''}`} accent="yellow">
       <p className="text-xs text-slate-500 mb-3">Pull these lesson folders before the session starts.</p>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
         {programmes.map(({ programme, groups: programmeGroups }) => {
@@ -76,6 +74,6 @@ export default function LessonsToday({ roster, levels }: { roster: RosterLike[];
           </div>
         </div>
       )}
-    </section>
+    </CollapsiblePanel>
   )
 }

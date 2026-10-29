@@ -11,7 +11,7 @@ import BulkActionBar from '../components/BulkActionBar'
 import BulkAttendanceModal from '../components/BulkAttendanceModal'
 import BulkSessionModal from '../components/BulkSessionModal'
 import BulkFeedbackModal from '../components/BulkFeedbackModal'
-import { RobotBadge } from '../components/RobotArt'
+import CollapsiblePanel from '../components/CollapsiblePanel'
 import { todayISO, dayName, formatDisplayDate, addDays, formatTime12h, formatShortDate } from '../lib/dates'
 import { levelLabel } from '../lib/curriculum'
 import { loadCurriculum } from '../lib/curriculumData'
@@ -506,10 +506,7 @@ export default function Register() {
       )}
 
       {buildReminders.length > 0 && (
-        <section className="card card-accent-top p-3 mb-4" style={{ ['--accent-color' as string]: 'var(--rt-yellow)' }} aria-label="Build/laptop reminders">
-          <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
-            <span aria-hidden>🔧</span> Builds left aside — {buildReminders.length}
-          </h3>
+        <CollapsiblePanel title="Builds left aside" countLabel={`${buildReminders.length} to collect`} accent="yellow">
           <ul className="flex flex-col gap-1">
             {buildReminders.map((s) => (
               <li key={s.id} className="text-sm">
@@ -521,14 +518,11 @@ export default function Register() {
               </li>
             ))}
           </ul>
-        </section>
+        </CollapsiblePanel>
       )}
 
       {feedbackOutstanding.length > 0 && (
-        <section className="card card-accent-top p-3 mb-4" style={{ ['--accent-color' as string]: 'var(--rt-red)' }} aria-label="Feedback reminders">
-          <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
-            <RobotBadge className="w-6 h-6" /> Feedback reminders — {feedbackOutstanding.length}
-          </h3>
+        <CollapsiblePanel title="Feedback reminders" countLabel={`${feedbackOutstanding.length} outstanding`} accent="red">
           <ul className="flex flex-col gap-1.5">
             {feedbackOutstanding.map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
@@ -547,7 +541,7 @@ export default function Register() {
               </li>
             ))}
           </ul>
-        </section>
+        </CollapsiblePanel>
       )}
 
       {visibleRoster.length > 0 && (
