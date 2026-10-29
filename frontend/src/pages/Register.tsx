@@ -421,30 +421,31 @@ export default function Register() {
         actions={<button className="btn-primary" onClick={() => setShowAdd(true)}>+ Add to register</button>}
       />
 
-      <section className="sticky top-0 z-20 card p-3 mb-4 shadow-sm" aria-label="Register controls">
-        <div className="flex flex-wrap items-center gap-2 mb-2">
+      <section className="register-toolbar sticky top-0 z-20 card p-3 mb-4 shadow-sm" aria-label="Register controls">
+        <div className="register-toolbar-date">
           <button className="btn-ghost" onClick={() => setDate(addDays(date, -1))} aria-label="Previous day">
-            ← Prev
+            <span aria-hidden>←</span><span className="sr-only sm:not-sr-only"> Prev</span>
           </button>
           <input
             type="date"
             value={date}
             onChange={(e) => e.target.value && setDate(e.target.value)}
-            className="p-2 border border-slate-200 rounded-lg text-sm"
+            className="min-w-0 w-full p-2 border border-slate-200 rounded-lg text-sm"
             aria-label="Select register date"
           />
           <button className="btn-ghost" onClick={() => setDate(addDays(date, 1))} aria-label="Next day">
-            Next →
+            <span className="sr-only sm:not-sr-only">Next </span><span aria-hidden>→</span>
           </button>
           {date !== todayISO() && (
-            <button className="btn-ghost" onClick={() => setDate(todayISO())}>
+            <button className="btn-ghost register-toolbar-today" onClick={() => setDate(todayISO())}>
               Today
             </button>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a student…" aria-label="Search register students" className="flex-1 min-w-0 w-full sm:w-auto p-2 border border-slate-200 rounded-lg text-sm" />
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter register by attendance" className="p-2 border border-slate-200 rounded-lg text-sm max-w-full">
+        <div className="register-toolbar-filters">
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a student…" aria-label="Search register students" className="min-w-0 w-full p-2 border border-slate-200 rounded-lg text-sm" />
+          <div className="register-toolbar-filter-options">
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter register by attendance" className="min-w-0 flex-1 p-2 border border-slate-200 rounded-lg text-sm">
             <option value="all">All students</option>
             <option value="not_entered">Not entered</option>
             <option value="attended">Attended</option>
@@ -452,7 +453,8 @@ export default function Register() {
             <option value="missing_details">Missing session details</option>
           </select>
           {(query || statusFilter !== 'all') && <button className="btn-ghost" onClick={() => { setQuery(''); setStatusFilter('all') }}>Clear filters</button>}
-          <span className="text-xs text-slate-600" role="status">Showing {visibleRoster.length} of {roster.length}</span>
+          </div>
+          <span className="register-toolbar-count text-xs text-slate-600" role="status">Showing {visibleRoster.length} of {roster.length}</span>
         </div>
       </section>
 

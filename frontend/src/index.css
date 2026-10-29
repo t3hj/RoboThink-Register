@@ -255,3 +255,28 @@ input, select, textarea {
 
 /* Placeholder hints remain readable against the white form-control surface. */
 input::placeholder, textarea::placeholder { color: #64748b; opacity: 1; }
+
+/* Register controls use explicit mobile rows so search and date inputs never
+   collapse to make room for a long attendance-filter label. */
+.register-toolbar-date {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.register-toolbar-today { grid-column: 1 / -1; justify-self: start; }
+.register-toolbar-filters { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+.register-toolbar-filter-options { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.register-toolbar-filter-options button { flex-shrink: 0; }
+.register-toolbar-count { align-self: center; }
+@media (min-width: 640px) {
+  .register-toolbar-date { display: flex; flex-wrap: wrap; }
+  .register-toolbar-date input { width: auto; }
+  .register-toolbar-filters { grid-template-columns: minmax(10rem, 1fr) auto; }
+  .register-toolbar-count { grid-column: 1 / -1; }
+}
+@media (min-width: 1280px) {
+  .register-toolbar-filters { grid-template-columns: minmax(10rem, 1fr) auto auto; }
+  .register-toolbar-count { grid-column: auto; }
+}
