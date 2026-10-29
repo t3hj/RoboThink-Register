@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { useToast } from './Toast'
 import { BusyButton } from './ui'
 import FeedbackControl from './FeedbackControl'
+import { friendlyMessage } from '../lib/errors'
 import { levelLabel } from '../lib/curriculum'
 import { sessionRecommendedLesson } from '../lib/expectedLesson'
 import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
@@ -74,6 +75,8 @@ export default function SessionEntryRow({
   const { profile } = useAuth()
   const { notify } = useToast()
   const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  function reportError(message: string) { setActionError(message) }
   const [draft, setDraft] = useState<Draft | null>(null)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [lessonScope, setLessonScope] = useState<'recommended' | 'nearby' | 'all'>('recommended')
@@ -97,12 +100,14 @@ export default function SessionEntryRow({
   const activeDraft: Draft | null = draft ?? (showBlankFormAutomatically ? blankDraft(defaultLessonId) : null)
 
   function startDraft() {
+    setActionError(null)
     setDraft(blankDraft(defaultLessonId))
     setEditingSessionId(null)
     setLessonScope('recommended')
   }
 
   function startEdit(session: AttendedSession) {
+    setActionError(null)
     setEditingSessionId(session.id)
     setDraft({
       activity: session.project_id && !session.actual_lesson_id ? 'project' : 'lesson',
@@ -121,7 +126,7 @@ export default function SessionEntryRow({
 
   async function upsertAttendance(values: Partial<Attendance> & { status: Attendance['status'] }) {
     if (!profile) {
-      notify('Your profile is not loaded — cannot record who made this change.', 'error')
+      reportError('Your profile is not loaded — cannot record who made this change.')
       return false
     }
     const { error } = await supabase.from('attendance').upsert(
@@ -136,13 +141,14 @@ export default function SessionEntryRow({
       { onConflict: 'student_id,date' },
     )
     if (error) {
-      notify(error.message, 'error')
+      reportError(friendlyMessage(error.message))
       return false
     }
     return true
   }
 
   async function markAttended() {
+    setActionError(null)
     setBusy(true)
     const ok = await upsertAttendance({ status: attendance?.status === 'Completed' ? 'Completed' : 'Arrived' })
     setBusy(false)
@@ -150,6 +156,7 @@ export default function SessionEntryRow({
   }
 
   async function markAbsent() {
+    setActionError(null)
     setBusy(true)
     const ok = await upsertAttendance({ status: 'Absent', time_in: null, time_out: null })
     setBusy(false)
@@ -160,33 +167,34 @@ export default function SessionEntryRow({
   }
 
   async function save() {
+    setActionError(null)
     if (!activeDraft) return
     if (activeDraft.activity === 'project' && !activeDraft.projectId) {
-      notify('Choose a project first.', 'error')
+      reportError('Choose a project first.')
       return
     }
     if (activeDraft.activity === 'lesson' && !activeDraft.lessonId) {
-      notify('Choose a lesson first.', 'error')
+      reportError('Choose a lesson first.')
       return
     }
     const selectedForSave = lessonById.get(activeDraft.lessonId)
     if (activeDraft.activity === 'lesson' && requiresAssessmentResult(selectedForSave)) {
       if (editingSessionId) {
-        notify('Assessment lessons are recorded as new sessions. Cancel this edit and record a new session instead.', 'error')
+        reportError('Assessment lessons are recorded as new sessions. Cancel this edit and record a new session instead.')
         return
       }
       if (activeDraft.outcome === 'completed' && !activeDraft.assessmentResult) {
-        notify('Choose PASS or FAIL for this assessment.', 'error')
+        reportError('Choose PASS or FAIL for this assessment.')
         return
       }
       if (activeDraft.outcome === 'completed' && activeDraft.assessmentResult === 'FAIL' && plan?.status !== 'ready_for_reassessment' && !activeDraft.remediationPath) {
-        notify('Choose a remediation path before recording a FAIL.', 'error')
+        reportError('Choose a remediation path before recording a FAIL.')
         return
       }
     }
     const validationError = activeDraft.activity === 'project' ? null : validateLeftAside(activeDraft)
     if (validationError) {
-      notify(validationError, 'error')
+      reportError(validationError)
       return
     }
     setBusy(true)
@@ -196,7 +204,7 @@ export default function SessionEntryRow({
         : await supabase.rpc('record_project_session', { in_student_id: student.id, in_project_id: activeDraft.projectId, in_outcome: activeDraft.outcome, in_date: date })
       if (error) {
         setBusy(false)
-        notify(error.message, 'error')
+        reportError(friendlyMessage(error.message))
         return
       }
       const attendanceSaved = await upsertAttendance({ status: outcomeToAttendanceStatus(activeDraft.outcome) })
@@ -241,7 +249,7 @@ export default function SessionEntryRow({
     }
     if (error) {
       setBusy(false)
-      notify(error.message, 'error')
+      reportError(friendlyMessage(error.message))
       return
     }
     const savedSessionId = sessionId
@@ -252,7 +260,7 @@ export default function SessionEntryRow({
         .eq('id', savedSessionId)
       if (projectError) {
         setBusy(false)
-        notify(`Session saved, but project selection was not saved: ${projectError.message}`, 'error')
+        reportError(`Session saved, but the project selection could not be updated. ${friendlyMessage(projectError.message)} Check the saved session before retrying.`)
         onChanged()
         return
       }
@@ -291,11 +299,12 @@ export default function SessionEntryRow({
     : activeProjects
 
   async function updateSessionProject(session: AttendedSession, projectId: string) {
+    setActionError(null)
     setBusy(true)
     const { error } = await supabase.from('attended_sessions').update({ project_id: projectId || null }).eq('id', session.id)
     setBusy(false)
     if (error) {
-      notify(error.message, 'error')
+      reportError(friendlyMessage(error.message))
       return
     }
     onChanged()
@@ -303,6 +312,13 @@ export default function SessionEntryRow({
 
   return (
     <div className="flex flex-col gap-3">
+      {actionError && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800" role="alert">
+          <p className="font-medium">Please check {student.full_name}’s entry</p>
+          <p className="mt-1">{actionError}</p>
+          <button type="button" className="mt-2 underline" onClick={() => setActionError(null)}>Dismiss error</button>
+        </div>
+      )}
       {/* Attendance state */}
       <div className="flex items-center gap-2 flex-wrap">
         <button
