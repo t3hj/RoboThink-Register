@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
+import { useCentres } from '../lib/centres'
+import { useBrand } from '../lib/brand'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState, StatusBadge } from '../components/ui'
 import { RobotWave } from '../components/RobotArt'
 import { todayISO, dayName, formatDisplayDate, addDays } from '../lib/dates'
@@ -26,73 +28,89 @@ interface DashboardData {
 
 export default function Dashboard() {
   const { profile, role } = useAuth()
+  const { selectedCentreId, selectedCentre, isAllCentres, loading: centresLoading, error: centresError, refresh: refreshCentres } = useCentres()
+  const { activeBrand } = useBrand()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const today = todayISO()
+  const scope = JSON.stringify([today, activeBrand, selectedCentreId, isAllCentres, centresLoading, centresError])
+  const activeScope = useRef(scope)
+  activeScope.current = scope
+  const requestId = useRef(0)
+  const [loadedScope, setLoadedScope] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    if (centresLoading || centresError || (!selectedCentreId && !isAllCentres)) return
+    const requestedScope = JSON.stringify([today, activeBrand, selectedCentreId, isAllCentres, centresLoading, centresError])
+    const request = ++requestId.current
+    const isCurrent = () => request === requestId.current && activeScope.current === requestedScope
     setLoading(true)
     setError(null)
     const lookbackStart = addDays(today, -14)
     const yesterday = addDays(today, -1)
 
-    const [studentsRes, attendanceRes, lessonsRes, progressRes, actionRes, feedbackRes, recentAttRes, requestsRes] = await Promise.all([
-      supabase.from('students').select('*, student_schedules(day_of_week,start_time,active)').order('full_name'),
-      supabase.from('attendance').select('*').eq('date', today),
-      supabase
-        .from('lesson_records')
-        .select('*, profiles(name), levels(name)')
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(8),
-      supabase.from('student_progress').select('*'),
-      supabase.from('students_requiring_assessment_action').select('*'),
-      supabase.from('feedback_sheets').select('id', { count: 'exact', head: true }).neq('status', 'given'),
-      supabase.from('attendance').select('student_id,date').gte('date', lookbackStart).lte('date', yesterday),
-      supabase.from('student_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    ])
-
-    if (studentsRes.error || recentAttRes.error || attendanceRes.error || lessonsRes.error || progressRes.error || actionRes.error || feedbackRes.error) {
-      setError(
-        studentsRes.error?.message ??
-          recentAttRes.error?.message ??
-          attendanceRes.error?.message ??
-          lessonsRes.error?.message ??
-          progressRes.error?.message ??
-          actionRes.error?.message ??
-          feedbackRes.error?.message ??
-          'Unknown database error',
-      )
-      setLoading(false)
-      return
+    try {
+      // First resolve the current brand/centre's students. The views and
+      // student-owned tables below do not all expose a centre_id column.
+      let studentsQuery = supabase.from('students').select('*, student_schedules(day_of_week,start_time,active)').eq('brand', activeBrand).order('full_name')
+      let requestsQuery = supabase.from('student_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('brand', activeBrand)
+      if (selectedCentreId) {
+        studentsQuery = studentsQuery.eq('centre_id', selectedCentreId)
+        requestsQuery = requestsQuery.eq('centre_id', selectedCentreId)
+      }
+      const [studentsRes, requestsRes] = await Promise.all([studentsQuery, requestsQuery])
+      if (!isCurrent()) return
+      if (studentsRes.error || requestsRes.error) throw studentsRes.error ?? requestsRes.error
+      const students = (studentsRes.data ?? []) as Student[]
+      const ids = students.map((student) => student.id)
+      const empty = { data: [], error: null, count: 0 }
+      let attendanceQuery = supabase.from('attendance').select('*').in('student_id', ids).eq('date', today)
+      if (selectedCentreId) attendanceQuery = attendanceQuery.eq('centre_id', selectedCentreId)
+      // Never fall back to an unfiltered query for an empty centre.
+      const [attendanceRes, lessonsRes, progressRes, actionRes, feedbackRes, recentAttRes] = ids.length ? await Promise.all([
+        attendanceQuery,
+        supabase.from('lesson_records').select('*, profiles(name), levels(name)').in('student_id', ids).eq('status', 'completed').order('created_at', { ascending: false }).limit(8),
+        supabase.from('student_progress').select('*').in('student_id', ids),
+        supabase.from('students_requiring_assessment_action').select('*').in('student_id', ids),
+        supabase.from('feedback_sheets').select('id', { count: 'exact', head: true }).in('student_id', ids).neq('status', 'given'),
+        supabase.from('attendance').select('student_id,date').in('student_id', ids).gte('date', lookbackStart).lte('date', yesterday),
+      ]) : [empty, empty, empty, empty, empty, empty]
+      if (!isCurrent()) return
+      const queryError = attendanceRes.error ?? lessonsRes.error ?? progressRes.error ?? actionRes.error ?? feedbackRes.error ?? recentAttRes.error
+      if (queryError) throw queryError
+      const progressMap = new Map(((progressRes.data ?? []) as StudentProgress[]).map((p) => [p.student_id, p]))
+      const withProgress: UpcomingStudent[] = students.map((s) => ({ ...s, progress: progressMap.get(s.id) ?? null }))
+      setData({
+        expected: withProgress.filter((s) => s.active && (isExpectedOnDate(s, today) || attendanceRes.data?.some((a) => a.student_id === s.id))),
+        attendance: (attendanceRes.data ?? []) as Attendance[],
+        recentLessons: (lessonsRes.data ?? []) as LessonRecord[],
+        totals: { total: students.length, active: students.filter((s) => s.active).length },
+        needsAction: (actionRes.data ?? []) as StudentRequiringAction[],
+        feedbackOutstanding: feedbackRes.count ?? 0,
+        pendingRequests: requestsRes.count ?? 0,
+        needsLesson: students.filter((s) => s.active && !s.current_lesson_id).length,
+        unmarked: findUnmarkedSessions(students, (recentAttRes.data ?? []) as Attendance[], lookbackStart, yesterday),
+      })
+      setLoadedScope(requestedScope)
+    } catch (failure) {
+      if (!isCurrent()) return
+      setError(failure && typeof failure === 'object' && 'message' in failure ? String(failure.message) : 'Unable to load dashboard')
+      setLoadedScope(requestedScope)
+    } finally {
+      if (isCurrent()) setLoading(false)
     }
-
-    const students = (studentsRes.data ?? []) as Student[]
-    const progressMap = new Map(((progressRes.data ?? []) as StudentProgress[]).map((p) => [p.student_id, p]))
-    const withProgress: UpcomingStudent[] = students.map((s) => ({ ...s, progress: progressMap.get(s.id) ?? null }))
-
-    setData({
-      expected: withProgress.filter(
-        (s) => s.active && (isExpectedOnDate(s, today) || attendanceRes.data?.some((a) => a.student_id === s.id)),
-      ),
-      attendance: (attendanceRes.data ?? []) as Attendance[],
-      recentLessons: (lessonsRes.data ?? []) as LessonRecord[],
-      totals: { total: students.length, active: students.filter((s) => s.active).length },
-      needsAction: (actionRes.data ?? []) as StudentRequiringAction[],
-      feedbackOutstanding: feedbackRes.count ?? 0,
-      pendingRequests: requestsRes.count ?? 0,
-      needsLesson: students.filter((s) => s.active && !s.current_lesson_id).length,
-      unmarked: findUnmarkedSessions(students, (recentAttRes.data ?? []) as Attendance[], lookbackStart, yesterday),
-    })
-    setLoading(false)
-  }, [today])
+  }, [today, activeBrand, selectedCentreId, isAllCentres, centresLoading, centresError])
 
   useEffect(() => {
     void load()
+    return () => { requestId.current++ }
   }, [load])
 
-  if (loading) return <LoadingPanel label="Loading dashboard…" />
+  if (centresLoading) return <LoadingPanel label="Loading working centre…" />
+  if (centresError) return <ErrorPanel message={centresError} onRetry={() => void refreshCentres()} />
+  if (!selectedCentreId && !isAllCentres) return <EmptyState title="No working centre available" hint="Please contact an administrator to check your centre assignment." />
+  if (loading || loadedScope !== scope) return <LoadingPanel label="Loading dashboard…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
   if (!data) return null
 
@@ -109,7 +127,7 @@ export default function Dashboard() {
     <div>
       <PageHeader
         title="Today at a glance"
-        subtitle={`${formatDisplayDate(today)} · ${dayName(today)}`}
+        subtitle={`${formatDisplayDate(today)} · ${dayName(today)} · ${isAllCentres ? 'All centres' : selectedCentre?.name ?? 'Working centre'}`}
         accent="yellow"
         actions={
           <Link to="/register" className="btn-primary">
