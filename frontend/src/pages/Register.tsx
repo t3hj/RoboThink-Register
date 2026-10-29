@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, SubscriptionBadge } from '../components/ui'
@@ -57,7 +57,7 @@ interface RosterEntry extends Student {
 }
 
 export default function Register() {
-    const { selectedCentreId, selectedCentre, isAllCentres } = useCentres()
+  const { selectedCentreId, selectedCentre, isAllCentres } = useCentres()
   const [searchParams] = useSearchParams()
   const requestedDate = searchParams.get('date')
   // ?date=YYYY-MM-DD lets other pages (e.g. the dashboard's "unmarked
@@ -66,6 +66,10 @@ export default function Register() {
   const [offWeek, setOffWeek] = useState<Pick<Student, 'id' | 'full_name'>[]>([])
   const [roster, setRoster] = useState<RosterEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadedScope, setLoadedScope] = useState<string | null>(null)
+  const requestId = useRef(0)
+  const scope = JSON.stringify([date, selectedCentreId])
+  const hasLoadedScope = loadedScope === scope
   const [error, setError] = useState<string | null>(null)
   const [levels, setLevels] = useState<Level[]>([])
   const [lessons, setLessons] = useState<Lesson[]>([])
@@ -82,6 +86,8 @@ export default function Register() {
   }, [])
 
   const loadRoster = useCallback(async (forDate: string) => {
+    const request = ++requestId.current
+    const isCurrent = () => request === requestId.current
     setLoading(true)
     setError(null)
     const dow = dayName(forDate)
@@ -92,6 +98,7 @@ export default function Register() {
     // session today from their schedule rows, plus anyone whose single
     // preferred day is today (students without schedule rows).
     const { data: slotRows } = await supabase.from('student_schedules').select('student_id').eq('day_of_week', dow).eq('active', true)
+    if (!isCurrent()) return
     const slotIds = [...new Set((slotRows ?? []).map((r) => r.student_id as string))]
     let scheduledQuery = supabase
       .from('students')
@@ -101,6 +108,7 @@ export default function Register() {
     if (selectedCentreId) scheduledQuery = scheduledQuery.eq('centre_id', selectedCentreId)
     const { data: scheduled, error: schedErr } = await scheduledQuery
 
+    if (!isCurrent()) return
     if (schedErr) {
       setError(schedErr.message)
       setLoading(false)
@@ -110,6 +118,7 @@ export default function Register() {
     let attendanceQuery = supabase.from('attendance').select('*').eq('date', forDate)
     if (selectedCentreId) attendanceQuery = attendanceQuery.eq('centre_id', selectedCentreId)
     const { data: att, error: attErr } = await attendanceQuery
+    if (!isCurrent()) return
     if (attErr) {
       setError(attErr.message)
       setLoading(false)
@@ -125,7 +134,7 @@ export default function Register() {
       .sort((a, b) => (a.preferred_time ?? '').localeCompare(b.preferred_time ?? '') || a.full_name.localeCompare(b.full_name))
     const expectedToday = scheduledAll.filter((s) => isExpectedOnDate(s, forDate))
     const attendedIds = new Set(attendance.map((a) => a.student_id))
-    setOffWeek(scheduledAll.filter((s) => !isExpectedOnDate(s, forDate) && !attendedIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name })))
+    const offWeekEntries = scheduledAll.filter((s) => !isExpectedOnDate(s, forDate) && !attendedIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name }))
     const scheduledIds = new Set(expectedToday.map((s) => s.id))
     // Catch-up/special students: anyone with an attendance row for this
     // date who wasn't already in the normal scheduled list. Restricted to
@@ -140,6 +149,7 @@ export default function Register() {
         .eq('active', true)
       if (selectedCentreId) extrasQuery = extrasQuery.eq('centre_id', selectedCentreId)
       const { data: extraData, error: extraErr } = await extrasQuery
+      if (!isCurrent()) return
       if (extraErr) {
         setError(extraErr.message)
         setLoading(false)
@@ -197,6 +207,7 @@ export default function Register() {
           .order('created_at', { ascending: false }),
         supabase.from('student_project_durations').select('*').in('student_id', ids).order('start_date', { ascending: false }),
       ])
+      if (!isCurrent()) return
       if (progRes.error) {
         setError(progRes.error.message)
         setLoading(false)
@@ -225,7 +236,6 @@ export default function Register() {
     for (const f of feedbackSheets) {
       feedbackByStudentMap.set(f.student_id, [...(feedbackByStudentMap.get(f.student_id) ?? []), f])
     }
-    setFeedbackByStudent(feedbackByStudentMap)
     const sessionsByStudent = new Map<string, AttendedSession[]>()
     for (const s of sessionsForDate) {
       sessionsByStudent.set(s.student_id, [...(sessionsByStudent.get(s.student_id) ?? []), s].sort((a, b) => a.session_number - b.session_number))
@@ -266,17 +276,21 @@ export default function Register() {
       if (aSched !== bSched) return aSched - bSched
       return (a.preferred_time ?? '').localeCompare(b.preferred_time ?? '')
     })
+    setOffWeek(offWeekEntries)
+    setFeedbackByStudent(feedbackByStudentMap)
+    setLoadedScope(JSON.stringify([forDate, selectedCentreId]))
     setRoster(entries)
     setLoading(false)
   }, [selectedCentreId])
 
   useEffect(() => {
     void loadRoster(date)
+    return () => { requestId.current++ }
   }, [date, loadRoster])
 
   useEffect(() => {
     setSelected(new Set())
-  }, [date])
+  }, [date, selectedCentreId])
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -377,8 +391,10 @@ export default function Register() {
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [roster])
 
-  if (loading) return <LoadingPanel label="Loading register…" />
-  if (error) return <ErrorPanel message={error} onRetry={() => void loadRoster(date)} />
+  // Keep same-scope session rows mounted: they own unsaved student drafts.
+  // Switching date or centre must instead load a fresh roster.
+  if (!hasLoadedScope && !error) return <LoadingPanel label="Loading register…" />
+  if (!hasLoadedScope && error) return <ErrorPanel message={error} onRetry={() => void loadRoster(date)} />
 
   return (
     <div>
@@ -412,6 +428,14 @@ export default function Register() {
           </>
         }
       />
+
+      {loading && <p className="mb-3 text-sm text-slate-500" role="status">Updating register… Your unfinished entries are kept.</p>}
+      {error && (
+        <div className="mb-4">
+          <p className="mb-2 text-sm text-slate-600">The register could not refresh. Your unfinished entries are still here; retry to see the latest saved records.</p>
+          <ErrorPanel message={error} onRetry={() => void loadRoster(date)} />
+        </div>
+      )}
 
       {closureName(date) && (
         <p className="mb-4 rounded-lg bg-[color:var(--rt-yellow-tint)] px-3 py-2 text-sm">
