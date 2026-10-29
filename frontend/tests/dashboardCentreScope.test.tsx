@@ -106,7 +106,7 @@ describe('dashboard working-centre scope', () => {
     backend.tables.attendance[0].centre_id = 'b'
     await mount()
     expect(statistic('Expected today')).toBe(1)
-    expect(statistic('In centre now')).toBe(0)
+    expect(statistic('Attended today')).toBe(0)
   })
   it('does not treat an unassigned instructor as All centres', async () => {
     backend.centreId = null
@@ -149,5 +149,70 @@ describe('dashboard working-centre scope', () => {
     backend.failTable = null
     await act(async () => renderer.root.findAllByType('button').find((button) => button.children.includes('Try again'))!.props.onClick())
     expect(statistic('Expected today')).toBe(1)
+  })
+})
+
+const upcomingStudentLinks = () => renderer.root.findByProps({ 'aria-labelledby': 'upcoming-heading' }).findAllByType('a').map((link) => link.props.href)
+function footerCount(label: string) {
+  const labelNode = renderer.root.findAllByType('div').find((node) => node.children.includes(label))!
+  return labelNode.parent!.findByProps({ className: 'text-xl font-bold' }).children.join('')
+}
+function savedProject() {
+  backend.tables.attended_sessions = [{ student_id: 'a', centre_id: 'a', date: '2026-10-29', actual_lesson_id: null, project_id: 'project-a', outcome: 'not_finished' }]
+}
+describe('dashboard arrivals versus session outcomes', () => {
+  it('counts Not Arrived records as unmarked and still upcoming', async () => {
+    backend.tables.attendance[0].status = 'Not Arrived'
+    await mount()
+    expect(footerCount('Awaiting register mark')).toBe('1')
+    expect(upcomingStudentLinks()).toContain('/students/a')
+    expect(statistic('Attended today')).toBe(0)
+  })
+  it('does not show an arrived student as upcoming when their project was not finished', async () => {
+    savedProject()
+    await mount()
+    expect(upcomingStudentLinks()).not.toContain('/students/a')
+    expect(statistic('Attended today')).toBe(1)
+    expect(footerCount('Sessions recorded today')).toBe('1')
+    expect(footerCount('Awaiting register mark')).toBe('0')
+    expect(renderer.root.findAllByProps({ 'aria-label': 'Register entries to finish' })).toHaveLength(0)
+    expect(backend.tables.attended_sessions[0].outcome).toBe('not_finished')
+  })
+  it('separates missing session details from outstanding arrivals', async () => {
+    await mount()
+    expect(upcomingStudentLinks()).not.toContain('/students/a')
+    expect(renderer.root.findAllByProps({ 'aria-label': 'Register entries to finish' })).toHaveLength(1)
+    expect(JSON.stringify(renderer.toJSON())).toContain('Session details not recorded')
+    expect(footerCount('Awaiting register mark')).toBe('0')
+  })
+  it('flags a saved session with missing attendance without claiming the student has not arrived', async () => {
+    savedProject()
+    backend.tables.attendance[0].status = 'Not Arrived'
+    await mount()
+    expect(upcomingStudentLinks()).not.toContain('/students/a')
+    expect(footerCount('Awaiting register mark')).toBe('1')
+    expect(JSON.stringify(renderer.toJSON())).toContain('Session recorded — attendance mark still needed')
+  })
+  it('includes a saved catch-up session even if its attendance update failed', async () => {
+    savedProject()
+    backend.tables.students[0].preferred_day = 'Friday'
+    backend.tables.attendance = backend.tables.attendance.filter((row) => row.student_id !== 'a')
+    await mount()
+    expect(statistic('Expected today')).toBe(1)
+    expect(upcomingStudentLinks()).not.toContain('/students/a')
+    expect(JSON.stringify(renderer.toJSON())).toContain('Session recorded — attendance mark still needed')
+  })
+  it('counts completed attendance as attended rather than upcoming', async () => {
+    savedProject()
+    backend.tables.attendance[0].status = 'Completed'
+    await mount()
+    expect(statistic('Attended today')).toBe(1)
+    expect(upcomingStudentLinks()).not.toContain('/students/a')
+  })
+  it('does not guess session completeness when today’s session read fails', async () => {
+    backend.failTable = 'attended_sessions'
+    await mount()
+    expect(renderer.root.findAllByType(StatCard)).toHaveLength(0)
+    expect(renderer.root.findAllByProps({ role: 'alert' })).toHaveLength(1)
   })
 })

@@ -35,6 +35,24 @@ You can open a future date, but nobody has arrived yet. Mark on the day.
 Press **Try again**. If it keeps happening, open **Technical details**, screenshot
 it and send it to an admin.
 
+**A project was not finished. Has the session still been recorded?**
+Yes. Saving a project session as **Not finished** records the visit and its
+unfinished outcome against that project, with a linked feedback record. The
+project stays active and curriculum progression does not advance. Expand the
+student's **Session details** on that date to check the saved entry.
+
+**Why has an unfinished project disappeared from Upcoming today?**
+**Upcoming today** lists students still expected to arrive. An attended student
+leaves that list whether their work was completed or not. A missing session or
+attendance update appears separately under **Register entries to finish**.
+**Not Arrived** still counts as an outstanding attendance mark.
+
+**The session saved but another update failed.**
+Use **Retry remaining updates** on that student's register entry. This finishes
+the failed project-link or attendance update without recording another session.
+If you have reloaded or left the page, check the saved session history first
+rather than recording the same visit again.
+
 **I can't sign in.**
 Request a fresh magic link and use the newest email. If it still fails, an admin
 must link your email to a staff profile.

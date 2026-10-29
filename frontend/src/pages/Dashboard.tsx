@@ -5,10 +5,12 @@ import { useAuth } from '../lib/auth'
 import { useCentres } from '../lib/centres'
 import { useBrand } from '../lib/brand'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState, StatusBadge } from '../components/ui'
+import CollapsiblePanel from '../components/CollapsiblePanel'
+import { attendanceState } from '../lib/attendedSessionsUi'
 import { RobotWave } from '../components/RobotArt'
 import { todayISO, dayName, formatDisplayDate, addDays } from '../lib/dates'
 import { isExpectedOnDate, findUnmarkedSessions, type UnmarkedSession } from '../lib/attendanceStats'
-import type { Attendance, Student, LessonRecord, StudentProgress, StudentRequiringAction } from '../types'
+import type { Attendance, AttendedSession, Student, LessonRecord, StudentProgress, StudentRequiringAction } from '../types'
 
 interface UpcomingStudent extends Student {
   progress: StudentProgress | null
@@ -17,6 +19,7 @@ interface UpcomingStudent extends Student {
 interface DashboardData {
   expected: UpcomingStudent[]
   attendance: Attendance[]
+  sessionsToday: Pick<AttendedSession, 'student_id' | 'outcome' | 'actual_lesson_id' | 'project_id'>[]
   recentLessons: LessonRecord[]
   totals: { total: number; active: number }
   needsAction: StudentRequiringAction[]
@@ -66,24 +69,30 @@ export default function Dashboard() {
       const ids = students.map((student) => student.id)
       const empty = { data: [], error: null, count: 0 }
       let attendanceQuery = supabase.from('attendance').select('*').in('student_id', ids).eq('date', today)
-      if (selectedCentreId) attendanceQuery = attendanceQuery.eq('centre_id', selectedCentreId)
+      let sessionsQuery = supabase.from('attended_sessions').select('student_id,outcome,actual_lesson_id,project_id').in('student_id', ids).eq('date', today)
+      if (selectedCentreId) {
+        attendanceQuery = attendanceQuery.eq('centre_id', selectedCentreId)
+        sessionsQuery = sessionsQuery.eq('centre_id', selectedCentreId)
+      }
       // Never fall back to an unfiltered query for an empty centre.
-      const [attendanceRes, lessonsRes, progressRes, actionRes, feedbackRes, recentAttRes] = ids.length ? await Promise.all([
+      const [attendanceRes, lessonsRes, progressRes, actionRes, feedbackRes, recentAttRes, sessionsRes] = ids.length ? await Promise.all([
         attendanceQuery,
         supabase.from('lesson_records').select('*, profiles(name), levels(name)').in('student_id', ids).eq('status', 'completed').order('created_at', { ascending: false }).limit(8),
         supabase.from('student_progress').select('*').in('student_id', ids),
         supabase.from('students_requiring_assessment_action').select('*').in('student_id', ids),
         supabase.from('feedback_sheets').select('id', { count: 'exact', head: true }).in('student_id', ids).neq('status', 'given'),
         supabase.from('attendance').select('student_id,date').in('student_id', ids).gte('date', lookbackStart).lte('date', yesterday),
-      ]) : [empty, empty, empty, empty, empty, empty]
+        sessionsQuery,
+      ]) : [empty, empty, empty, empty, empty, empty, empty]
       if (!isCurrent()) return
-      const queryError = attendanceRes.error ?? lessonsRes.error ?? progressRes.error ?? actionRes.error ?? feedbackRes.error ?? recentAttRes.error
+      const queryError = attendanceRes.error ?? lessonsRes.error ?? progressRes.error ?? actionRes.error ?? feedbackRes.error ?? recentAttRes.error ?? sessionsRes.error
       if (queryError) throw queryError
       const progressMap = new Map(((progressRes.data ?? []) as StudentProgress[]).map((p) => [p.student_id, p]))
       const withProgress: UpcomingStudent[] = students.map((s) => ({ ...s, progress: progressMap.get(s.id) ?? null }))
       setData({
-        expected: withProgress.filter((s) => s.active && (isExpectedOnDate(s, today) || attendanceRes.data?.some((a) => a.student_id === s.id))),
+        expected: withProgress.filter((s) => s.active && (isExpectedOnDate(s, today) || attendanceRes.data?.some((a) => a.student_id === s.id) || sessionsRes.data?.some((session) => session.student_id === s.id))),
         attendance: (attendanceRes.data ?? []) as Attendance[],
+        sessionsToday: (sessionsRes.data ?? []) as DashboardData['sessionsToday'],
         recentLessons: (lessonsRes.data ?? []) as LessonRecord[],
         totals: { total: students.length, active: students.filter((s) => s.active).length },
         needsAction: (actionRes.data ?? []) as StudentRequiringAction[],
@@ -115,13 +124,20 @@ export default function Dashboard() {
   if (!data) return null
 
   const attByStatus = (status: Attendance['status']) => data.attendance.filter((a) => a.status === status).length
-  const arrived = attByStatus('Arrived')
+  const attended = attByStatus('Arrived') + attByStatus('Completed')
   const absent = attByStatus('Absent')
-  const completedToday = attByStatus('Completed')
-  const notMarked = data.expected.filter((s) => !data.attendance.some((a) => a.student_id === s.id)).length
+  const attendanceByStudent = new Map(data.attendance.map((row) => [row.student_id, row]))
+  const recordedStudents = new Set(data.sessionsToday.map((session) => session.student_id))
+  const notMarked = data.expected.filter((student) => attendanceState(attendanceByStudent.get(student.id)?.status) === 'not_entered').length
   const upcoming = data.expected
-    .filter((s) => !['Completed', 'Absent'].includes(data.attendance.find((a) => a.student_id === s.id)?.status ?? ''))
+    .filter((student) => attendanceState(attendanceByStudent.get(student.id)?.status) === 'not_entered' && !recordedStudents.has(student.id))
     .sort((a, b) => (a.preferred_time ?? '').localeCompare(b.preferred_time ?? ''))
+  const incompleteEntries = data.expected.flatMap((student) => {
+    const state = attendanceState(attendanceByStudent.get(student.id)?.status)
+    if (state === 'attended' && !recordedStudents.has(student.id)) return [{ student, reason: 'Session details not recorded' }]
+    if (state === 'not_entered' && recordedStudents.has(student.id)) return [{ student, reason: 'Session recorded — attendance mark still needed' }]
+    return []
+  })
 
   return (
     <div>
@@ -149,19 +165,19 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard value={data.expected.length} label="Expected today" />
-        <StatCard value={arrived} label="In centre now" tone="good" />
+        <StatCard value={attended} label="Attended today" tone="good" />
         <StatCard value={absent} label="Absent" tone={absent > 0 ? 'bad' : undefined} />
         <StatCard value={data.feedbackOutstanding} label="Feedback outstanding" tone={data.feedbackOutstanding > 0 ? 'warn' : undefined} />
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        <section className="card p-4">
+        <section className="card p-4" aria-labelledby="upcoming-heading">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Upcoming today</h3>
-            <span className="badge">{notMarked} not marked</span>
+            <h3 id="upcoming-heading" className="font-semibold">Upcoming today</h3>
+            <span className="badge">{upcoming.length} not arrived</span>
           </div>
           {upcoming.length === 0 ? (
-            <EmptyState title="No sessions remaining today" hint="Everyone is marked in, done, or absent." robot />
+            <EmptyState title="No arrivals outstanding" hint="Everyone expected has been marked attended or absent, or already has a recorded session." robot />
           ) : (
             <ul className="divide-y divide-slate-100">
               {upcoming.map((s) => {
@@ -207,6 +223,18 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+
+      {incompleteEntries.length > 0 && (
+        <div className="mt-4">
+          <CollapsiblePanel title="Register entries to finish" countLabel={`${incompleteEntries.length} pending`} accent="yellow">
+            <p className="text-sm text-slate-600 mb-3">Complete the missing register details below. Saved sessions do not need to be recorded again.</p>
+            <ul className="space-y-2 mb-3">
+              {incompleteEntries.map(({ student, reason }) => <li key={student.id} className="text-sm"><Link to={`/students/${student.id}`} className="font-medium hover:underline">{student.full_name}</Link><span className="text-slate-600"> · {reason}</span></li>)}
+            </ul>
+            <Link to="/register" className="btn-ghost">Open register</Link>
+          </CollapsiblePanel>
+        </div>
+      )}
 
       {data.needsLesson > 0 && (
         <Link to="/students?filter=needs-lesson" className="card card-hover p-4 mt-6 flex items-center justify-between gap-3 border-amber-200">
@@ -289,8 +317,8 @@ export default function Dashboard() {
             <div className="text-slate-600">Active</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3">
-            <div className="text-xl font-bold">{completedToday}</div>
-            <div className="text-slate-600">Lessons done today</div>
+            <div className="text-xl font-bold">{data.sessionsToday.length}</div>
+            <div className="text-slate-600">Sessions recorded today</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3">
             <div className="text-xl font-bold">{notMarked}</div>
