@@ -91,9 +91,9 @@ function Layout() {
                 </NavLink>
               ))}
             </nav>
-            <div className="mt-4 pt-3 border-t border-slate-100 hidden lg:block">
-              <div className="text-sm font-medium truncate">{profile?.name ?? 'Signed in'}</div>
-              <div className="text-xs text-slate-500 capitalize mb-2">{profile?.role ?? 'staff'}</div>
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <div className="hidden lg:block text-sm font-medium truncate">{profile?.name ?? 'Signed in'}</div>
+              <div className="hidden lg:block text-xs text-slate-500 capitalize mb-2">{profile?.role ?? 'staff'}</div>
               {!centresLoading && !centresError && (activeCentres.length > 0 || assignedCentres.length > 0) && (
                 <label className="block mb-2">
                   <span className="text-xs text-slate-500">Working centre</span>
@@ -111,7 +111,7 @@ function Layout() {
                   {selectedCentre && <span className="sr-only">Selected centre: {selectedCentre.name}</span>}
                 </label>
               )}
-              <button onClick={() => void signOut()} className="btn-ghost w-full text-sm">Sign out</button>
+              <button onClick={() => void signOut()} className="btn-ghost w-full text-sm hidden lg:block">Sign out</button>
             </div>
           </div>
           <button onClick={() => void signOut()} className="btn-ghost w-full mt-3 lg:hidden text-sm">
