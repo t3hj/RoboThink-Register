@@ -7,17 +7,28 @@ import Register from '../src/pages/Register'
 const database = vi.hoisted(() => ({
   centreId: 'centre-a',
   attendance: [] as unknown[],
+  failQuery: null as { table: string; fields?: string } | null,
+  throwQuery: null as string | null,
+  curriculumFailures: 0,
   nextStudents: null as Promise<{ data: unknown[] | null; error: { message: string } | null }> | null,
 }))
 vi.mock('../src/lib/centres', () => ({ useCentres: () => ({ selectedCentreId: database.centreId, selectedCentre: { name: 'Test centre' }, isAllCentres: false }) }))
-vi.mock('../src/lib/curriculumData', () => ({ loadCurriculum: async () => ({ levels: [], lessons: [] }) }))
+vi.mock('../src/lib/curriculumData', () => ({ loadCurriculum: async () => { if (database.curriculumFailures > 0) { database.curriculumFailures--; throw new Error('Failed to fetch') }; return { levels: [], lessons: [] } } }))
 vi.mock('../src/lib/supabaseClient', () => ({
   supabase: { from: (table: string) => {
     const pending = table === 'students' ? database.nextStudents : null
     if (table === 'students') database.nextStudents = null
     const result = pending ?? Promise.resolve({ data: table === 'students' ? ['A', 'B'].map((id) => ({ id, full_name: `Student ${id}`, active: true, preferred_day: 'Thursday', preferred_time: '16:00', student_schedules: [] })) : table === 'attendance' ? database.attendance : [], error: null })
-    const query: Record<string, unknown> = { then: result.then.bind(result) }
-    for (const method of ['select', 'eq', 'in', 'neq', 'order', 'or']) query[method] = () => query
+    let fields = ''
+    const query: Record<string, unknown> = {
+      select: (value: string) => { fields = value; return query },
+      then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
+        if (database.throwQuery === table) return Promise.reject(new Error('Failed to fetch')).then(resolve, reject)
+        if (database.failQuery?.table === table && (!database.failQuery.fields || database.failQuery.fields === fields)) return Promise.resolve({ data: null, error: { message: 'Failed to fetch' } }).then(resolve, reject)
+        return result.then(resolve, reject)
+      },
+    }
+    for (const method of ['eq', 'in', 'neq', 'order', 'or']) query[method] = () => query
     return query
   } },
 }))
@@ -40,7 +51,7 @@ function pendingRefresh() {
   database.nextStudents = new Promise((done) => { resolve = done })
   return resolve
 }
-beforeEach(() => { database.centreId = 'centre-a'; database.attendance = []; database.nextStudents = null })
+beforeEach(() => { database.centreId = 'centre-a'; database.attendance = []; database.nextStudents = null; database.failQuery = null; database.throwQuery = null; database.curriculumFailures = 0 })
 afterEach(async () => { if (renderer) await act(async () => renderer.unmount()) })
 
 describe('register draft retention', () => {
@@ -129,5 +140,50 @@ describe('register search and filters', () => {
     await act(async () => saveOnOldDate())
     expect(renderer.root.findByProps({ 'aria-label': 'Select register date' }).props.value).toBe('2026-11-05')
     expect(input('B')).toBeDefined()
+  })
+})
+
+const failedReads = [
+  { table: 'student_schedules' },
+  { table: 'remediation_plans' },
+  { table: 'feedback_sheets' },
+  { table: 'attended_sessions', fields: '*, assessment_records:assessments(result)' },
+]
+describe('register read failures', () => {
+  it.each(failedReads)('blocks incomplete initial data when $table fails', async (query) => {
+    database.failQuery = query
+    await mount()
+    expect(renderer.root.findAllByProps({ 'aria-label': 'Draft A' })).toHaveLength(0)
+    expect(renderer.root.findAllByProps({ role: 'alert' })).toHaveLength(1)
+    database.failQuery = null
+    await act(async () => renderer.root.findAllByType('button').find((button) => button.children.includes('Try again'))!.props.onClick())
+    expect(input('A')).toBeDefined()
+  })
+  it.each(failedReads)('keeps drafts and the last known roster when $table fails on refresh', async (query) => {
+    await mount()
+    await typeDraft()
+    database.failQuery = query
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Save A' }).props.onClick())
+    expect(renderer.root.findAllByProps({ role: 'alert' })).toHaveLength(1)
+    expect(input('B').props.value).toBe('Laptop 7 — sensor issue')
+    database.failQuery = null
+    await act(async () => renderer.root.findAllByType('button').find((button) => button.children.includes('Try again'))!.props.onClick())
+    expect(input('B').props.value).toBe('Laptop 7 — sensor issue')
+  })
+  it('handles a rejected request and recovers rather than loading indefinitely', async () => {
+    database.throwQuery = 'students'
+    await mount()
+    expect(renderer.root.findAllByProps({ role: 'alert' })).toHaveLength(1)
+    database.throwQuery = null
+    await act(async () => renderer.root.findAllByType('button').find((button) => button.children.includes('Try again'))!.props.onClick())
+    expect(input('A')).toBeDefined()
+  })
+  it('does not present missing lesson choices as an empty curriculum', async () => {
+    database.curriculumFailures = 1
+    await mount()
+    expect(renderer.root.findAllByProps({ 'aria-label': 'Draft A' })).toHaveLength(0)
+    expect(renderer.root.findAllByProps({ role: 'alert' })).toHaveLength(1)
+    await act(async () => renderer.root.findAllByType('button').find((button) => button.children.includes('Try again'))!.props.onClick())
+    expect(input('A')).toBeDefined()
   })
 })

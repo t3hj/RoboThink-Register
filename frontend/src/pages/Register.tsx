@@ -75,6 +75,8 @@ export default function Register() {
   const [error, setError] = useState<string | null>(null)
   const [levels, setLevels] = useState<Level[]>([])
   const [lessons, setLessons] = useState<Lesson[]>([])
+  const [curriculumLoading, setCurriculumLoading] = useState(true)
+  const [curriculumError, setCurriculumError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [feedbackByStudent, setFeedbackByStudent] = useState<Map<string, FeedbackSheet[]>>(new Map())
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -82,12 +84,21 @@ export default function Register() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [bulkModal, setBulkModal] = useState<'attended' | 'absent' | 'lesson_outcome' | 'not_finished' | 'feedback' | null>(null)
 
-  useEffect(() => {
-    void loadCurriculum().then(({ levels: lv, lessons: le }) => {
+  const refreshCurriculum = useCallback(async () => {
+    setCurriculumLoading(true)
+    setCurriculumError(null)
+    try {
+      const { levels: lv, lessons: le } = await loadCurriculum()
       setLevels(lv)
       setLessons(le)
-    })
+    } catch (failure) {
+      setCurriculumError(failure && typeof failure === 'object' && 'message' in failure ? String(failure.message) : 'Unable to load curriculum')
+    } finally {
+      setCurriculumLoading(false)
+    }
   }, [])
+
+  useEffect(() => { void refreshCurriculum() }, [refreshCurriculum])
 
   const loadRoster = useCallback(async (forDate: string) => {
     const requestedScope = JSON.stringify([forDate, selectedCentreId])
@@ -96,197 +107,195 @@ export default function Register() {
     const isCurrent = () => request === requestId.current && activeScope.current === requestedScope
     setLoading(true)
     setError(null)
-    const dow = dayName(forDate)
+    try {
+      const dow = dayName(forDate)
 
-    // Active students only — inactive students never appear in the normal
-    // Register or its completeness counts.
-    // A student can have several weekly sessions, so find everyone with a
-    // session today from their schedule rows, plus anyone whose single
-    // preferred day is today (students without schedule rows).
-    const { data: slotRows } = await supabase.from('student_schedules').select('student_id').eq('day_of_week', dow).eq('active', true)
-    if (!isCurrent()) return
-    const slotIds = [...new Set((slotRows ?? []).map((r) => r.student_id as string))]
-    let scheduledQuery = supabase
-      .from('students')
-      .select('*, levels(name), subscriptions(name), student_schedules(day_of_week,start_time,active)')
-      .eq('active', true)
-    scheduledQuery = slotIds.length > 0 ? scheduledQuery.or(`preferred_day.eq.${dow},id.in.(${slotIds.join(',')})`) : scheduledQuery.eq('preferred_day', dow)
-    if (selectedCentreId) scheduledQuery = scheduledQuery.eq('centre_id', selectedCentreId)
-    const { data: scheduled, error: schedErr } = await scheduledQuery
-
-    if (!isCurrent()) return
-    if (schedErr) {
-      setError(schedErr.message)
-      setLoading(false)
-      return
-    }
-
-    let attendanceQuery = supabase.from('attendance').select('*').eq('date', forDate)
-    if (selectedCentreId) attendanceQuery = attendanceQuery.eq('centre_id', selectedCentreId)
-    const { data: att, error: attErr } = await attendanceQuery
-    if (!isCurrent()) return
-    if (attErr) {
-      setError(attErr.message)
-      setLoading(false)
-      return
-    }
-
-    const attendance = (att ?? []) as Attendance[]
-    // Fortnightly students only appear in their "on" weeks. Off-week students
-    // who nevertheless have an attendance row today are picked up as extras.
-    // Show each student at the time of TODAY's session, not their first one.
-    const scheduledAll = ((scheduled ?? []) as Student[])
-      .map((s) => ({ ...s, preferred_day: dow, preferred_time: slotOnDate(s, forDate)?.time ?? s.preferred_time }))
-      .sort((a, b) => (a.preferred_time ?? '').localeCompare(b.preferred_time ?? '') || a.full_name.localeCompare(b.full_name))
-    const expectedToday = scheduledAll.filter((s) => isExpectedOnDate(s, forDate))
-    const attendedIds = new Set(attendance.map((a) => a.student_id))
-    const offWeekEntries = scheduledAll.filter((s) => !isExpectedOnDate(s, forDate) && !attendedIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name }))
-    const scheduledIds = new Set(expectedToday.map((s) => s.id))
-    // Catch-up/special students: anyone with an attendance row for this
-    // date who wasn't already in the normal scheduled list. Restricted to
-    // active students, same as the scheduled query.
-    const extraIds = [...new Set(attendance.map((a) => a.student_id))].filter((id) => !scheduledIds.has(id))
-    let extras: Student[] = []
-    if (extraIds.length) {
-      let extrasQuery = supabase
+      // Active students only — inactive students never appear in the normal
+      // Register or its completeness counts.
+      // A student can have several weekly sessions, so find everyone with a
+      // session today from their schedule rows, plus anyone whose single
+      // preferred day is today (students without schedule rows).
+      const { data: slotRows, error: slotsError } = await supabase.from('student_schedules').select('student_id').eq('day_of_week', dow).eq('active', true)
+      if (!isCurrent()) return
+      if (slotsError) throw slotsError
+      const slotIds = [...new Set((slotRows ?? []).map((r) => r.student_id as string))]
+      let scheduledQuery = supabase
         .from('students')
-        .select('*, levels(name), subscriptions(name)')
-        .in('id', extraIds)
+        .select('*, levels(name), subscriptions(name), student_schedules(day_of_week,start_time,active)')
         .eq('active', true)
-      if (selectedCentreId) extrasQuery = extrasQuery.eq('centre_id', selectedCentreId)
-      const { data: extraData, error: extraErr } = await extrasQuery
+      scheduledQuery = slotIds.length > 0 ? scheduledQuery.or(`preferred_day.eq.${dow},id.in.(${slotIds.join(',')})`) : scheduledQuery.eq('preferred_day', dow)
+      if (selectedCentreId) scheduledQuery = scheduledQuery.eq('centre_id', selectedCentreId)
+      const { data: scheduled, error: schedErr } = await scheduledQuery
+
       if (!isCurrent()) return
-      if (extraErr) {
-        setError(extraErr.message)
+      if (schedErr) {
+        setError(schedErr.message)
         setLoading(false)
         return
       }
-      extras = (extraData ?? []) as Student[]
-    }
 
-    const everyone = [...expectedToday, ...extras]
-    const ids = everyone.map((s) => s.id)
-
-    let progress: StudentProgress[] = []
-    let plans: RemediationPlan[] = []
-    let feedbackSheets: FeedbackSheet[] = []
-    let sessionsForDate: AttendedSession[] = []
-    let recentSessions: AttendedSession[] = []
-    let lessonRecords: LessonRecord[] = []
-    let progressionOverrides: (ProgressionOverrideCheckpoint & { student_id: string })[] = []
-    let projects: StudentProject[] = []
-
-    if (ids.length) {
-      const [progRes, planRes, feedbackRes, sessionsRes, recentRes, lessonRecordsRes, overridesRes, projectsRes] = await Promise.all([
-        supabase.from('student_progress').select('*').in('student_id', ids),
-        supabase
-          .from('remediation_plans')
-          .select('*')
-          .in('student_id', ids)
-          .in('status', ['required', 'in_progress', 'ready_for_reassessment', 'intervention_required']),
-        // Outstanding feedback, by student_id only — deliberately NOT
-        // filtered by date/schedule, so it follows the student to
-        // whatever session they next appear at (normal day, catch-up, or
-        // any other day).
-        supabase.from('feedback_sheets').select('*').in('student_id', ids).neq('status', 'given'),
-        // Existing sessions for THIS date — loading/reloading the
-        // register must reflect what's already saved, never create new
-        // ones just by opening the page.
-        supabase.from('attended_sessions').select('*, assessment_records:assessments(result)').eq('date', forDate).in('student_id', ids),
-        // All sessions, across all dates, are the per-occurrence progression
-        // ledger. The selected Register date must never limit lesson history.
-        supabase
-          .from('attended_sessions')
-          .select('*')
-          .in('student_id', ids)
-          .order('date', { ascending: false })
-          .order('session_number', { ascending: false }),
-        // lesson_records is unique per student/level/lesson, not an attempt
-        // ledger. Load both statuses for legacy SQL-backfilled attempts which
-        // have no corresponding attended_sessions row.
-        supabase.from('lesson_records').select('*').in('student_id', ids),
-        // Explicit staff progression changes are history checkpoints.
-        supabase
-          .from('progress_overrides')
-          .select('student_id,new_level_id,new_lesson,created_at')
-          .in('student_id', ids)
-          .order('created_at', { ascending: false }),
-        supabase.from('student_project_durations').select('*').in('student_id', ids).order('start_date', { ascending: false }),
-      ])
+      let attendanceQuery = supabase.from('attendance').select('*').eq('date', forDate)
+      if (selectedCentreId) attendanceQuery = attendanceQuery.eq('centre_id', selectedCentreId)
+      const { data: att, error: attErr } = await attendanceQuery
       if (!isCurrent()) return
-      if (progRes.error) {
-        setError(progRes.error.message)
+      if (attErr) {
+        setError(attErr.message)
         setLoading(false)
         return
       }
-      const progressionError = recentRes.error ?? lessonRecordsRes.error ?? overridesRes.error ?? projectsRes.error
-      if (progressionError) {
-        setError(progressionError.message)
-        setLoading(false)
-        return
+
+      const attendance = (att ?? []) as Attendance[]
+      // Fortnightly students only appear in their "on" weeks. Off-week students
+      // who nevertheless have an attendance row today are picked up as extras.
+      // Show each student at the time of TODAY's session, not their first one.
+      const scheduledAll = ((scheduled ?? []) as Student[])
+        .map((s) => ({ ...s, preferred_day: dow, preferred_time: slotOnDate(s, forDate)?.time ?? s.preferred_time }))
+        .sort((a, b) => (a.preferred_time ?? '').localeCompare(b.preferred_time ?? '') || a.full_name.localeCompare(b.full_name))
+      const expectedToday = scheduledAll.filter((s) => isExpectedOnDate(s, forDate))
+      const attendedIds = new Set(attendance.map((a) => a.student_id))
+      const offWeekEntries = scheduledAll.filter((s) => !isExpectedOnDate(s, forDate) && !attendedIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name }))
+      const scheduledIds = new Set(expectedToday.map((s) => s.id))
+      // Catch-up/special students: anyone with an attendance row for this
+      // date who wasn't already in the normal scheduled list. Restricted to
+      // active students, same as the scheduled query.
+      const extraIds = [...new Set(attendance.map((a) => a.student_id))].filter((id) => !scheduledIds.has(id))
+      let extras: Student[] = []
+      if (extraIds.length) {
+        let extrasQuery = supabase
+          .from('students')
+          .select('*, levels(name), subscriptions(name)')
+          .in('id', extraIds)
+          .eq('active', true)
+        if (selectedCentreId) extrasQuery = extrasQuery.eq('centre_id', selectedCentreId)
+        const { data: extraData, error: extraErr } = await extrasQuery
+        if (!isCurrent()) return
+        if (extraErr) {
+          setError(extraErr.message)
+          setLoading(false)
+          return
+        }
+        extras = (extraData ?? []) as Student[]
       }
-      progress = (progRes.data ?? []) as StudentProgress[]
-      plans = (planRes.data ?? []) as RemediationPlan[]
-      feedbackSheets = (feedbackRes.data ?? []) as FeedbackSheet[]
-      sessionsForDate = (sessionsRes.data ?? []) as AttendedSession[]
-      recentSessions = (recentRes.data ?? []) as AttendedSession[]
-      lessonRecords = (lessonRecordsRes.data ?? []) as LessonRecord[]
-      progressionOverrides = (overridesRes.data ?? []) as (ProgressionOverrideCheckpoint & { student_id: string })[]
-      projects = (projectsRes.data ?? []) as StudentProject[]
-    }
 
-    const progMap = new Map(progress.map((p) => [p.student_id, p]))
-    const planMap = new Map(plans.map((p) => [p.student_id, p]))
-    const attMap = new Map(attendance.map((a) => [a.student_id, a]))
-    const feedbackByStudentMap = new Map<string, FeedbackSheet[]>()
-    for (const f of feedbackSheets) {
-      feedbackByStudentMap.set(f.student_id, [...(feedbackByStudentMap.get(f.student_id) ?? []), f])
-    }
-    const sessionsByStudent = new Map<string, AttendedSession[]>()
-    for (const s of sessionsForDate) {
-      sessionsByStudent.set(s.student_id, [...(sessionsByStudent.get(s.student_id) ?? []), s].sort((a, b) => a.session_number - b.session_number))
-    }
-    const mostRecentByStudent = new Map<string, AttendedSession>()
-    for (const s of recentSessions) {
-      if (!mostRecentByStudent.has(s.student_id)) mostRecentByStudent.set(s.student_id, s)
-    }
-    const lessonRecordsByStudent = new Map<string, LessonRecord[]>()
-    for (const lr of lessonRecords) {
-      lessonRecordsByStudent.set(lr.student_id, [...(lessonRecordsByStudent.get(lr.student_id) ?? []), lr])
-    }
-    const overridesByStudent = new Map<string, ProgressionOverrideCheckpoint[]>()
-    for (const override of progressionOverrides) {
-      overridesByStudent.set(override.student_id, [
-        ...(overridesByStudent.get(override.student_id) ?? []),
-        { new_level_id: override.new_level_id, new_lesson: override.new_lesson, created_at: override.created_at },
-      ])
-    }
+      const everyone = [...expectedToday, ...extras]
+      const ids = everyone.map((s) => s.id)
 
-    const entries: RosterEntry[] = everyone.map((s) => ({
-      ...s,
-      attendance: attMap.get(s.id) ?? null,
-      progress: progMap.get(s.id) ?? null,
-      plan: planMap.get(s.id) ?? null,
-      feedback: findOutstandingFeedback(feedbackByStudentMap.get(s.id) ?? []),
-      sessionsToday: sessionsByStudent.get(s.id) ?? [],
-      mostRecentSession: mostRecentByStudent.get(s.id) ?? null,
-      lessonRecords: lessonRecordsByStudent.get(s.id) ?? [],
-      sessionHistory: recentSessions.filter((session) => session.student_id === s.id),
-      progressionOverrides: overridesByStudent.get(s.id) ?? [],
-      projects: projects.filter((project) => project.student_id === s.id),
-    }))
+      let progress: StudentProgress[] = []
+      let plans: RemediationPlan[] = []
+      let feedbackSheets: FeedbackSheet[] = []
+      let sessionsForDate: AttendedSession[] = []
+      let recentSessions: AttendedSession[] = []
+      let lessonRecords: LessonRecord[] = []
+      let progressionOverrides: (ProgressionOverrideCheckpoint & { student_id: string })[] = []
+      let projects: StudentProject[] = []
 
-    entries.sort((a, b) => {
-      const aSched = isExpectedOnDate(a, forDate) ? 0 : 1
-      const bSched = isExpectedOnDate(b, forDate) ? 0 : 1
-      if (aSched !== bSched) return aSched - bSched
-      return (a.preferred_time ?? '').localeCompare(b.preferred_time ?? '')
-    })
-    setOffWeek(offWeekEntries)
-    setFeedbackByStudent(feedbackByStudentMap)
-    setLoadedScope(JSON.stringify([forDate, selectedCentreId]))
-    setRoster(entries)
-    setLoading(false)
+      if (ids.length) {
+        const [progRes, planRes, feedbackRes, sessionsRes, recentRes, lessonRecordsRes, overridesRes, projectsRes] = await Promise.all([
+          supabase.from('student_progress').select('*').in('student_id', ids),
+          supabase
+            .from('remediation_plans')
+            .select('*')
+            .in('student_id', ids)
+            .in('status', ['required', 'in_progress', 'ready_for_reassessment', 'intervention_required']),
+          // Outstanding feedback, by student_id only — deliberately NOT
+          // filtered by date/schedule, so it follows the student to
+          // whatever session they next appear at (normal day, catch-up, or
+          // any other day).
+          supabase.from('feedback_sheets').select('*').in('student_id', ids).neq('status', 'given'),
+          // Existing sessions for THIS date — loading/reloading the
+          // register must reflect what's already saved, never create new
+          // ones just by opening the page.
+          supabase.from('attended_sessions').select('*, assessment_records:assessments(result)').eq('date', forDate).in('student_id', ids),
+          // All sessions, across all dates, are the per-occurrence progression
+          // ledger. The selected Register date must never limit lesson history.
+          supabase
+            .from('attended_sessions')
+            .select('*')
+            .in('student_id', ids)
+            .order('date', { ascending: false })
+            .order('session_number', { ascending: false }),
+          // lesson_records is unique per student/level/lesson, not an attempt
+          // ledger. Load both statuses for legacy SQL-backfilled attempts which
+          // have no corresponding attended_sessions row.
+          supabase.from('lesson_records').select('*').in('student_id', ids),
+          // Explicit staff progression changes are history checkpoints.
+          supabase
+            .from('progress_overrides')
+            .select('student_id,new_level_id,new_lesson,created_at')
+            .in('student_id', ids)
+            .order('created_at', { ascending: false }),
+          supabase.from('student_project_durations').select('*').in('student_id', ids).order('start_date', { ascending: false }),
+        ])
+        if (!isCurrent()) return
+        const rosterError = progRes.error ?? planRes.error ?? feedbackRes.error ?? sessionsRes.error ?? recentRes.error ?? lessonRecordsRes.error ?? overridesRes.error ?? projectsRes.error
+        if (rosterError) throw rosterError
+        progress = (progRes.data ?? []) as StudentProgress[]
+        plans = (planRes.data ?? []) as RemediationPlan[]
+        feedbackSheets = (feedbackRes.data ?? []) as FeedbackSheet[]
+        sessionsForDate = (sessionsRes.data ?? []) as AttendedSession[]
+        recentSessions = (recentRes.data ?? []) as AttendedSession[]
+        lessonRecords = (lessonRecordsRes.data ?? []) as LessonRecord[]
+        progressionOverrides = (overridesRes.data ?? []) as (ProgressionOverrideCheckpoint & { student_id: string })[]
+        projects = (projectsRes.data ?? []) as StudentProject[]
+      }
+
+      const progMap = new Map(progress.map((p) => [p.student_id, p]))
+      const planMap = new Map(plans.map((p) => [p.student_id, p]))
+      const attMap = new Map(attendance.map((a) => [a.student_id, a]))
+      const feedbackByStudentMap = new Map<string, FeedbackSheet[]>()
+      for (const f of feedbackSheets) {
+        feedbackByStudentMap.set(f.student_id, [...(feedbackByStudentMap.get(f.student_id) ?? []), f])
+      }
+      const sessionsByStudent = new Map<string, AttendedSession[]>()
+      for (const s of sessionsForDate) {
+        sessionsByStudent.set(s.student_id, [...(sessionsByStudent.get(s.student_id) ?? []), s].sort((a, b) => a.session_number - b.session_number))
+      }
+      const mostRecentByStudent = new Map<string, AttendedSession>()
+      for (const s of recentSessions) {
+        if (!mostRecentByStudent.has(s.student_id)) mostRecentByStudent.set(s.student_id, s)
+      }
+      const lessonRecordsByStudent = new Map<string, LessonRecord[]>()
+      for (const lr of lessonRecords) {
+        lessonRecordsByStudent.set(lr.student_id, [...(lessonRecordsByStudent.get(lr.student_id) ?? []), lr])
+      }
+      const overridesByStudent = new Map<string, ProgressionOverrideCheckpoint[]>()
+      for (const override of progressionOverrides) {
+        overridesByStudent.set(override.student_id, [
+          ...(overridesByStudent.get(override.student_id) ?? []),
+          { new_level_id: override.new_level_id, new_lesson: override.new_lesson, created_at: override.created_at },
+        ])
+      }
+
+      const entries: RosterEntry[] = everyone.map((s) => ({
+        ...s,
+        attendance: attMap.get(s.id) ?? null,
+        progress: progMap.get(s.id) ?? null,
+        plan: planMap.get(s.id) ?? null,
+        feedback: findOutstandingFeedback(feedbackByStudentMap.get(s.id) ?? []),
+        sessionsToday: sessionsByStudent.get(s.id) ?? [],
+        mostRecentSession: mostRecentByStudent.get(s.id) ?? null,
+        lessonRecords: lessonRecordsByStudent.get(s.id) ?? [],
+        sessionHistory: recentSessions.filter((session) => session.student_id === s.id),
+        progressionOverrides: overridesByStudent.get(s.id) ?? [],
+        projects: projects.filter((project) => project.student_id === s.id),
+      }))
+
+      entries.sort((a, b) => {
+        const aSched = isExpectedOnDate(a, forDate) ? 0 : 1
+        const bSched = isExpectedOnDate(b, forDate) ? 0 : 1
+        if (aSched !== bSched) return aSched - bSched
+        return (a.preferred_time ?? '').localeCompare(b.preferred_time ?? '')
+      })
+      setOffWeek(offWeekEntries)
+      setFeedbackByStudent(feedbackByStudentMap)
+      setLoadedScope(JSON.stringify([forDate, selectedCentreId]))
+      setRoster(entries)
+      setLoading(false)
+    } catch (failure) {
+      if (!isCurrent()) return
+      setError(failure && typeof failure === 'object' && 'message' in failure ? String(failure.message) : 'Unable to load register')
+      setLoading(false)
+    }
   }, [selectedCentreId])
 
   useEffect(() => {
@@ -406,6 +415,9 @@ export default function Register() {
     }
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [roster])
+
+  if (curriculumLoading) return <LoadingPanel label="Loading lesson choices…" />
+  if (curriculumError) return <ErrorPanel message={curriculumError} onRetry={() => void refreshCurriculum()} />
 
   // Keep same-scope session rows mounted: they own unsaved student drafts.
   // Switching date or centre must instead load a fresh roster.
