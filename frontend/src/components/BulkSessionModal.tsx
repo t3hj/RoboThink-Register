@@ -121,7 +121,7 @@ export default function BulkSessionModal({ mode, candidates, date, levels, lesso
   const title = mode === 'not_finished' ? 'Bulk Not Finished' : 'Bulk Lesson / Outcome'
 
   return (
-    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose}>
+    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose} dismissible={!busy}>
       <div className="card p-5 max-w-lg w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <h3 className="font-semibold mb-1">{title}</h3>
         <p className="text-xs text-slate-500 mb-3">

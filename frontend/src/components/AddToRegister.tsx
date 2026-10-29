@@ -93,7 +93,7 @@ export default function AddToRegister({ date, dayLabel, excludeIds, onAdded, onC
   }
 
   return (
-    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose}>
+    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose} dismissible={!busy}>
       <div className="card p-5 max-w-md w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add student to today's register">
         <h3 className="font-semibold mb-1">Add to today's register</h3>
         <p className="text-xs text-slate-500 mb-4">Their normal day/time won't change — this only adds today's session.</p>

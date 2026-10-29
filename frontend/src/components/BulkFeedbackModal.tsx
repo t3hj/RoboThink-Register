@@ -74,7 +74,7 @@ export default function BulkFeedbackModal({ candidates, onDone, onClose }: Props
   }
 
   return (
-    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose}>
+    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose} dismissible={!busy}>
       <div className="card p-5 max-w-md w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Bulk feedback">
         <h3 className="font-semibold mb-1">Bulk feedback status</h3>
         <p className="text-xs text-slate-500 mb-3">

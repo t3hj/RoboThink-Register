@@ -60,7 +60,7 @@ export default function BulkAttendanceModal({ target, candidates, date, dayLabel
   }
 
   return (
-    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose}>
+    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-4 overflow-y-auto" onClose={onClose} dismissible={!busy}>
       <div className="card p-5 max-w-md w-full my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Bulk mark ${target}`}>
         <h3 className="font-semibold mb-1">Mark {target === 'Arrived' ? 'Attended' : 'Absent'}?</h3>
         <p className="text-sm text-slate-500 mb-3">Apply to {candidates.length} student{candidates.length === 1 ? '' : 's'}?</p>

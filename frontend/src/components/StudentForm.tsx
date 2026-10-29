@@ -188,7 +188,7 @@ export default function StudentForm({ student, prefill, onClose, onSaved }: Prop
   }
 
   return (
-    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-2 sm:p-4 overflow-y-auto overscroll-contain" onClose={onClose}>
+    <ModalOverlay className="flex items-start sm:items-center justify-center bg-black/40 p-2 sm:p-4 overflow-y-auto overscroll-contain" onClose={onClose} dismissible={!busy}>
       <div className="card p-4 sm:p-5 max-w-lg w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain my-2 sm:my-8" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit student' : 'Add student'}>
         <h3 className="font-semibold mb-4">{isEdit ? 'Edit student' : 'Add student'}</h3>
 

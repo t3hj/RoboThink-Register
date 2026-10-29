@@ -3,7 +3,7 @@ import type { AttendanceStatus } from '../types'
 import { friendlyMessage } from '../lib/errors'
 import { RobotIdle } from './RobotArt'
 import { createPortal } from 'react-dom'
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 
 /** Coloured status badge for attendance states. Colour is never the only
  *  signal — the status word itself is always shown. */
@@ -146,11 +146,12 @@ export function ConfirmDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const titleId = useId()
   if (!open) return null
   return (
-    <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={onCancel}>
-      <div className="card p-5 max-w-sm w-full" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <h3 className="font-semibold mb-2">{title}</h3>
+    <ModalOverlay className="flex items-center justify-center bg-black/40 p-4" onClose={onCancel} dismissible={!busy}>
+      <div className="card p-5 max-w-sm w-full" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <h3 id={titleId} className="font-semibold mb-2">{title}</h3>
         <p className="text-sm text-slate-600 mb-4">{message}</p>
         <div className="flex justify-end gap-2">
           <button className="btn-ghost" onClick={onCancel} disabled={busy}>
@@ -181,35 +182,74 @@ export function BusyButton({
 }
 
 
-let openOverlays = 0
+const openOverlays: HTMLElement[] = []
+let bodyOverflowBeforeDialogs = ''
+const FOCUSABLE = 'button:not(:disabled), a[href], input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
 
-/** Full-screen dimmed overlay for dialogs. Rendered on document.body so no
- *  page wrapper, transform or overflow can displace it; locks page scrolling
- *  while open and closes on Escape or a click on the backdrop. The dialog
- *  itself should stop click propagation (all existing dialogs do). */
-export function ModalOverlay({ className = '', onClose, children }: { className?: string; onClose: () => void; children: React.ReactNode }) {
-  // Keep the latest onClose without re-running the effect on every render
-  // (callers pass inline arrow functions).
+/** Shared dialog focus, dismissal and body-scroll behaviour. Only the topmost
+ *  overlay handles keyboard events, including when dialogs are nested. */
+export function ModalOverlay({ className = '', onClose, dismissible = true, children }: { className?: string; onClose: () => void; dismissible?: boolean; children: React.ReactNode }) {
+  const overlayRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef(onClose)
+  const dismissibleRef = useRef(dismissible)
   closeRef.current = onClose
+  dismissibleRef.current = dismissible
 
   useEffect(() => {
-    openOverlays++
-    const previous = document.body.style.overflow
+    const overlay = overlayRef.current!
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    if (openOverlays.length === 0) bodyOverflowBeforeDialogs = document.body.style.overflow
+    openOverlays.push(overlay)
     document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeRef.current()
+    const isTop = () => openOverlays[openOverlays.length - 1] === overlay
+    const focusable = () => [...overlay.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) =>
+      !element.closest('[hidden], [inert], [aria-hidden="true"]') && element.getClientRects().length > 0,
+    )
+    const focusFirst = () => (focusable()[0] ?? overlay).focus()
+    if (!overlay.contains(document.activeElement)) focusFirst()
+
+    const onFocus = (event: FocusEvent) => {
+      if (isTop() && !overlay.contains(event.target as Node)) focusFirst()
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (!isTop()) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (dismissibleRef.current) closeRef.current()
+      }
+      if (event.key === 'Tab') {
+        const elements = focusable()
+        const first = elements[0]
+        const last = elements[elements.length - 1]
+        if (!first) {
+          event.preventDefault()
+          overlay.focus()
+        } else if (event.shiftKey && (document.activeElement === first || document.activeElement === overlay)) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === overlay)) {
+          event.preventDefault()
+          first.focus()
+        }
+      }
     }
     document.addEventListener('keydown', onKey)
+    document.addEventListener('focusin', onFocus)
     return () => {
       document.removeEventListener('keydown', onKey)
-      openOverlays--
-      if (openOverlays === 0) document.body.style.overflow = previous
+      document.removeEventListener('focusin', onFocus)
+      const wasTop = isTop()
+      openOverlays.splice(openOverlays.indexOf(overlay), 1)
+      if (openOverlays.length === 0) document.body.style.overflow = bodyOverflowBeforeDialogs
+      if (wasTop && previousFocus?.isConnected) previousFocus.focus()
     }
   }, [])
 
   return createPortal(
-    <div className={`fixed inset-0 z-40 ${className}`} onClick={() => closeRef.current()}>
+    <div ref={overlayRef} tabIndex={-1} className={`fixed inset-0 z-40 ${className}`} onClick={(event) => {
+      if (event.target === event.currentTarget && dismissibleRef.current && openOverlays[openOverlays.length - 1] === event.currentTarget) closeRef.current()
+    }}>
       {children}
     </div>,
     document.body,
