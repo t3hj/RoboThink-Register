@@ -45,25 +45,25 @@ export default function Auth() {
           <MascotCrew className="mb-6 rounded-xl bg-slate-50 p-3" />
           {!supabaseConfigured && (
             <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
-              Supabase is not configured. Copy <code>frontend/.env.example</code> to{' '}
-              <code>frontend/.env</code> and set <code>VITE_SUPABASE_URL</code> and{' '}
-              <code>VITE_SUPABASE_ANON_KEY</code>, then restart the dev server.
+              Sign-in is temporarily unavailable. Please contact your administrator for help.
             </div>
           )}
           <form onSubmit={signIn} className="space-y-3">
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Instructor email</span>
+              <span className="text-sm font-medium text-slate-700">Staff email</span>
               <input
                 type="email"
                 required
                 autoComplete="email"
+                aria-describedby="sign-in-help"
                 className="mt-1 w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--rt-primary)]/40"
                 placeholder="you@robothink.co.uk"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </label>
-            <button type="submit" disabled={sending} className="btn-primary w-full">
+            <p id="sign-in-help" className="text-sm text-slate-500">Use your staff email. We’ll send you a secure sign-in link; no password is needed.</p>
+            <button type="submit" disabled={sending || !supabaseConfigured} className="btn-primary w-full">
               {sending ? 'Sending…' : 'Send sign-in link'}
             </button>
           </form>
@@ -73,8 +73,7 @@ export default function Auth() {
             </p>
           )}
           <p className="mt-6 text-xs text-slate-400">
-            Access is restricted to RoboThink staff. Accounts must be mapped to a staff profile
-            (see <code>db/robothink_rls.sql</code>).
+            Access is restricted to authorised staff. If you need access or cannot sign in, please contact your administrator.
           </p>
         </div>
       </div>
