@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
 import { useToast } from './Toast'
@@ -53,6 +53,16 @@ type Draft = {
   remediationPath: RemediationPath | ''
 }
 
+// Once the session RPC succeeds, retries only finish these follow-up writes.
+// They must never call an insert RPC again, including for assessments/projects.
+type PendingSave = {
+  sessionId: string | null
+  projectId: string | null
+  outcome: SessionOutcome
+  needsProjectLink: boolean
+  successMessage: string
+}
+
 function blankDraft(defaultLessonId: string): Draft {
   return { activity: 'lesson', lessonId: defaultLessonId, outcome: 'completed', leftAside: false, identifier: '', reason: '', note: '', projectId: '', assessmentResult: '', remediationPath: '' }
 }
@@ -75,6 +85,9 @@ export default function SessionEntryRow({
   const { profile } = useAuth()
   const { notify } = useToast()
   const [busy, setBusy] = useState(false)
+  const saving = useRef(false)
+  const [hasRecordedSession, setHasRecordedSession] = useState(false)
+  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   function reportError(message: string) { setActionError(message) }
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -96,7 +109,7 @@ export default function SessionEntryRow({
   )
   const defaultLessonId = recommendedLesson?.id ?? (expectedLesson === undefined ? lessonsInLevel[0]?.id ?? '' : '')
 
-  const showBlankFormAutomatically = state === 'attended' && sessionsToday.length === 0 && !editingSessionId
+  const showBlankFormAutomatically = state === 'attended' && sessionsToday.length === 0 && !editingSessionId && !hasRecordedSession
   const formOpen = draft != null || showBlankFormAutomatically
   const activeDraft: Draft | null = draft ?? (showBlankFormAutomatically ? blankDraft(defaultLessonId) : null)
 
@@ -172,7 +185,55 @@ export default function SessionEntryRow({
     }
   }
 
+  async function finishSavedSession(saved: PendingSave) {
+    if (saved.needsProjectLink) {
+      if (!saved.sessionId) {
+        reportError('The session was recorded, but its reference was not returned. Check the student’s history before recording anything else.')
+        onChanged()
+        return
+      }
+      const { data, error } = await supabase.from('attended_sessions')
+        .update({ project_id: saved.projectId }).eq('id', saved.sessionId).select('id').maybeSingle()
+      if (error || !data) {
+        reportError(`The session is already recorded, but its project selection could not be updated. ${error ? friendlyMessage(error.message) : 'The saved session could not be found.'} Retry the remaining updates below.`)
+        onChanged()
+        return
+      }
+      saved = { ...saved, needsProjectLink: false }
+      setPendingSave(saved)
+    }
+    const attendanceSaved = await upsertAttendance({ status: outcomeToAttendanceStatus(saved.outcome) })
+    if (!attendanceSaved) {
+      setActionError((message) => `The session is already recorded, but attendance could not be updated. ${message ?? ''} Retry the remaining updates below.`)
+      onChanged()
+      return
+    }
+    setPendingSave(null)
+    setDraft(null)
+    setEditingSessionId(null)
+    setDetailsOpen(false)
+    notify(saved.successMessage, 'success')
+    onChanged()
+  }
+
   async function save() {
+    if (saving.current) return
+    saving.current = true
+    setBusy(true)
+    try {
+      setActionError(null)
+      if (pendingSave) await finishSavedSession(pendingSave)
+      else await saveDraft()
+    } catch {
+      reportError('The save could not be fully confirmed. Check the recorded sessions below. If the session is already recorded, retry only the remaining updates.')
+      onChanged()
+    } finally {
+      saving.current = false
+      setBusy(false)
+    }
+  }
+
+  async function saveDraft() {
     setActionError(null)
     if (!activeDraft) return
     if (activeDraft.activity === 'project' && !activeDraft.projectId) {
@@ -205,28 +266,26 @@ export default function SessionEntryRow({
     }
     setBusy(true)
     if (activeDraft.activity === 'project') {
-      const { error } = editingSessionId
+      const result = editingSessionId
         ? await supabase.rpc('update_project_session', { in_session_id: editingSessionId, in_project_id: activeDraft.projectId, in_outcome: activeDraft.outcome, in_date: date })
         : await supabase.rpc('record_project_session', { in_student_id: student.id, in_project_id: activeDraft.projectId, in_outcome: activeDraft.outcome, in_date: date })
-      if (error) {
-        setBusy(false)
-        reportError(friendlyMessage(error.message))
+      if (result.error) {
+        reportError(friendlyMessage(result.error.message))
         return
       }
-      const attendanceSaved = await upsertAttendance({ status: outcomeToAttendanceStatus(activeDraft.outcome) })
-      setBusy(false)
-      setDraft(null)
-      setEditingSessionId(null)
-      if (attendanceSaved) setDetailsOpen(false)
-      notify(
-        attendanceSaved
-          ? editingSessionId ? 'Project session updated' : `Project session recorded for ${student.full_name}`
-          : 'Project session saved, but attendance could not be updated. Please check the attendance status.',
-        attendanceSaved ? 'success' : 'error',
-      )
-      onChanged()
+      const saved: PendingSave = {
+        sessionId: editingSessionId ?? (typeof result.data === 'string' ? result.data : null),
+        projectId: activeDraft.projectId,
+        outcome: activeDraft.outcome,
+        needsProjectLink: false,
+        successMessage: editingSessionId ? 'Project session updated' : `Project session recorded for ${student.full_name}`,
+      }
+      setHasRecordedSession(true)
+      setPendingSave(saved)
+      await finishSavedSession(saved)
       return
     }
+
     const args = {
       in_actual_lesson_id: activeDraft.lessonId,
       in_outcome: activeDraft.outcome,
@@ -259,35 +318,21 @@ export default function SessionEntryRow({
       reportError(friendlyMessage(error.message))
       return
     }
-    const savedSessionId = sessionId
-    if (savedSessionId) {
-      const { error: projectError } = await supabase
-        .from('attended_sessions')
-        .update({ project_id: activeDraft.projectId || null })
-        .eq('id', savedSessionId)
-      if (projectError) {
-        setBusy(false)
-        reportError(`Session saved, but the project selection could not be updated. ${friendlyMessage(projectError.message)} Check the saved session before retrying.`)
-        onChanged()
-        return
-      }
+    const originalProjectId = editingSessionId ? sessionsToday.find((session) => session.id === editingSessionId)?.project_id ?? null : null
+    const saved: PendingSave = {
+      sessionId,
+      projectId: activeDraft.projectId || null,
+      outcome: activeDraft.outcome,
+      needsProjectLink: (activeDraft.projectId || null) !== originalProjectId,
+      successMessage: requiresAssessmentResult(selectedForSave)
+        ? activeDraft.outcome === 'not_finished'
+          ? `${selectedForSave?.title ?? 'Assessment'} marked not finished for ${student.full_name}`
+          : `${selectedForSave?.title ?? 'Assessment'}: ${activeDraft.assessmentResult} recorded for ${student.full_name}`
+        : editingSessionId ? 'Session updated' : `Session recorded for ${student.full_name}`,
     }
-    const attendanceSaved = await upsertAttendance({ status: outcomeToAttendanceStatus(activeDraft.outcome) })
-    setBusy(false)
-    setDraft(null)
-    setEditingSessionId(null)
-    if (attendanceSaved) setDetailsOpen(false)
-    notify(
-      attendanceSaved
-        ? requiresAssessmentResult(selectedForSave)
-          ? activeDraft.outcome === 'not_finished'
-            ? `${selectedForSave?.title ?? 'Assessment'} marked not finished for ${student.full_name}`
-            : `${selectedForSave?.title ?? 'Assessment'}: ${activeDraft.assessmentResult} recorded for ${student.full_name}`
-          : editingSessionId ? 'Session updated' : `Session recorded for ${student.full_name}`
-        : 'Session saved, but attendance could not be updated. Please check the attendance status.',
-      attendanceSaved ? 'success' : 'error',
-    )
-    onChanged()
+    setHasRecordedSession(true)
+    setPendingSave(saved)
+    await finishSavedSession(saved)
   }
 
   const selectedLesson = activeDraft ? lessonById.get(activeDraft.lessonId) : null
@@ -322,16 +367,18 @@ export default function SessionEntryRow({
     <div className="flex flex-col gap-3">
       {actionError && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800" role="alert">
-          <p className="font-medium">Please check {student.full_name}’s entry</p>
+          <p className="font-medium">{pendingSave ? `Session recorded for ${student.full_name} — update incomplete` : `Please check ${student.full_name}’s entry`}</p>
           <p className="mt-1">{actionError}</p>
-          <button type="button" className="mt-2 underline" onClick={() => setActionError(null)}>Dismiss error</button>
+          {pendingSave
+            ? <BusyButton busy={busy} className="btn-ghost mt-2" onClick={() => void save()}>Retry remaining updates</BusyButton>
+            : <button type="button" className="mt-2 underline" onClick={() => setActionError(null)}>Dismiss error</button>}
         </div>
       )}
       {/* Attendance state */}
       <div className="flex items-center gap-2 flex-wrap">
         <button
           className={`text-sm px-3 py-2 rounded-lg font-medium min-w-[5.5rem] ${state === 'attended' ? 'btn-primary' : 'btn-ghost'}`}
-          disabled={busy}
+          disabled={busy || pendingSave != null}
           aria-pressed={state === 'attended'}
           onClick={() => void markAttended()}
         >
@@ -339,7 +386,7 @@ export default function SessionEntryRow({
         </button>
         <button
           className={`text-sm px-3 py-2 rounded-lg font-medium min-w-[5.5rem] ${state === 'absent' ? 'bg-[color:var(--rt-danger)] text-white' : 'btn-ghost'}`}
-          disabled={busy}
+          disabled={busy || pendingSave != null}
           aria-pressed={state === 'absent'}
           onClick={() => void markAbsent()}
         >
@@ -353,7 +400,7 @@ export default function SessionEntryRow({
           <summary className="flex flex-wrap cursor-pointer list-none items-center gap-2 p-2.5 text-sm [&::-webkit-details-marker]:hidden">
             <span className="min-w-0 flex-1 font-medium">Session details<span className="sr-only"> for {student.full_name}</span></span>
             <span className={`badge ${draft || sessionsToday.length === 0 ? 'badge-assess' : ''}`}>
-              {draft ? 'Unsaved changes' : sessionsToday.length > 0 ? `${sessionsToday.length} recorded${sessionsToday.at(-1)?.outcome === 'not_finished' ? ' · not finished' : ''}` : 'Needs recording'}
+              {pendingSave ? 'Recorded · update pending' : draft ? 'Unsaved changes' : sessionsToday.length > 0 ? `${sessionsToday.length} recorded${sessionsToday.at(-1)?.outcome === 'not_finished' ? ' · not finished' : ''}` : hasRecordedSession ? 'Recorded · refreshing' : 'Needs recording'}
             </span>
             <span className="text-slate-600 group-open:rotate-180" aria-hidden>⌄</span>
           </summary>
@@ -378,7 +425,7 @@ export default function SessionEntryRow({
                     <select
                       className="p-1.5 border border-slate-200 rounded-md bg-white text-slate-700"
                       value={s.project_id ?? ''}
-                      disabled={busy || editingSessionId === s.id}
+                      disabled={busy || pendingSave != null || editingSessionId === s.id}
                       onChange={(event) => void updateSessionProject(s, event.target.value)}
                       aria-label={`Project for session ${s.session_number}`}
                     >
@@ -393,7 +440,7 @@ export default function SessionEntryRow({
                       ? <span className="badge">Not finished</span>
                       : <span className="badge badge-assess">{s.assessment_records?.[0]?.result ?? 'No result saved'}</span>
                   ) : (
-                    <button className="text-xs text-slate-600 hover:underline" onClick={() => {
+                    <button className="text-xs text-slate-600 hover:underline" disabled={busy || pendingSave != null} onClick={() => {
                       if (editingSessionId === s.id) { setDraft(null); setEditingSessionId(null) }
                       else startEdit(s)
                     }}>
@@ -412,14 +459,14 @@ export default function SessionEntryRow({
         </ul>
       )}
 
-      {state === 'attended' && !formOpen && (
+      {state === 'attended' && !formOpen && !pendingSave && (
         <button className="btn-ghost text-sm self-start" disabled={busy} onClick={startDraft}>
-          + Record {sessionsToday.length > 0 ? 'another session' : 'session details'}
+          + Record {sessionsToday.length > 0 || hasRecordedSession ? 'another session' : 'session details'}
         </button>
       )}
 
       {/* Session entry / edit form */}
-      {state === 'attended' && activeDraft && (
+      {state === 'attended' && activeDraft && !pendingSave && (
         <div className="bg-slate-50 rounded-lg p-3 flex flex-col gap-3">
           <div className="flex gap-2" role="group" aria-label="Session activity">
             {(['lesson', 'project'] as const).map((activity) => {
