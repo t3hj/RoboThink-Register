@@ -6,6 +6,7 @@ import Register from '../src/pages/Register'
 
 const database = vi.hoisted(() => ({
   centreId: 'centre-a',
+  attendance: [] as unknown[],
   nextStudents: null as Promise<{ data: unknown[] | null; error: { message: string } | null }> | null,
 }))
 vi.mock('../src/lib/centres', () => ({ useCentres: () => ({ selectedCentreId: database.centreId, selectedCentre: { name: 'Test centre' }, isAllCentres: false }) }))
@@ -14,7 +15,7 @@ vi.mock('../src/lib/supabaseClient', () => ({
   supabase: { from: (table: string) => {
     const pending = table === 'students' ? database.nextStudents : null
     if (table === 'students') database.nextStudents = null
-    const result = pending ?? Promise.resolve({ data: table === 'students' ? ['A', 'B'].map((id) => ({ id, full_name: `Student ${id}`, active: true, preferred_day: 'Thursday', preferred_time: '16:00', student_schedules: [] })) : [], error: null })
+    const result = pending ?? Promise.resolve({ data: table === 'students' ? ['A', 'B'].map((id) => ({ id, full_name: `Student ${id}`, active: true, preferred_day: 'Thursday', preferred_time: '16:00', student_schedules: [] })) : table === 'attendance' ? database.attendance : [], error: null })
     const query: Record<string, unknown> = { then: result.then.bind(result) }
     for (const method of ['select', 'eq', 'in', 'neq', 'order', 'or']) query[method] = () => query
     return query
@@ -39,7 +40,7 @@ function pendingRefresh() {
   database.nextStudents = new Promise((done) => { resolve = done })
   return resolve
 }
-beforeEach(() => { database.centreId = 'centre-a'; database.nextStudents = null })
+beforeEach(() => { database.centreId = 'centre-a'; database.attendance = []; database.nextStudents = null })
 afterEach(async () => { if (renderer) await act(async () => renderer.unmount()) })
 
 describe('register draft retention', () => {
@@ -83,5 +84,50 @@ describe('register draft retention', () => {
     await act(async () => resolve({ data: [{ id: 'stale', full_name: 'Stale student', active: true, preferred_day: 'Thursday', preferred_time: '16:00' }], error: null }))
     expect(renderer.root.findAllByProps({ 'aria-label': 'Draft stale' })).toHaveLength(0)
     expect(input('B').props.value).toBe('')
+  })
+})
+
+function isHidden(node: ReturnType<typeof input>) {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (typeof parent.props.className === 'string' && parent.props.className.split(' ').includes('hidden')) return true
+  }
+  return false
+}
+
+describe('register search and filters', () => {
+  it('keeps an unfinished entry intact when hidden by search and shown again', async () => {
+    await mount()
+    await typeDraft()
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Search register students' }).props.onChange({ target: { value: 'Student A' } }))
+    expect(isHidden(input('B'))).toBe(true)
+    expect(isHidden(input('A'))).toBe(false)
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Search register students' }).props.onChange({ target: { value: '' } }))
+    expect(isHidden(input('B'))).toBe(false)
+    expect(input('B').props.value).toBe('Laptop 7 — sensor issue')
+  })
+  it('limits select all to the shown students', async () => {
+    await mount()
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Search register students' }).props.onChange({ target: { value: 'Student A' } }))
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Select all visible students' }).props.onChange({ target: { checked: true } }))
+    expect(renderer.root.findByProps({ 'aria-label': 'Select Student A' }).props.checked).toBe(true)
+    expect(renderer.root.findByProps({ 'aria-label': 'Select Student B' }).props.checked).toBe(false)
+  })
+  it('finds students who attended but have no recorded session details', async () => {
+    database.attendance = [{ student_id: 'A', status: 'Arrived' }, { student_id: 'B', status: 'Absent' }]
+    await mount()
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Filter register by attendance' }).props.onChange({ target: { value: 'missing_details' } }))
+    expect(isHidden(input('A'))).toBe(false)
+    expect(isHidden(input('B'))).toBe(true)
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Filter register by attendance' }).props.onChange({ target: { value: 'absent' } }))
+    expect(isHidden(input('A'))).toBe(true)
+    expect(isHidden(input('B'))).toBe(false)
+  })
+  it('ignores a save callback from a date the user has already left', async () => {
+    await mount()
+    const saveOnOldDate = renderer.root.findByProps({ 'aria-label': 'Save A' }).props.onClick
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Select register date' }).props.onChange({ target: { value: '2026-11-05' } }))
+    await act(async () => saveOnOldDate())
+    expect(renderer.root.findByProps({ 'aria-label': 'Select register date' }).props.value).toBe('2026-11-05')
+    expect(input('B')).toBeDefined()
   })
 })

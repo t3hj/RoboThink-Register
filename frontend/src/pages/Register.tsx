@@ -18,7 +18,7 @@ import { loadCurriculum } from '../lib/curriculumData'
 import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
 import { isExpectedOnDate, slotOnDate } from '../lib/attendanceStats'
 import { closureName } from '../lib/ukHolidays'
-import { registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
+import { attendanceState, registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
 import { requiresAssessmentResult } from '../lib/assessment'
 import { resolveFeedbackTarget } from '../lib/bulkActions'
 import { useCentres } from '../lib/centres'
@@ -70,12 +70,16 @@ export default function Register() {
   const requestId = useRef(0)
   const scope = JSON.stringify([date, selectedCentreId])
   const hasLoadedScope = loadedScope === scope
+  const activeScope = useRef(scope)
+  activeScope.current = scope
   const [error, setError] = useState<string | null>(null)
   const [levels, setLevels] = useState<Level[]>([])
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [feedbackByStudent, setFeedbackByStudent] = useState<Map<string, FeedbackSheet[]>>(new Map())
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [bulkModal, setBulkModal] = useState<'attended' | 'absent' | 'lesson_outcome' | 'not_finished' | 'feedback' | null>(null)
 
   useEffect(() => {
@@ -86,8 +90,10 @@ export default function Register() {
   }, [])
 
   const loadRoster = useCallback(async (forDate: string) => {
+    const requestedScope = JSON.stringify([forDate, selectedCentreId])
+    if (activeScope.current !== requestedScope) return
     const request = ++requestId.current
-    const isCurrent = () => request === requestId.current
+    const isCurrent = () => request === requestId.current && activeScope.current === requestedScope
     setLoading(true)
     setError(null)
     const dow = dayName(forDate)
@@ -290,7 +296,7 @@ export default function Register() {
 
   useEffect(() => {
     setSelected(new Set())
-  }, [date, selectedCentreId])
+  }, [date, selectedCentreId, query, statusFilter])
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -301,7 +307,17 @@ export default function Register() {
     })
   }
 
-  const selectedRoster = useMemo(() => roster.filter((s) => selected.has(s.id)), [roster, selected])
+  const visibleRoster = useMemo(() => {
+    const search = query.trim().toLowerCase()
+    return roster.filter((student) => {
+      if (search && !student.full_name.toLowerCase().includes(search)) return false
+      const state = attendanceState(student.attendance?.status)
+      return statusFilter === 'all' || state === statusFilter ||
+        (statusFilter === 'missing_details' && state === 'attended' && student.sessionsToday.length === 0)
+    })
+  }, [roster, query, statusFilter])
+  const visibleIds = useMemo(() => new Set(visibleRoster.map((student) => student.id)), [visibleRoster])
+  const selectedRoster = useMemo(() => visibleRoster.filter((s) => selected.has(s.id)), [visibleRoster, selected])
 
   // Derive one recommendation from the full dated attempt history, independent
   // of the selected Register date, then pass that same value to the summary and
@@ -402,32 +418,43 @@ export default function Register() {
         title="Register"
         subtitle={`${formatDisplayDate(date)} · ${dayName(date)} · ${isAllCentres ? 'All centres' : selectedCentre?.name ?? 'Centre unavailable'}${isHistorical ? ' · Historical' : isFuture ? ' · Upcoming' : ''}`}
         accent="green"
-        actions={
-          <>
-            <button className="btn-ghost" onClick={() => setDate(addDays(date, -1))} aria-label="Previous day">
-              ← Prev
-            </button>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => e.target.value && setDate(e.target.value)}
-              className="p-2 border border-slate-200 rounded-lg text-sm"
-              aria-label="Select register date"
-            />
-            <button className="btn-ghost" onClick={() => setDate(addDays(date, 1))} aria-label="Next day">
-              Next →
-            </button>
-            {date !== todayISO() && (
-              <button className="btn-ghost" onClick={() => setDate(todayISO())}>
-                Today
-              </button>
-            )}
-            <button className="btn-primary" onClick={() => setShowAdd(true)}>
-              + Add to register
-            </button>
-          </>
-        }
+        actions={<button className="btn-primary" onClick={() => setShowAdd(true)}>+ Add to register</button>}
       />
+
+      <section className="sticky top-0 z-20 card p-3 mb-4 shadow-sm" aria-label="Register controls">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <button className="btn-ghost" onClick={() => setDate(addDays(date, -1))} aria-label="Previous day">
+            ← Prev
+          </button>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+            className="p-2 border border-slate-200 rounded-lg text-sm"
+            aria-label="Select register date"
+          />
+          <button className="btn-ghost" onClick={() => setDate(addDays(date, 1))} aria-label="Next day">
+            Next →
+          </button>
+          {date !== todayISO() && (
+            <button className="btn-ghost" onClick={() => setDate(todayISO())}>
+              Today
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a student…" aria-label="Search register students" className="flex-1 min-w-0 w-full sm:w-auto p-2 border border-slate-200 rounded-lg text-sm" />
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter register by attendance" className="p-2 border border-slate-200 rounded-lg text-sm max-w-full">
+            <option value="all">All students</option>
+            <option value="not_entered">Not entered</option>
+            <option value="attended">Attended</option>
+            <option value="absent">Absent</option>
+            <option value="missing_details">Missing session details</option>
+          </select>
+          {(query || statusFilter !== 'all') && <button className="btn-ghost" onClick={() => { setQuery(''); setStatusFilter('all') }}>Clear filters</button>}
+          <span className="text-xs text-slate-500" role="status">Showing {visibleRoster.length} of {roster.length}</span>
+        </div>
+      </section>
 
       {loading && <p className="mb-3 text-sm text-slate-500" role="status">Updating register… Your unfinished entries are kept.</p>}
       {error && (
@@ -465,10 +492,10 @@ export default function Register() {
         )}
       </div>
 
-      {selected.size > 0 && (
+      {selectedRoster.length > 0 && (
         <BulkActionBar
-          count={selected.size}
-          onSelectAll={() => setSelected(new Set(roster.map((s) => s.id)))}
+          count={selectedRoster.length}
+          onSelectAll={() => setSelected(new Set(visibleRoster.map((s) => s.id)))}
           onClear={() => setSelected(new Set())}
           onMarkAttended={() => setBulkModal('attended')}
           onMarkAbsent={() => setBulkModal('absent')}
@@ -523,20 +550,23 @@ export default function Register() {
         </section>
       )}
 
-      {roster.length > 0 && (
+      {visibleRoster.length > 0 && (
         <div className="flex items-center gap-2 mb-3 px-1">
           <label className="flex items-center gap-1.5 text-sm text-slate-500">
             <input
               type="checkbox"
-              checked={selected.size === roster.length}
-              onChange={(e) => setSelected(e.target.checked ? new Set(roster.map((s) => s.id)) : new Set())}
+              aria-label="Select all visible students"
+              checked={selectedRoster.length === visibleRoster.length}
+              onChange={(e) => setSelected(e.target.checked ? new Set(visibleRoster.map((s) => s.id)) : new Set())}
             />
-            Select all
+            Select all shown
           </label>
         </div>
       )}
 
-      <LessonsToday roster={roster.map((s) => ({ ...s, expectedLesson: expectedLessons.get(s.id) }))} levels={levels} />
+      <LessonsToday roster={visibleRoster.map((s) => ({ ...s, expectedLesson: expectedLessons.get(s.id) }))} levels={levels} />
+
+      {roster.length > 0 && visibleRoster.length === 0 && <EmptyState title="No students match" hint="Clear the search or attendance filter to show everyone again." />}
 
       {roster.length === 0 ? (
         <EmptyState
@@ -547,9 +577,9 @@ export default function Register() {
       ) : (
         <div className="flex flex-col gap-4">
           {timeGroups.map(([time, entries]) => (
-            <div key={time || 'no-time'}>
+            <div key={time || 'no-time'} className={entries.some((student) => visibleIds.has(student.id)) ? '' : 'hidden'}>
               <h3 className="text-sm font-semibold text-slate-500 mb-2 px-1">
-                {formatTime12h(time)} <span className="text-slate-400 font-normal">· {entries.length} student{entries.length === 1 ? '' : 's'}</span>
+                {formatTime12h(time)} <span className="text-slate-400 font-normal">· {entries.filter((student) => visibleIds.has(student.id)).length} shown</span>
               </h3>
               <div className="card divide-y divide-slate-100">
                 {entries.map((s) => {
@@ -563,7 +593,7 @@ export default function Register() {
                   const latestSessionLesson = lessons.find((lesson) => lesson.id === latestSessionToday?.actual_lesson_id)
                   const assessmentWorkflowSessionId = latestSessionLesson && !requiresAssessmentResult(latestSessionLesson) ? latestSessionToday?.id ?? null : null
                   return (
-                    <div key={s.id} className="p-3 sm:p-4 flex flex-col gap-3">
+                    <div key={s.id} className={visibleIds.has(s.id) ? "p-3 sm:p-4 flex flex-col gap-3" : "hidden"}>
                       <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
                           <input
