@@ -1,11 +1,10 @@
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
-import { CentreProvider, useCentres } from './lib/centres'
+import { CentreProvider } from './lib/centres'
 import { BrandProvider, useBrand } from './lib/brand'
 import { ToastProvider } from './components/Toast'
 import { LoadingPanel } from './components/ui'
-import { CreativeIqLogo, MascotCrew, RoboThinkLogo } from './components/Branding'
-import BrandSwitcher from './components/BrandSwitcher'
+import AppNavigation from './components/AppNavigation'
 import Auth from './pages/Auth'
 import Dashboard from './pages/Dashboard'
 import Register from './pages/Register'
@@ -40,9 +39,6 @@ const NAV: { to: string; label: string; end?: boolean; roles: Role[] }[] = [
   { to: '/help', label: 'Help & guides', roles: ['admin', 'instructor', 'management'] },
 ]
 
-/** Rotates the four brand colours through the nav dots — decoration only. */
-const DOT_COLOURS = ['var(--rt-yellow)', 'var(--rt-green)', 'var(--rt-blue)', 'var(--rt-red)']
-
 function homeFor(role: Role | null): string {
   if (role === 'management') return '/management'
   return '/'
@@ -58,10 +54,9 @@ function RoleRoute({ roles, children }: { roles: Role[]; children: React.ReactNo
 }
 
 function Layout() {
-  const { profile, role, signOut } = useAuth()
+  const { role } = useAuth()
   const { activeBrand } = useBrand()
   const { pathname } = useLocation()
-  const { activeCentres, assignedCentres, selectedCentreId, selectedCentre, isAllCentres, loading: centresLoading, error: centresError, setSelectedCentreId } = useCentres()
   const items = NAV.filter((item) => !role || item.roles.includes(role))
   return (
     <div data-brand={activeBrand} className="min-h-screen bg-[color:var(--rt-paper)] text-[color:var(--rt-ink)]">
@@ -70,54 +65,7 @@ function Layout() {
       </a>
       <div className="brand-stripe" aria-hidden />
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4 lg:py-6 grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
-        <aside className="lg:col-span-1 min-w-0">
-          <div className="card p-4 lg:sticky lg:top-6">
-            <div className="flex items-center gap-3 mb-4">
-              {activeBrand === 'creative_iq' ? <CreativeIqLogo className="w-40 max-w-full" /> : <RoboThinkLogo className="w-40 max-w-full" />}
-            </div>
-            <p className="text-[11px] text-slate-500 -mt-2 mb-3">Register &amp; Progress</p>
-            <BrandSwitcher />
-            {activeBrand === 'robothink' && <MascotCrew className="mb-4 pb-3 border-b border-slate-100" />}
-            <nav className="flex lg:flex-col gap-1.5 overflow-x-auto overscroll-x-contain -mx-1 px-1 pb-1" aria-label="Main navigation">
-              {items.map((item, index) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  className="nav-link"
-                >
-                  <span className="nav-dot" style={{ '--dot': DOT_COLOURS[index % DOT_COLOURS.length] } as React.CSSProperties} aria-hidden />
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
-            <div className="mt-4 pt-3 border-t border-slate-100">
-              <div className="hidden lg:block text-sm font-medium truncate">{profile?.name ?? 'Signed in'}</div>
-              <div className="hidden lg:block text-xs text-slate-500 capitalize mb-2">{profile?.role ?? 'staff'}</div>
-              {!centresLoading && !centresError && (activeCentres.length > 0 || assignedCentres.length > 0) && (
-                <label className="block mb-2">
-                  <span className="text-xs text-slate-500">Working centre</span>
-                  <select
-                    className="mt-1 w-full p-1.5 border border-slate-200 rounded-lg text-xs"
-                    value={isAllCentres ? '' : selectedCentreId ?? ''}
-                    onChange={(event) => setSelectedCentreId(event.target.value || null)}
-                    aria-label="Working centre"
-                  >
-                    {role === 'admin' && <option value="">All centres</option>}
-                    {(role === 'admin' ? activeCentres : assignedCentres.filter((centre) => centre.active)).map((centre) => (
-                      <option key={centre.id} value={centre.id}>{centre.name}</option>
-                    ))}
-                  </select>
-                  {selectedCentre && <span className="sr-only">Selected centre: {selectedCentre.name}</span>}
-                </label>
-              )}
-              <button onClick={() => void signOut()} className="btn-ghost w-full text-sm hidden lg:block">Sign out</button>
-            </div>
-          </div>
-          <button onClick={() => void signOut()} className="btn-ghost w-full mt-3 lg:hidden text-sm">
-            Sign out{profile ? ` (${profile.name})` : ''}
-          </button>
-        </aside>
+        <AppNavigation items={items} />
 
         <main id="main-content" className="lg:col-span-4 min-w-0">
           <div key={`${activeBrand}:${pathname}`} className="page-enter">
