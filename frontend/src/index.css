@@ -137,7 +137,8 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
   border-radius: 0.625rem;
   font-size: 0.875rem;
   font-weight: 500;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   color: var(--rt-ink-soft);
   transition: background 0.15s ease, color 0.15s ease;
 }

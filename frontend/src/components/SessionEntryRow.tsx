@@ -350,8 +350,8 @@ export default function SessionEntryRow({
 
       {(state === 'attended' || sessionsToday.length > 0 || draft != null) && (
         <details className="group rounded-lg border border-slate-200" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
-          <summary className="flex cursor-pointer list-none items-center gap-2 p-2.5 text-sm [&::-webkit-details-marker]:hidden" aria-label={`Session details for ${student.full_name}`}>
-            <span className="flex-1 font-medium">Session details</span>
+          <summary className="flex flex-wrap cursor-pointer list-none items-center gap-2 p-2.5 text-sm [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0 flex-1 font-medium">Session details<span className="sr-only"> for {student.full_name}</span></span>
             <span className={`badge ${draft || sessionsToday.length === 0 ? 'badge-assess' : ''}`}>
               {draft ? 'Unsaved changes' : sessionsToday.length > 0 ? `${sessionsToday.length} recorded${sessionsToday.at(-1)?.outcome === 'not_finished' ? ' · not finished' : ''}` : 'Needs recording'}
             </span>
