@@ -145,7 +145,7 @@ function Layout() {
 }
 
 function Protected() {
-  const { user, loading } = useAuth()
+  const { user, profile, role, loading, profileError, retryProfile, signOut } = useAuth()
 
   if (loading) {
     return (
@@ -155,6 +155,22 @@ function Protected() {
     )
   }
   if (!user) return <Auth />
+  if (!profile || !role || !['admin', 'instructor', 'management'].includes(role)) {
+    return (
+      <div className="min-h-screen bg-[color:var(--rt-paper)] flex items-center justify-center p-6">
+        <section className="card p-6 max-w-md w-full" aria-labelledby="staff-access-title">
+          <h1 id="staff-access-title" className="text-xl mb-2">{profileError ? 'Unable to load staff access' : 'Staff access not configured'}</h1>
+          <p className="text-sm text-slate-600 mb-4" role={profileError ? 'alert' : undefined}>
+            {profileError ?? 'You are signed in, but your account is not linked to an authorised staff profile. Please contact your administrator to enable access.'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-primary" onClick={retryProfile}>Try again</button>
+            <button className="btn-ghost" onClick={() => void signOut()}>Sign out</button>
+          </div>
+        </section>
+      </div>
+    )
+  }
   return <Layout />
 }
 

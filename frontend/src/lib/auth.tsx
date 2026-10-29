@@ -9,6 +9,8 @@ interface AuthContextValue {
   profile: Profile | null
   role: Role | null
   loading: boolean
+  profileError: string | null
+  retryProfile: () => void
   signOut: () => Promise<void>
 }
 
@@ -18,6 +20,8 @@ const AuthContext = createContext<AuthContextValue>({
   profile: null,
   role: null,
   loading: true,
+  profileError: null,
+  retryProfile: () => {},
   signOut: async () => { },
 })
 
@@ -31,7 +35,11 @@ export function useAuth() {
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [profileState, setProfileState] = useState<{ userId: string | null; profile: Profile | null; loading: boolean; error: string | null }>({ userId: null, profile: null, loading: false, error: null })
+  const [profileAttempt, setProfileAttempt] = useState(0)
+  const userId = session?.user.id ?? null
+  const profile = profileState.userId === userId ? profileState.profile : null
+  const profileLoading = !!userId && (profileState.userId !== userId || profileState.loading)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -50,33 +58,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
-    async function loadProfile(user: User | null) {
-      if (!user) {
-        setProfile(null)
-        return
-      }
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('auth_id', user.id)
-        .maybeSingle()
-      if (cancelled) return
-      if (error) {
-        console.error('Failed to load profile:', error.message)
-        setProfile(null)
-      } else {
-        setProfile(data)
+    if (!userId) {
+      setProfileState({ userId: null, profile: null, loading: false, error: null })
+      return
+    }
+    setProfileState({ userId, profile: null, loading: true, error: null })
+    async function loadProfile() {
+      try {
+        const { data, error } = await supabase.from('profiles').select('*').eq('auth_id', userId).maybeSingle()
+        if (cancelled) return
+        setProfileState({ userId, profile: error ? null : data, loading: false, error: error ? 'Your staff access could not be loaded. Please try again.' : null })
+      } catch {
+        if (!cancelled) setProfileState({ userId, profile: null, loading: false, error: 'Your staff access could not be loaded. Check your connection and try again.' })
       }
     }
-    loadProfile(session?.user ?? null)
-    return () => {
-      cancelled = true
-    }
-  }, [session?.user?.id])
+    void loadProfile()
+    return () => { cancelled = true }
+  }, [userId, profileAttempt])
+
+  const retryProfile = () => {
+    setProfileState({ userId, profile: null, loading: true, error: null })
+    setProfileAttempt((attempt) => attempt + 1)
+  }
 
   const signOut = async () => {
     await supabase.auth.signOut()
-    setProfile(null)
+    setProfileState({ userId: null, profile: null, loading: false, error: null })
   }
 
   return (
@@ -86,7 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user: session?.user ?? null,
         profile,
         role: profile?.role ?? null,
-        loading,
+        loading: loading || profileLoading,
+        profileError: profileState.userId === userId ? profileState.error : null,
+        retryProfile,
         signOut,
       }}
     >
