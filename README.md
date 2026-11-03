@@ -228,3 +228,7 @@ data inside the authorised application environment.
 - Do not add real student, parent or staff records to SQL seeds or tests.
 - Do not commit `.env`, service-role keys, passwords or auth mapping details.
 - Use synthetic placeholders when demonstrating database structure.
+
+## Staff sign-in
+
+Google sign-in, persistent sessions, and admin approval are described in [Google sign-in setup](docs/google-sign-in.md). Email links remain available. New Auth accounts require admin approval before they receive staff access.

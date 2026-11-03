@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { supabase, supabaseConfigured } from '../lib/supabaseClient'
+import { useEffect, useState } from 'react'
+import { googleSignInEnabled, supabase, supabaseConfigured } from '../lib/supabaseClient'
 import { MascotCrew, RoboThinkLogo } from '../components/Branding'
 
 export default function Auth() {
@@ -7,6 +7,50 @@ export default function Auth() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState(false)
   const [sending, setSending] = useState(false)
+  const [googleEnabled, setGoogleEnabled] = useState(false)
+  const [openingGoogle, setOpeningGoogle] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void googleSignInEnabled(controller.signal).then((enabled) => {
+      if (!controller.signal.aborted) setGoogleEnabled(enabled)
+    })
+    const query = new URLSearchParams(window.location.search)
+    const hash = new URLSearchParams(window.location.hash.slice(1))
+    if (query.has('error') || hash.has('error')) {
+      setError(true)
+      setMessage('Sign-in was cancelled or could not be completed. Please try again or use an email link.')
+      // Remove only OAuth error fields; never display provider text from a URL.
+      const clean = new URL(window.location.href)
+      for (const key of ['error', 'error_code', 'error_description']) {
+        clean.searchParams.delete(key)
+        hash.delete(key)
+      }
+      clean.hash = hash.toString()
+      window.history.replaceState(null, '', clean)
+    }
+    return () => controller.abort()
+  }, [])
+
+  const signInWithGoogle = async () => {
+    setOpeningGoogle(true)
+    setMessage('')
+    try {
+      const { error: err } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: { prompt: 'select_account' },
+        },
+      })
+      if (err) throw err
+    } catch {
+      setError(true)
+      setMessage('Google sign-in could not be started. Please try again or use an email link.')
+    } finally {
+      setOpeningGoogle(false)
+    }
+  }
 
   const signIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -18,17 +62,19 @@ export default function Auth() {
     }
     setSending(true)
     setMessage('')
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email: addr,
-      options: { emailRedirectTo: window.location.origin },
-    })
-    setSending(false)
-    if (err) {
-      setError(true)
-      setMessage(err.message)
-    } else {
+    try {
+      const { error: err } = await supabase.auth.signInWithOtp({
+        email: addr,
+        options: { emailRedirectTo: window.location.origin },
+      })
+      if (err) throw err
       setError(false)
       setMessage(`Sign-in link sent to ${addr}. Check your inbox (and spam folder).`)
+    } catch {
+      setError(true)
+      setMessage('The sign-in link could not be sent. Check your connection and try again.')
+    } finally {
+      setSending(false)
     }
   }
 
@@ -48,6 +94,15 @@ export default function Auth() {
               Sign-in is temporarily unavailable. Please contact your administrator for help.
             </div>
           )}
+          {googleEnabled && (
+            <div className="mb-5">
+              <button type="button" className="btn-ghost w-full min-h-11 border border-slate-300" disabled={openingGoogle || sending || !supabaseConfigured} onClick={() => void signInWithGoogle()}>
+                {openingGoogle ? 'Opening Google…' : 'Continue with Google'}
+              </button>
+              <p className="text-xs text-slate-600 mt-2">Choose the Google account with your approved staff email.</p>
+              <p className="text-sm text-slate-600 text-center mt-4">or use an email link</p>
+            </div>
+          )}
           <form onSubmit={signIn} className="space-y-3">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Staff email</span>
@@ -63,7 +118,7 @@ export default function Auth() {
               />
             </label>
             <p id="sign-in-help" className="text-sm text-slate-600">Use your staff email. We’ll send you a secure sign-in link; no password is needed.</p>
-            <button type="submit" disabled={sending || !supabaseConfigured} className="btn-primary w-full">
+            <button type="submit" disabled={sending || openingGoogle || !supabaseConfigured} className="btn-primary w-full">
               {sending ? 'Sending…' : 'Send sign-in link'}
             </button>
           </form>
@@ -72,7 +127,8 @@ export default function Auth() {
               {message}
             </p>
           )}
-          <p className="mt-6 text-xs text-slate-600">
+          <p className="mt-5 text-xs text-slate-600">On your own phone, your session is remembered when browser storage is available. Always sign out on shared centre devices.</p>
+          <p className="mt-3 text-xs text-slate-600">
             Access is restricted to authorised staff. If you need access or cannot sign in, please contact your administrator.
           </p>
         </div>

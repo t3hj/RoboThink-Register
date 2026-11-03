@@ -8,11 +8,6 @@ import type { BrandId, Centre, Profile, Role, StaffCentre } from '../types'
 const ROLES: Role[] = ['admin', 'instructor', 'management']
 const BRAND_LABELS: Record<BrandId, string> = { robothink: 'RoboThink', creative_iq: 'Creative IQ' }
 
-/** Minimal, admin-only: list staff and change their role. Nothing fancier
- *  than that is asked for — inviting/creating accounts still happens via
- *  Supabase Auth directly; this just lets an admin correct/assign a role
- *  once an account exists (handle_new_user already defaults new sign-ups
- *  to 'instructor', never 'admin'). */
 export default function StaffManagement() {
   const { notify } = useToast()
   const { activeBrand } = useBrand()
@@ -20,6 +15,9 @@ export default function StaffManagement() {
   const [centres, setCentres] = useState<Centre[]>([])
   const [assignments, setAssignments] = useState<StaffCentre[]>([])
   const [newCentreName, setNewCentreName] = useState('')
+  const [staffEmail, setStaffEmail] = useState('')
+  const [staffName, setStaffName] = useState('')
+  const [staffRole, setStaffRole] = useState<Role>('instructor')
   const [assignmentStaffId, setAssignmentStaffId] = useState('')
   const [assignmentCentreId, setAssignmentCentreId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -48,6 +46,25 @@ export default function StaffManagement() {
   useEffect(() => {
     void load()
   }, [load])
+
+  async function approveStaff() {
+    setSavingId('approve-staff')
+    try {
+      const { error: err } = await supabase.rpc('approve_staff', {
+        in_email: staffEmail.trim(), in_name: staffName.trim(), in_role: staffRole,
+      })
+      if (err) throw err
+      setStaffEmail('')
+      setStaffName('')
+      setStaffRole('instructor')
+      notify('Staff access approved. Assign their venue below.', 'success')
+      void load()
+    } catch (err) {
+      notify(err instanceof Error ? err.message : (err as { message?: string })?.message ?? 'Unable to approve staff access', 'error')
+    } finally {
+      setSavingId(null)
+    }
+  }
 
   async function changeRole(id: string, role: Role) {
     setSavingId(id)
@@ -129,6 +146,17 @@ export default function StaffManagement() {
   return (
     <div>
       <PageHeader title="Staff & centres" subtitle="Manage staff roles and assign instructors to venues" accent="red" />
+
+      <section className="card p-4 mb-5">
+        <h2 className="font-semibold mb-2">Approve staff access</h2>
+        <p className="text-sm text-slate-600 mb-3">Ask new staff to sign in once with their email or Google account, then approve that exact email here. Assign their venue below after approval.</p>
+        <form className="grid sm:grid-cols-2 gap-3" onSubmit={(event) => { event.preventDefault(); void approveStaff() }}>
+          <label className="text-sm">Name<input required className="block w-full p-2 border border-slate-200 rounded-lg mt-1" value={staffName} onChange={(event) => setStaffName(event.target.value)} /></label>
+          <label className="text-sm">Staff email<input required type="email" className="block w-full p-2 border border-slate-200 rounded-lg mt-1" value={staffEmail} onChange={(event) => setStaffEmail(event.target.value)} /></label>
+          <label className="text-sm">Role<select className="block w-full p-2 border border-slate-200 rounded-lg mt-1" value={staffRole} onChange={(event) => setStaffRole(event.target.value as Role)}>{ROLES.map((role) => <option key={role} value={role}>{role}</option>)}</select></label>
+          <button className="btn-primary self-end" type="submit" disabled={savingId === 'approve-staff' || !staffEmail.trim() || !staffName.trim()}>{savingId === 'approve-staff' ? 'Approving…' : 'Approve staff'}</button>
+        </form>
+      </section>
 
       <section className="card p-4 mb-5">
         <h2 className="font-semibold mb-1">Centres and venues</h2>

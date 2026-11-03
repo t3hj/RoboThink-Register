@@ -34,8 +34,9 @@ migrations is a manual step in the Supabase project, not part of boot.
 - `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/` → `200`.
 - The rendered page is the sign-in screen ("Sign in to RoboThink") with no
   "Supabase is not configured" banner when credentials are present.
-- Sign-in is Supabase magic-link email auth: an account must be linked to a
-  staff profile row to reach the operational pages.
+- Sign-in supports email links and Google when the provider is enabled. An
+  account must be linked to an approved staff profile to reach operational pages.
+  See `docs/google-sign-in.md`; do not restore the historical auto-profile trigger.
 
 ## Quirk: the register's "next lesson" is derived from history
 

@@ -16,4 +16,20 @@ export const supabaseConfigured = Boolean(url && anonKey)
 export const supabase = createClient(
   url || 'https://placeholder.supabase.co',
   anonKey || 'public-anon-key-placeholder',
+  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } },
 )
+
+/** Public Auth settings: never show a provider that has not been enabled. */
+export async function googleSignInEnabled(signal?: AbortSignal): Promise<boolean> {
+  if (!url || !anonKey) return false
+  try {
+    const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/settings`, {
+      headers: { apikey: anonKey }, signal,
+    })
+    if (!response.ok) return false
+    const settings = await response.json()
+    return settings.external?.google === true
+  } catch {
+    return false
+  }
+}
