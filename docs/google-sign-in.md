@@ -28,7 +28,7 @@ Approval reuses a matching unlinked historical profile when unambiguous, preserv
 
 ## Sessions and shared devices
 
-Session persistence, refresh and callback detection are explicitly enabled. Session restoration ignores stale initial results after a newer Auth event, and a failed restoration no longer leaves an endless loading screen. Browser storage restrictions, private browsing, sign-out and server session policies can still require another login. Staff must sign out on shared centre devices.
+Session persistence, refresh and callback detection are explicitly enabled. Session restoration ignores stale results after newer Auth events. Network or storage failures show a recovery message instead of asking for another email link. Recovery retries after 2, 5 and 15 seconds and when the browser regains focus, becomes visible, restores a page, or reconnects. Supabase still owns persistent token storage, refresh locking and token rotation. Sign out uses local scope, so signing out on a laptop does not revoke the same account’s phone sessions. Browser storage restrictions, private browsing, sign-out and server session policies can still require another login. Staff must sign out on shared centre devices.
 
 ## Verification
 
@@ -39,3 +39,16 @@ Session persistence, refresh and callback detection are explicitly enabled. Sess
 - After enabling the provider, test an existing approved Google email, cancellation, an unapproved Google email, logout, reopening the app, and the home-screen app on iPhone/Android. Confirm the approved user's profile ID, role and centre access remain the same. Do not claim Google is operational until the real callback succeeds.
 
 The security change is tracked in `supabase/migrations/20261103132626_staff_approval_for_social_login.sql`. It has been applied to the hosted database. Older SQL files under `db/` are historical and must not be reapplied over this migration.
+
+## Mobile session recovery checks
+
+Run `npm test --prefix frontend` and `npm run build --prefix frontend`.
+The session recovery tests cover refresh errors, null initial events, stale
+responses after sign-out, bounded retries, lifecycle events and local sign-out.
+On real Brave, Safari and Chrome devices, sign in once, background/lock and
+reopen, then repeat with the network temporarily off. Restore connectivity and
+confirm the saved session recovers. Test each browser and home-screen install
+separately: they may use separate storage. Email links must be opened in the
+same browser/install used for the register. Private browsing, clearing site
+data or browser settings that delete storage still require fresh sign-in; the
+app cannot override these settings or recover revoked refresh tokens.

@@ -93,12 +93,23 @@ function Layout() {
 }
 
 function Protected() {
-  const { user, profile, role, loading, profileError, retryProfile, signOut } = useAuth()
+  const { user, profile, role, loading, sessionError, retrySession, profileError, retryProfile, signOut } = useAuth()
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[color:var(--rt-paper)] flex items-center justify-center p-6">
         <LoadingPanel label="Checking your session…" />
+      </div>
+    )
+  }
+  if (!user && sessionError) {
+    return (
+      <div className="min-h-screen bg-[color:var(--rt-paper)] flex items-center justify-center p-6">
+        <section className="card p-6 max-w-md w-full">
+          <h1 className="text-xl mb-2">Reconnect to the register</h1>
+          <p role="alert" className="text-sm text-slate-600 mb-4">{sessionError} You do not need to request another email link yet.</p>
+          <button className="btn-primary" onClick={retrySession}>Try saved sign-in again</button>
+        </section>
       </div>
     )
   }
@@ -119,7 +130,12 @@ function Protected() {
       </div>
     )
   }
-  return <Layout />
+  return <>
+    {sessionError && <div role="alert" className="bg-amber-50 p-3 text-sm text-amber-900">
+      {sessionError} <button className="underline" onClick={retrySession}>Retry connection</button>
+    </div>}
+    <Layout />
+  </>
 }
 
 export default function App() {

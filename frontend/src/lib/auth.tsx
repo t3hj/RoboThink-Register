@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabaseClient'
 import type { Profile, Role } from '../types'
+import { startSessionRecovery } from './sessionRecovery'
 
 interface AuthContextValue {
   session: Session | null
@@ -9,6 +10,8 @@ interface AuthContextValue {
   profile: Profile | null
   role: Role | null
   loading: boolean
+  sessionError: string | null
+  retrySession: () => void
   profileError: string | null
   retryProfile: () => void
   signOut: () => Promise<void>
@@ -20,6 +23,8 @@ const AuthContext = createContext<AuthContextValue>({
   profile: null,
   role: null,
   loading: true,
+  sessionError: null,
+  retrySession: () => {},
   profileError: null,
   retryProfile: () => {},
   signOut: async () => { },
@@ -42,25 +47,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const profileLoading = !!userId && (profileState.userId !== userId || profileState.loading)
   const [loading, setLoading] = useState(true)
 
+  const [sessionError, setSessionError] = useState<string | null>(null)
+  const recovery = useRef<ReturnType<typeof startSessionRecovery> | null>(null)
+  const retrySession = () => recovery.current?.retry()
+
   useEffect(() => {
-    let active = true
-    let receivedAuthEvent = false
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
-      if (!active) return
-      receivedAuthEvent = true
-      setSession(s)
-      setLoading(false)
+    const controller = startSessionRecovery(supabase.auth, (state) => {
+      setSession(state.session)
+      setSessionError(state.error)
+      setLoading(state.loading)
     })
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!active || receivedAuthEvent) return
-      setSession(data.session)
-      setLoading(false)
-    }).catch(() => {
-      if (active && !receivedAuthEvent) setLoading(false)
-    })
-    return () => { active = false; subscription.unsubscribe() }
+    recovery.current = controller
+    const resume = () => {
+      if (document.visibilityState !== 'hidden') controller.retry()
+    }
+    window.addEventListener('online', resume)
+    window.addEventListener('pageshow', resume)
+    window.addEventListener('focus', resume)
+    document.addEventListener('visibilitychange', resume)
+    return () => {
+      recovery.current = null
+      controller.dispose()
+      window.removeEventListener('online', resume)
+      window.removeEventListener('pageshow', resume)
+      window.removeEventListener('focus', resume)
+      document.removeEventListener('visibilitychange', resume)
+    }
   }, [])
 
   useEffect(() => {
@@ -89,7 +101,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
-    await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut({ scope: 'local' })
+    if (error) {
+      setSessionError('Sign-out could not be completed. Check your connection and try again.')
+      return
+    }
     setProfileState({ userId: null, profile: null, loading: false, error: null })
   }
 
@@ -101,6 +117,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         role: profile?.role ?? null,
         loading: loading || profileLoading,
+        sessionError,
+        retrySession,
         profileError: profileState.userId === userId ? profileState.error : null,
         retryProfile,
         signOut,
