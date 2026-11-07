@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { readSheet } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabaseClient'
@@ -52,11 +52,18 @@ export default function ImportStudents() {
   const [time, setTime] = useState('')
   const [ticketMap, setTicketMap] = useState<Record<string, number | ''>>({})
   const [existing, setExisting] = useState<ExistingStudent[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
+  const [reading, setReading] = useState(false)
   const [busy, setBusy] = useState(false)
+  const importing = useRef(false)
   const [result, setResult] = useState<string[] | null>(null)
 
   useEffect(() => {
-    void supabase.from('subscriptions').select('*').order('id').then(({ data }) => setSubscriptions((data ?? []) as Subscription[]))
+    void supabase.from('subscriptions').select('*').order('id').then(({ data, error }) => {
+      if (error) notify(`Could not load subscriptions: ${error.message}`, 'error')
+      else setSubscriptions((data ?? []) as Subscription[])
+    })
   }, [])
 
   useEffect(() => {
@@ -65,9 +72,10 @@ export default function ImportStudents() {
 
   // Load the centre's current students so we can match rather than duplicate.
   useEffect(() => {
-    if (!centreId || !parsed) return
-    let cancelled = false
     setExisting(null)
+    setLoadError(null)
+    if (!centreId || !parsed || parsed.error) return
+    let cancelled = false
     void supabase
       .from('students')
       .select('id,full_name,date_of_birth,parent_contact,active,attendance_pattern,student_schedules(day_of_week,start_time,active)')
@@ -75,7 +83,7 @@ export default function ImportStudents() {
       .limit(2000)
       .then(({ data, error }) => {
         if (cancelled) return
-        if (error) return notify(error.message, 'error')
+        if (error) { setLoadError(error.message); return }
         setExisting(
           (data ?? []).map((s) => ({
             id: s.id as string,
@@ -93,11 +101,14 @@ export default function ImportStudents() {
     return () => {
       cancelled = true
     }
-  }, [centreId, parsed, notify])
+  }, [centreId, parsed, notify, reload])
 
   async function onFile(file: File | undefined) {
     setResult(null)
     if (!file) return
+    setReading(true)
+    setParsed(null)
+    setExisting(null)
     setFileName(file.name)
     try {
       const cells = (await readSheet(file)) as unknown[][]
@@ -107,9 +118,11 @@ export default function ImportStudents() {
       setTime(p.meta.time ?? '')
       const tickets = [...new Set(p.rows.map((r) => r.ticket ?? NO_TICKET))]
       setTicketMap(Object.fromEntries(tickets.map((t) => [t, suggestSubscriptionId(t === NO_TICKET ? null : t, subscriptions) ?? ''])))
-    } catch {
+    } catch (error) {
       setParsed(null)
-      notify('That file could not be read. Please upload the .xlsx register downloaded from Pebble.', 'error')
+      notify(`That file could not be read. Please upload the .xlsx register downloaded from Pebble. ${error instanceof Error ? error.message : ''}`, 'error')
+    } finally {
+      setReading(false)
     }
   }
 
@@ -126,10 +139,11 @@ export default function ImportStudents() {
   const tickets = Object.keys(ticketMap)
   const unmapped = creates.some((p) => ticketMap[p.row.ticket ?? NO_TICKET] === '')
   const nothingToDo = counts.create + counts.add_session + fills === 0
-  const canImport = Boolean(parsed && existing && centreId && !unmapped && !nothingToDo && !busy)
+  const canImport = Boolean(parsed && !parsed.error && existing && centreId && slot?.day && slot?.time && !reading && !unmapped && !nothingToDo && !busy)
 
   async function run() {
-    if (!parsed || !existing) return
+    if (importing.current || !canImport || !parsed || !existing) return
+    importing.current = true
     setBusy(true)
     const log: string[] = []
     try {
@@ -184,7 +198,11 @@ export default function ImportStudents() {
       notify(e instanceof Error ? e.message : 'Import failed', 'error')
       log.push(e instanceof Error ? e.message : 'Import failed')
       setResult(log)
+      // Re-read persisted rows before allowing a retry after partial writes.
+      setExisting(null)
+      setReload((value) => value + 1)
     }
+    importing.current = false
     setBusy(false)
   }
 
@@ -207,7 +225,7 @@ export default function ImportStudents() {
         <div className="grid sm:grid-cols-2 gap-4">
           <label className="text-sm block">
             <span className="block text-slate-600 mb-1">1. Which venue is this register for?</span>
-            <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={centreId} onChange={(e) => setCentreId(e.target.value)} disabled={busy}>
+            <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={centreId} onChange={(e) => setCentreId(e.target.value)} disabled={busy || reading}>
               <option value="">— Choose a centre —</option>
               {activeCentres.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -216,7 +234,7 @@ export default function ImportStudents() {
           </label>
           <label className="text-sm block">
             <span className="block text-slate-600 mb-1">2. Pebble register (.xlsx)</span>
-            <input type="file" accept=".xlsx" className="w-full text-sm" onChange={(e) => void onFile(e.target.files?.[0])} disabled={busy || !centreId} />
+            <input type="file" accept=".xlsx" className="w-full text-sm" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = '' }} disabled={busy || reading || !centreId} />
           </label>
         </div>
         <p className="text-xs text-slate-600 mt-3">
@@ -225,6 +243,8 @@ export default function ImportStudents() {
           file is ignored.
         </p>
       </section>
+
+      {reading && <p role="status" className="text-sm mb-4">Reading spreadsheet…</p>}
 
       {parsed?.error && <div className="card p-4 mb-5 text-sm text-rose-700" role="alert">{parsed.error}</div>}
 
@@ -238,7 +258,7 @@ export default function ImportStudents() {
             <div className="grid grid-cols-2 gap-3 max-w-md">
               <label className="text-sm block">
                 <span className="block text-slate-600 mb-1">Day</span>
-                <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy}>
+                <select className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy || reading}>
                   <option value="">None</option>
                   {DAYS.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
@@ -248,7 +268,7 @@ export default function ImportStudents() {
                 <input type="time" className="w-full p-2 border border-slate-200 rounded-lg text-sm" value={time} onChange={(e) => setTime(e.target.value)} disabled={busy} />
               </label>
             </div>
-            {!slot?.time && <p className="text-xs text-amber-700 mt-2">Without a day and time, students are added but won’t appear on any register until you set their sessions.</p>}
+            {!slot?.time && <p className="text-xs text-amber-700 mt-2">Choose a day and start time before importing so students appear on the register.</p>}
             {parsed.ignoredColumns.length > 0 && (
               <p className="text-xs text-slate-600 mt-3">Not imported: {parsed.ignoredColumns.join(', ')}.</p>
             )}
@@ -262,7 +282,7 @@ export default function ImportStudents() {
                 {tickets.map((t) => (
                   <label key={t} className="text-sm grid sm:grid-cols-2 gap-2 items-center">
                     <span>{t}</span>
-                    <select className="p-2 border border-slate-200 rounded-lg text-sm" value={ticketMap[t]} onChange={(e) => setTicketMap((m) => ({ ...m, [t]: e.target.value === '' ? '' : Number(e.target.value) }))} disabled={busy}>
+                    <select className="p-2 border border-slate-200 rounded-lg text-sm" value={ticketMap[t]} onChange={(e) => setTicketMap((m) => ({ ...m, [t]: e.target.value === '' ? '' : Number(e.target.value) }))} disabled={busy || reading}>
                       <option value="">— Choose —</option>
                       {subscriptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
@@ -274,7 +294,12 @@ export default function ImportStudents() {
 
           <section className="card p-4 mb-5">
             <h2 className="font-semibold mb-3">Preview</h2>
-            {!existing ? (
+            {loadError ? (
+              <div role="alert" className="text-sm text-rose-700">
+                Could not check existing students: {loadError}
+                <button className="ml-2 underline" onClick={() => setReload((value) => value + 1)}>Retry</button>
+              </div>
+            ) : !existing ? (
               <div className="text-sm text-slate-600">Checking existing students…</div>
             ) : plans.length === 0 ? (
               <EmptyState title="No students found" />

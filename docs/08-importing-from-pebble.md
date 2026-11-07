@@ -16,7 +16,7 @@ name, so they are not duplicated: each file simply adds that session.
 2. Choose the **venue** the register is for.
 3. Choose the **.xlsx file**.
 4. Check the **day and start time**, which are read from the file. Each student
-   gets this weekly session. Correct them if they look wrong.
+   gets this weekly session. Both are required. Correct them if they look wrong.
 5. For new students, match each **ticket** to a subscription (for example a Full
    Term Ticket is Term Time).
 6. Look through the **preview**. Each student is marked:
@@ -53,3 +53,19 @@ The date of birth and contact details are personal information about children an
 parents. They are visible only to admins and managers in the app, and are used for
 running sessions, not marketing. Keep your privacy notice up to date, and
 don't share exports.
+
+If checking existing students fails, use **Retry** in the preview. If an import
+partly succeeds, the preview reloads saved students before allowing another try,
+so the retry adds only the remaining students and sessions.
+
+## Choosing export fields
+
+Child names are required. Date of birth, ticket, customer mobile and email are
+optional and can appear in any column order. If Ticket is omitted, choose a
+subscription for the “(no ticket)” group in the preview. If the session date or
+time is absent, set the day and start time manually before importing.
+
+Customer names are never used as child names. Medical information, photo
+consent, attendance, check-in/out times, add-ons, notes and custom booking
+question answers are ignored, even if selected in Pebble. Keep the real export
+on your device; troubleshooting can use a synthetic file with the same headings.
