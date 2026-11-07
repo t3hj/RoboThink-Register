@@ -52,3 +52,17 @@ it('reloads after a partial import and retries schedules without creating the st
   expect(mock.schedules).toHaveBeenCalledTimes(2)
   expect(mock.schedules.mock.calls[1][0][0]).toMatchObject({ student_id: 'saved', day_of_week: 'Saturday', start_time: '10:00' })
 })
+it('allows a names-only export once staff choose its subscription and session', async () => {
+  mock.read.mockResolvedValue([['Child name'], ['Ada Example']])
+  await mountAndRead()
+  expect(importButton().props.disabled).toBe(true)
+  await act(async () => {
+    const selects = renderer.root.findAllByType('select')
+    selects[1].props.onChange({ target: { value: 'Saturday' } })
+    selects[2].props.onChange({ target: { value: '1' } })
+    renderer.root.findByProps({ type: 'time' }).props.onChange({ target: { value: '10:00' } })
+  })
+  expect(importButton().props.disabled).toBe(false)
+  await act(async () => importButton().props.onClick())
+  expect(mock.insert.mock.calls[0][0][0]).toMatchObject({ full_name: 'Ada Example', subscription_id: 1, date_of_birth: null, parent_contact: null })
+})

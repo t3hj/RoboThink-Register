@@ -36,6 +36,9 @@ export interface PebbleParseResult {
   error: string | null
 }
 
+const NAME_HEADERS = ['child', 'child name', 'student', 'student name', 'attendee', 'attendee name', 'name']
+const heading = (cell: unknown): string => text(cell).toLowerCase().replace(/[’']/g, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').replace(/:$/, '').trim()
+
 const text = (cell: unknown): string => {
   if (cell === null || cell === undefined) return ''
   if (cell instanceof Date) return isoFromDate(cell)
@@ -108,8 +111,8 @@ export function parsePebbleSheet(cells: unknown[][]): PebbleParseResult {
   const meta: PebbleMeta = { activity: null, className: null, date: null, time: null }
   const empty = (error: string): PebbleParseResult => ({ meta, rows: [], ignoredColumns: [], error })
 
-  const headerIndex = cells.findIndex((row) => row.some((cell) => ['child', 'child name', 'student', 'name'].includes(text(cell).toLowerCase())))
-  if (headerIndex < 0) return empty('This does not look like a Pebble register: I could not find the “child” column heading.')
+  const headerIndex = cells.findIndex((row) => row.some((cell) => NAME_HEADERS.includes(heading(cell))))
+  if (headerIndex < 0) return empty('No child-name column was found. Export a register containing child names (not just customer names). Optional fields can be left unselected.')
 
   for (const row of cells.slice(0, headerIndex)) {
     const key = text(row?.[0]).toLowerCase()
@@ -119,17 +122,17 @@ export function parsePebbleSheet(cells: unknown[][]): PebbleParseResult {
     else if (key === 'time of session') meta.time = parseTime(row[1])
   }
 
-  const headers = cells[headerIndex].map((h) => text(h).toLowerCase())
+  const headers = cells[headerIndex].map(heading)
   const col = (...names: string[]) => headers.findIndex((h) => names.includes(h))
   const idx = {
-    name: col('child', 'child name', 'student', 'name'),
-    dob: col('dob', 'date of birth'),
-    ticket: col('ticket'),
-    mobile: col('mobile', 'phone'),
-    email: col('email'),
+    name: col(...NAME_HEADERS),
+    dob: col('dob', 'date of birth', 'child dob', 'child date of birth', 'childs date of birth'),
+    ticket: col('ticket', 'ticket type', 'ticket name'),
+    mobile: col('mobile', 'phone', 'customer mobile', 'customer phone', 'mobile number', 'customer mobile number'),
+    email: col('email', 'email address', 'customer email', 'customer email address'),
   }
   const used = new Set(Object.values(idx).filter((i) => i >= 0))
-  const ignoredColumns = headers.filter((h, i) => h && !used.has(i))
+  const ignoredColumns = cells[headerIndex].map((h) => text(h).toLowerCase()).filter((h, i) => h && !used.has(i))
 
   const rows: PebbleRow[] = []
   cells.slice(headerIndex + 1).forEach((cellRow, offset) => {

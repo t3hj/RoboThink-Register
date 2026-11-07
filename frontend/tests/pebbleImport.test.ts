@@ -155,3 +155,32 @@ describe('Pebble export variations', () => {
     expect(planImport(rows, [], { day: 'Tuesday', time: '15:15' }).map(p => p.action)).toEqual(['create', 'duplicate_in_file'])
   })
 })
+
+
+describe('configurable Pebble export fields', () => {
+  const optional = [
+    ['Date of birth', '05/08/2016', 'dob', '2016-08-05'],
+    ['Customer mobile', '07700900001', 'mobile', '07700900001'],
+    ['Ticket', 'Full Term Ticket', 'ticket', 'Full Term Ticket'],
+    ['Customer email', 'PARENT@example.com', 'email', 'parent@example.com'],
+  ]
+  it.each(Array.from({ length: 16 }, (_, i) => i))('accepts optional field selection %i in any order', (mask) => {
+    const selected = optional.filter((_, i) => mask & (1 << i)).reverse()
+    const p = parsePebbleSheet([
+      ['Medical', ...selected.map(f => f[0]), 'Child name', 'Customer name', 'Photo consent', 'Attendance', 'Check-in time', 'Check-out time', 'Add-Ons', 'Notes', 'Custom booking question'],
+      ['PRIVATE MEDICAL', ...selected.map(f => f[1]), 'Ada Example', 'PRIVATE CUSTOMER', 'PRIVATE PHOTO', 'PRIVATE ATTENDANCE', 'PRIVATE IN', 'PRIVATE OUT', 'PRIVATE ADDON', 'PRIVATE NOTES', 'PRIVATE ANSWER'],
+    ])
+    expect(p.error).toBeNull()
+    expect(p.rows).toHaveLength(1)
+    expect(p.rows[0].name).toBe('Ada Example')
+    optional.forEach((f, i) => expect(p.rows[0][f[2] as 'dob' | 'mobile' | 'ticket' | 'email']).toBe(mask & (1 << i) ? f[3] : null))
+    expect(JSON.stringify(p)).not.toContain('PRIVATE')
+  })
+  it('never treats customer names as children', () => {
+    expect(parsePebbleSheet([['Customer name', 'Customer mobile'], ['Parent Example', '07700900001']]).error).toMatch(/child-name/)
+  })
+  it('normalises header whitespace, casing and separators', () => {
+    const p = parsePebbleSheet([[' CHILD NAME ', 'Customer_mobile', 'DATE OF BIRTH:'], ['Ada Example', '07700900001', '05/08/2016']])
+    expect(p.rows[0]).toMatchObject({ name: 'Ada Example', mobile: '07700900001', dob: '2016-08-05' })
+  })
+})
