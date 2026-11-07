@@ -129,3 +129,29 @@ describe('planImport', () => {
     expect(plans.map((p) => p.action)).toEqual(['create', 'create'])
   })
 })
+
+
+describe('Pebble export variations', () => {
+  it('finds the child column after booking reference columns', () => {
+    const p = parsePebbleSheet([
+      ['Booking reference', 'Child name', 'Date of birth', 'Email'],
+      ['ABC123', 'Ada Example', '05/08/2016', 'parent@example.com'],
+    ])
+    expect(p.error).toBeNull()
+    expect(p.rows[0]).toMatchObject({ name: 'Ada Example', dob: '2016-08-05' })
+  })
+
+  it.each([
+    [0.625, '15:00'],
+    [new Date('1899-12-30T15:15:00Z'), '15:15'],
+    ['3:15 pm', '15:15'],
+    ['12:00 am', '00:00'],
+  ])('reads Excel and twelve-hour session time %s', (input, expected) => {
+    expect(parsePebbleSheet([['Time of session', input], ['child'], ['Ada Example']]).meta.time).toBe(expected)
+  })
+
+  it('does not create a duplicate when the first occurrence has no DOB', () => {
+    const rows = parsePebbleSheet([['child', 'dob'], ['Ada Example'], ['Ada Example', '05/08/2016']]).rows
+    expect(planImport(rows, [], { day: 'Tuesday', time: '15:15' }).map(p => p.action)).toEqual(['create', 'duplicate_in_file'])
+  })
+})

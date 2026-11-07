@@ -63,9 +63,19 @@ export function parseUkDate(cell: unknown): string | null {
 }
 
 function parseTime(cell: unknown): string | null {
+  if (cell instanceof Date && !Number.isNaN(cell.getTime())) return `${String(cell.getUTCHours()).padStart(2, '0')}:${String(cell.getUTCMinutes()).padStart(2, '0')}`
+  if (typeof cell === 'number' && cell >= 0 && cell < 1) {
+    const minutes = Math.round(cell * 24 * 60) % 1440
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+  }
   const m = /^(\d{1,2})[:.](\d{2})/.exec(text(cell))
   if (!m) return null
-  const h = Number(m[1])
+  let h = Number(m[1])
+  const meridiem = /\b(am|pm)\b/i.exec(text(cell))?.[1].toLowerCase()
+  if (meridiem) {
+    if (h < 1 || h > 12) return null
+    h = h % 12 + (meridiem === 'pm' ? 12 : 0)
+  }
   const min = Number(m[2])
   return h < 24 && min < 60 ? `${String(h).padStart(2, '0')}:${m[2]}` : null
 }
@@ -98,7 +108,7 @@ export function parsePebbleSheet(cells: unknown[][]): PebbleParseResult {
   const meta: PebbleMeta = { activity: null, className: null, date: null, time: null }
   const empty = (error: string): PebbleParseResult => ({ meta, rows: [], ignoredColumns: [], error })
 
-  const headerIndex = cells.findIndex((row) => ['child', 'child name', 'student', 'name'].includes(text(row?.[0]).toLowerCase()))
+  const headerIndex = cells.findIndex((row) => row.some((cell) => ['child', 'child name', 'student', 'name'].includes(text(cell).toLowerCase())))
   if (headerIndex < 0) return empty('This does not look like a Pebble register: I could not find the “child” column heading.')
 
   for (const row of cells.slice(0, headerIndex)) {
@@ -208,7 +218,7 @@ export function planImport(rows: PebbleRow[], existing: ExistingStudent[], slot:
   return rows.map((row): RowPlan => {
     const key = nameKey(row.name)
     const fileKey = `${key}|${row.dob ?? ''}`
-    if (seen.has(fileKey) || (!row.dob && [...seen].some((k) => k.startsWith(`${key}|`)))) {
+    if (seen.has(fileKey) || seen.has(`${key}|`) || (!row.dob && [...seen].some((k) => k.startsWith(`${key}|`)))) {
       return { row, action: 'duplicate_in_file', fillDob: false, fillContact: false, reason: 'Appears twice in this file' }
     }
     seen.add(fileKey)
