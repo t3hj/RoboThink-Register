@@ -521,7 +521,7 @@ export default function StudentProfile() {
                         </span>
                         <span className="text-slate-600"> · {assessmentLesson ? `Assessment ${assessmentLesson.lesson_number}: ${assessmentLesson.title}` : a.type} · attempt {a.attempt_number}</span>
                       </div>
-                      <div className="flex items-center justify-end gap-3 text-xs">
+                      <div className="flex flex-wrap items-center justify-end gap-3 text-xs">
                         <span className="text-slate-600 sm:whitespace-nowrap sm:text-right">{formatShortDate(a.date)} · {a.profiles?.name ?? 'Unassigned'}</span>
                         {(role === 'admin' || role === 'instructor') && isCurriculumSession && isLatestAssessment && (
                           <button
@@ -558,10 +558,10 @@ export default function StudentProfile() {
                     <span className="text-slate-600"> · {l.levels?.name ?? `Level ${l.level_id}`}</span>
                     {l.status !== 'completed' && <span className="badge ml-2">Not finished</span>}
                   </div>
-                  <div className="flex items-center justify-end gap-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-end gap-3 text-xs">
                     <span className="text-slate-600 sm:whitespace-nowrap sm:text-right">{formatShortDate(l.date)} · {l.profiles?.name ?? 'Unassigned'}</span>
                     {(role === 'admin' || role === 'instructor') && (
-                      <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex flex-wrap items-center justify-end gap-3">
                         <button className="text-[color:var(--rt-link)] hover:underline" onClick={() => setLessonEdit({ id: l.id, date: l.date, lessonId: l.lesson_id ?? curriculumLessons.find((lesson) => lesson.level_id === l.level_id && lesson.lesson_number === l.lesson_number)?.id ?? '', outcome: l.status === 'completed' ? 'completed' : 'not_finished' })}>Edit</button>
                         <button
                           className="text-[color:var(--rt-link)] hover:underline"
