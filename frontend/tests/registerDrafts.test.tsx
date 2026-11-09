@@ -20,12 +20,14 @@ vi.mock('../src/lib/supabaseClient', () => ({
     if (table === 'students') database.nextStudents = null
     const result = pending ?? Promise.resolve({ data: table === 'students' ? ['A', 'B'].map((id) => ({ id, full_name: `Student ${id}`, active: true, preferred_day: 'Thursday', preferred_time: '16:00', student_schedules: [] })) : table === 'attendance' ? database.attendance : [], error: null })
     let fields = ''
+    let offset = 0
     const query: Record<string, unknown> = {
+      range: (from: number) => { offset = from; return query },
       select: (value: string) => { fields = value; return query },
       then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
         if (database.throwQuery === table) return Promise.reject(new Error('Failed to fetch')).then(resolve, reject)
         if (database.failQuery?.table === table && (!database.failQuery.fields || database.failQuery.fields === fields)) return Promise.resolve({ data: null, error: { message: 'Failed to fetch' } }).then(resolve, reject)
-        return result.then(resolve, reject)
+        return (offset ? Promise.resolve({ data: [], error: null }) : result).then(resolve, reject)
       },
     }
     for (const method of ['eq', 'in', 'neq', 'order', 'or']) query[method] = () => query

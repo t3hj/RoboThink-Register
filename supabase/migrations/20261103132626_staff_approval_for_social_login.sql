@@ -1,6 +1,14 @@
 -- Authentication never grants a staff role. Existing profiles and assignments stay intact.
 drop trigger if exists on_auth_user_created on auth.users;
-revoke execute on function public.handle_new_user() from public, anon, authenticated;
+-- Some preview databases have no legacy auto-profile function.
+-- Keep the trigger disabled in either case; never recreate automatic approval.
+do $$
+begin
+  if to_regprocedure('public.handle_new_user()') is not null then
+    revoke execute on function public.handle_new_user() from public, anon, authenticated;
+  end if;
+end;
+$$;
 drop policy if exists profiles_insert_own on public.profiles;
 
 -- Only this private helper needs privileged access to verified Auth identities.

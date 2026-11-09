@@ -184,3 +184,15 @@ describe('configurable Pebble export fields', () => {
     expect(p.rows[0]).toMatchObject({ name: 'Ada Example', mobile: '07700900001', dob: '2016-08-05' })
   })
 })
+
+
+describe('session time formats', () => {
+  it.each([
+    ['3:30pm', '15:30'], ['3:30 PM', '15:30'], ['12:00am', '00:00'],
+    ['12:00PM', '12:00'], ['9:05am', '09:05'], ['15:30', '15:30'], ['15:30:00', '15:30'], ['3:30:00pm', '15:30'], ['3:30:75', null],
+    ['3:30pm - 5:00pm', '15:30'], ['25:00', null], ['3:75pm', null],
+    ['13:30pm', null], ['3:300', null], ['3:30potato', null],
+  ])('%s parses as %s', (value, expected) => {
+    expect(parsePebbleSheet([['Time of session', value], ['Child'], ['Synthetic Student']]).meta.time).toBe(expected)
+  })
+})

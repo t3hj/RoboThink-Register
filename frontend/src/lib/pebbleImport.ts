@@ -71,10 +71,10 @@ function parseTime(cell: unknown): string | null {
     const minutes = Math.round(cell * 24 * 60) % 1440
     return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
   }
-  const m = /^(\d{1,2})[:.](\d{2})/.exec(text(cell))
+  const m = /^(\d{1,2})[:.](\d{2})(?::[0-5]\d(?:\.\d+)?)?(?:\s*(am|pm))?(?=\s|$|[-–—])/i.exec(text(cell))
   if (!m) return null
   let h = Number(m[1])
-  const meridiem = /\b(am|pm)\b/i.exec(text(cell))?.[1].toLowerCase()
+  const meridiem = m[3]?.toLowerCase()
   if (meridiem) {
     if (h < 1 || h > 12) return null
     h = h % 12 + (meridiem === 'pm' ? 12 : 0)

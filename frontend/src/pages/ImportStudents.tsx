@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { readSheet } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/pagination'
 import { useBrand } from '../lib/brand'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
@@ -76,11 +77,11 @@ export default function ImportStudents() {
     setLoadError(null)
     if (!centreId || !parsed || parsed.error) return
     let cancelled = false
-    void supabase
+    void fetchAllRows(() => supabase
       .from('students')
       .select('id,full_name,date_of_birth,parent_contact,active,attendance_pattern,student_schedules(day_of_week,start_time,active)')
       .eq('centre_id', centreId)
-      .limit(2000)
+      .order('id'))
       .then(({ data, error }) => {
         if (cancelled) return
         if (error) { setLoadError(error.message); return }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/pagination'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, SubscriptionBadge } from '../components/ui'
 import LessonsToday from '../components/LessonsToday'
 import FeedbackControl from '../components/FeedbackControl'
@@ -115,7 +116,7 @@ export default function Register() {
       // A student can have several weekly sessions, so find everyone with a
       // session today from their schedule rows, plus anyone whose single
       // preferred day is today (students without schedule rows).
-      const { data: slotRows, error: slotsError } = await supabase.from('student_schedules').select('student_id').eq('day_of_week', dow).eq('active', true)
+      const { data: slotRows, error: slotsError } = await fetchAllRows(() => supabase.from('student_schedules').select('student_id').eq('day_of_week', dow).eq('active', true).order('id'))
       if (!isCurrent()) return
       if (slotsError) throw slotsError
       const slotIds = [...new Set((slotRows ?? []).map((r) => r.student_id as string))]
@@ -125,7 +126,8 @@ export default function Register() {
         .eq('active', true)
       scheduledQuery = slotIds.length > 0 ? scheduledQuery.or(`preferred_day.eq.${dow},id.in.(${slotIds.join(',')})`) : scheduledQuery.eq('preferred_day', dow)
       if (selectedCentreId) scheduledQuery = scheduledQuery.eq('centre_id', selectedCentreId)
-      const { data: scheduled, error: schedErr } = await scheduledQuery
+      scheduledQuery = scheduledQuery.order('id')
+      const { data: scheduled, error: schedErr } = await fetchAllRows(() => scheduledQuery)
 
       if (!isCurrent()) return
       if (schedErr) {
@@ -136,7 +138,8 @@ export default function Register() {
 
       let attendanceQuery = supabase.from('attendance').select('*').eq('date', forDate)
       if (selectedCentreId) attendanceQuery = attendanceQuery.eq('centre_id', selectedCentreId)
-      const { data: att, error: attErr } = await attendanceQuery
+      attendanceQuery = attendanceQuery.order('id')
+      const { data: att, error: attErr } = await fetchAllRows(() => attendanceQuery)
       if (!isCurrent()) return
       if (attErr) {
         setError(attErr.message)
@@ -167,7 +170,8 @@ export default function Register() {
           .in('id', extraIds)
           .eq('active', true)
         if (selectedCentreId) extrasQuery = extrasQuery.eq('centre_id', selectedCentreId)
-        const { data: extraData, error: extraErr } = await extrasQuery
+        extrasQuery = extrasQuery.order('id')
+        const { data: extraData, error: extraErr } = await fetchAllRows(() => extrasQuery)
         if (!isCurrent()) return
         if (extraErr) {
           setError(extraErr.message)
@@ -191,40 +195,40 @@ export default function Register() {
 
       if (ids.length) {
         const [progRes, planRes, feedbackRes, sessionsRes, recentRes, lessonRecordsRes, overridesRes, projectsRes] = await Promise.all([
-          supabase.from('student_progress').select('*').in('student_id', ids),
-          supabase
+          fetchAllRows(() => supabase.from('student_progress').select('*').in('student_id', ids).order('student_id')),
+          fetchAllRows(() => supabase
             .from('remediation_plans')
             .select('*')
             .in('student_id', ids)
-            .in('status', ['required', 'in_progress', 'ready_for_reassessment', 'intervention_required']),
+            .in('status', ['required', 'in_progress', 'ready_for_reassessment', 'intervention_required']).order('id')),
           // Outstanding feedback, by student_id only — deliberately NOT
           // filtered by date/schedule, so it follows the student to
           // whatever session they next appear at (normal day, catch-up, or
           // any other day).
-          supabase.from('feedback_sheets').select('*').in('student_id', ids).neq('status', 'given'),
+          fetchAllRows(() => supabase.from('feedback_sheets').select('*').in('student_id', ids).neq('status', 'given').order('id')),
           // Existing sessions for THIS date — loading/reloading the
           // register must reflect what's already saved, never create new
           // ones just by opening the page.
-          supabase.from('attended_sessions').select('*, assessment_records:assessments(result)').eq('date', forDate).in('student_id', ids),
+          fetchAllRows(() => supabase.from('attended_sessions').select('*, assessment_records:assessments(result)').eq('date', forDate).in('student_id', ids).order('id')),
           // All sessions, across all dates, are the per-occurrence progression
           // ledger. The selected Register date must never limit lesson history.
-          supabase
+          fetchAllRows(() => supabase
             .from('attended_sessions')
             .select('*')
             .in('student_id', ids)
             .order('date', { ascending: false })
-            .order('session_number', { ascending: false }),
+            .order('session_number', { ascending: false }).order('id')),
           // lesson_records is unique per student/level/lesson, not an attempt
           // ledger. Load both statuses for legacy SQL-backfilled attempts which
           // have no corresponding attended_sessions row.
-          supabase.from('lesson_records').select('*').in('student_id', ids),
+          fetchAllRows(() => supabase.from('lesson_records').select('*').in('student_id', ids).order('id')),
           // Explicit staff progression changes are history checkpoints.
-          supabase
+          fetchAllRows(() => supabase
             .from('progress_overrides')
             .select('student_id,new_level_id,new_lesson,created_at')
             .in('student_id', ids)
-            .order('created_at', { ascending: false }),
-          supabase.from('student_project_durations').select('*').in('student_id', ids).order('start_date', { ascending: false }),
+            .order('created_at', { ascending: false }).order('id')),
+          fetchAllRows(() => supabase.from('student_project_durations').select('*').in('student_id', ids).order('start_date', { ascending: false }).order('id')),
         ])
         if (!isCurrent()) return
         const rosterError = progRes.error ?? planRes.error ?? feedbackRes.error ?? sessionsRes.error ?? recentRes.error ?? lessonRecordsRes.error ?? overridesRes.error ?? projectsRes.error
