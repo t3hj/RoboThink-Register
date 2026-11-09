@@ -10,7 +10,7 @@ vi.mock('../src/components/Toast', () => ({ useToast: () => ({ notify: mock.noti
 vi.mock('../src/lib/supabaseClient', () => ({ supabase: { from: (table: string) => {
   if (table === 'subscriptions') return { select: () => ({ order: async () => ({ data: [{ id: 1, name: 'Term Time' }] }) }) }
   if (table === 'student_schedules') return { insert: mock.schedules }
-  return { select: () => ({ eq: () => ({ limit: mock.load }) }), insert: mock.insert }
+  return { select: () => ({ eq: () => ({ order: () => ({ range: (from: number, to: number) => from ? Promise.resolve({ data: [], error: null }) : mock.load(from, to) }) }) }), insert: mock.insert }
 } } }))
 let renderer: ReactTestRenderer
 const importButton = () => renderer.root.findAllByType('button').find(b => b.children.join('').startsWith('Import '))!

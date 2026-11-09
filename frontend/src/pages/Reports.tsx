@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/pagination'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, StatCard } from '../components/ui'
 import { addDays, todayISO } from '../lib/dates'
 import type { Assessment, Attendance, LessonRecord, RemediationPlan, Student } from '../types'
@@ -24,16 +25,12 @@ export default function Reports() {
     setLoading(true)
     setError(null)
     const [aRes, lRes, sRes, asRes, rpRes] = await Promise.all([
-      supabase.from('attendance').select('*').gte('date', fromDate).lte('date', toDate),
-      supabase
-        .from('lesson_records')
-        .select('*, profiles(name), levels(name)')
-        .eq('status', 'completed')
-        .gte('date', fromDate)
-        .lte('date', toDate),
-      supabase.from('students').select('*').order('full_name'),
-      supabase.from('assessments').select('*').gte('date', fromDate).lte('date', toDate),
-      supabase.from('remediation_plans').select('*').neq('status', 'completed'),
+      fetchAllRows(() => supabase.from('attendance').select('*').gte('date', fromDate).lte('date', toDate).order('id')),
+      fetchAllRows(() => supabase.from('lesson_records').select('*, profiles(name), levels(name)')
+        .eq('status', 'completed').gte('date', fromDate).lte('date', toDate).order('id')),
+      fetchAllRows(() => supabase.from('students').select('*').order('full_name').order('id')),
+      fetchAllRows(() => supabase.from('assessments').select('*').gte('date', fromDate).lte('date', toDate).order('id')),
+      fetchAllRows(() => supabase.from('remediation_plans').select('*').neq('status', 'completed').order('id')),
     ])
     if (aRes.error || lRes.error || sRes.error || asRes.error || rpRes.error) {
       setError(

@@ -184,7 +184,8 @@ function lessonIsAtOrBeyond(candidate: LessonRef, expected: LessonRef, levels: L
  * attempt establishes the student's point in the curriculum. Thereafter a
  * completed attempt at or beyond the cursor advances to the lesson after the
  * actual attempt (matching the progression RPC); earlier repeats/catch-ups
- * and all not-finished attempts leave the cursor unchanged.
+ * and all not-finished attempts leave the cursor unchanged. Coding resumes an
+ * earlier sequence after two consecutive completed sessions in curriculum order.
  */
 export function deriveExpectedLesson<L extends LessonRef>(
   input: ExpectedLessonInput,
@@ -219,7 +220,8 @@ export function deriveExpectedLesson<L extends LessonRef>(
       )
     : attempts
 
-  for (const attempt of events) {
+  let previous: ProgressionAttempt | null = null
+  for (const attempt of [...events].sort(compareAttempts)) {
     const attemptedLesson = lessonAt(attempt.level_id, attempt.lesson_number, lessons)
     if (!attemptedLesson) continue
 
@@ -227,12 +229,20 @@ export function deriveExpectedLesson<L extends LessonRef>(
       expected = attempt.outcome === 'completed'
         ? nextLessonAfter(attempt.level_id, attempt.lesson_number, levels, lessons)
         : attemptedLesson
+      previous = attempt
       continue
     }
 
-    if (attempt.outcome === 'completed' && lessonIsAtOrBeyond(attemptedLesson, expected, levels)) {
+    const resumesCodingSequence = currentLevel.slug === 'coding' &&
+      input.overrideNextLesson == null &&
+      previous?.outcome === 'completed' &&
+      previous.session_number != null && attempt.session_number != null &&
+      nextLessonAfter(previous.level_id, previous.lesson_number, levels, lessons)?.id === attemptedLesson.id
+    if (attempt.outcome === 'completed' &&
+      (lessonIsAtOrBeyond(attemptedLesson, expected, levels) || resumesCodingSequence)) {
       expected = nextLessonAfter(attempt.level_id, attempt.lesson_number, levels, lessons)
     }
+    previous = attempt
   }
 
   if (input.overrideNextLesson != null) {

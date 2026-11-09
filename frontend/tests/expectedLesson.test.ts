@@ -352,3 +352,50 @@ describe('Register recommendation consistency', () => {
     expect(sessionRowDefault?.lesson_number).toBe(topSection[0].groups[0].lessonNumber)
   })
 })
+
+
+describe('returning to a coding sequence', () => {
+  const codingLessons = lessonsFor(30, 40)
+  const resolve = (attempts: ProgressionAttempt[], extra: Partial<ExpectedLessonInput> = {}) =>
+    deriveExpectedLesson(input(attempts, { currentLevelId: 30, ...extra }), levels, codingLessons)?.lesson_number
+  const coding = (n: number, day: number, outcome: 'completed' | 'not_finished' = 'completed') =>
+    attempt(30, n, outcome, `2026-01-${String(day).padStart(2, '0')}`)
+  it('resumes at 7 after jumping to 20 then completing 5 and 6', () => {
+    expect(resolve([coding(20, 1), coding(5, 2), coding(6, 3)])).toBe(7)
+  })
+  it('counts two separate sessions on the same date in session order', () => {
+    const first = coding(5, 2)
+    const second = { ...coding(6, 2), session_number: 2, source_id: 'second-session' }
+    expect(resolve([coding(20, 1), first, second])).toBe(7)
+  })
+  it('keeps advancing the resumed sequence', () => {
+    expect(resolve([coding(20, 1), coding(5, 2), coding(6, 3), coding(7, 4)])).toBe(8)
+  })
+  it('does not reset for a single catch-up, repeated lesson, skipped lesson or unfinished attempt', () => {
+    for (const tail of [[coding(5, 2)], [coding(5, 2), coding(5, 3)],
+      [coding(5, 2), coding(7, 3)], [coding(5, 2), coding(6, 3, 'not_finished')],
+      [coding(5, 2, 'not_finished'), coding(6, 3)]]) {
+      expect(resolve([coding(20, 1), ...tail])).toBe(21)
+    }
+  })
+  it('does not treat a legacy lesson record as a second attended session', () => {
+    expect(resolve([coding(20, 1), { ...coding(5, 2), session_number: null }, coding(6, 3)])).toBe(21)
+  })
+  it('honours explicit numeric overrides and history checkpoints', () => {
+    expect(resolve([coding(20, 1), coding(5, 2), coding(6, 3)], { overrideNextLesson: 30 })).toBe(30)
+    expect(resolve([coding(20, 1), coding(5, 2), coding(6, 4)], {
+      progressionOverrides: [{ new_level_id: 30, new_lesson: 30, created_at: '2026-01-03T10:00:00Z' }],
+    })).toBe(30)
+  })
+  it('preserves non-normal progression states', () => {
+    for (const currentKind of ['assessment', 'remediation', 'complete'] as const) {
+      expect(resolveExpectedLesson(input([coding(20, 1), coding(5, 2), coding(6, 3)], {
+        currentLevelId: 30, currentKind,
+      }), levels, codingLessons)).toEqual({ source: 'stored' })
+    }
+  })
+  it('leaves two earlier robotics lessons as catch-ups', () => {
+    expect(deriveExpectedLesson(input([attempt(8, 10, 'completed', '2026-01-01'),
+      attempt(8, 5, 'completed', '2026-01-02'), attempt(8, 6, 'completed', '2026-01-03')]), levels, lessons)?.lesson_number).toBe(11)
+  })
+})

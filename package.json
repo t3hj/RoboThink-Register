@@ -1,5 +1,9 @@
 {
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.15",
     "pdf-parse": "^2.4.5"
+  },
+  "scripts": {
+    "test:db": "node db/tests/registerAudit.test.mjs"
   }
 }
