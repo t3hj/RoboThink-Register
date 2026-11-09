@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { ModalOverlay } from '../components/ui'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { fetchAllRows } from '../lib/pagination'
+import RemoveUnlinkedLesson from '../components/RemoveUnlinkedLesson'
 import { useAuth } from '../lib/auth'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, StatusBadge, StatCard } from '../components/ui'
 import ChangeLessonControl from '../components/ChangeLessonControl'
@@ -104,11 +106,11 @@ export default function StudentProfile() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
-      supabase
+      fetchAllRows(() => supabase
         .from('lesson_records')
         .select('*, profiles(name), levels(name), lessons(title)')
         .eq('student_id', id)
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false }).order('id')),
       supabase
         .from('remediation_lessons')
         .select('*, profiles(name)')
@@ -148,12 +150,12 @@ export default function StudentProfile() {
         .order('session_number', { ascending: false })
         .limit(1)
         .maybeSingle(),
-      supabase
+      fetchAllRows(() => supabase
         .from('attended_sessions')
         .select('*, lessons(lesson_number,title,level_id,lesson_kind), student_projects(name), assessment_records:assessments(id), remediation_lessons(id)')
         .eq('student_id', id)
         .order('date', { ascending: false })
-        .order('session_number', { ascending: false }),
+        .order('session_number', { ascending: false }).order('id')),
       loadCurriculum(),
     ])
     if (sRes.error || pRes.error || lRes.error || rRes.error || aRes.error || pointRes.error || planHistoryRes.error || attRes.error || fRes.error || projectRes.error || sessionsRes.error) {
@@ -572,6 +574,8 @@ export default function StudentProfile() {
                             remediationPath: 'remediation_lessons',
                           })}
                         >Convert to assessment</button>
+                        <RemoveUnlinkedLesson recordId={l.id} lessonNumber={l.lesson_number}
+                          linked={historySessions.some((session) => session.lesson_record_id === l.id)} onRemoved={load} />
                       </div>
                     )}
                   </div>

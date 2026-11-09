@@ -4,6 +4,6 @@
     "pdf-parse": "^2.4.5"
   },
   "scripts": {
-    "test:db": "node db/tests/registerAudit.test.mjs"
+    "test:db": "node db/tests/registerAudit.test.mjs && node db/tests/sessionHistory.test.mjs"
   }
 }
