@@ -12,7 +12,18 @@
 | Student on the wrong lesson | Ask an admin to correct their current lesson |
 | Student left | Edit them and set them **Inactive** |
 
-Edits update the linked records together, so progress and history stay in sync.
+Correcting a lesson keeps the recorded visit and its feedback together. The old
+lesson entry is removed only when no other visit uses it. Genuine repeats stay
+in history. If a lesson represents several visits, open the Register on the
+visit's date to correct that specific session.
+
+If a mistaken lesson is in **Learning history** but has no **Recorded session**,
+use **Remove history entry** beside that lesson and confirm the removal. This
+keeps attendance, recorded visits and feedback attached to those visits. A term
+follow-up blocks removal until an administrator reviews it.
+
+Changing an Attended/Absent mark does not erase saved lessons. Correct or remove
+an incorrectly saved session separately.
 
 ## FAQ
 
