@@ -22,7 +22,7 @@ portal.
 
 ## Features
 
-- Magic-link sign-in through Supabase Auth.
+- Google and email-link sign-in through Supabase Auth, persistent sessions and staff approval.
 - Role-aware dashboards for instructors, management and administrators.
 - Daily register with date navigation, catch-up/special attendees and bulk actions.
 - Attendance, arrival/time-out and attended-session recording.
@@ -62,7 +62,7 @@ and a short version is built into the app under **Help & guides**.
 
 ### Sign in
 
-Use the staff sign-in page and request a magic link. An account must be linked
+Use Google sign-in when enabled, or request an email link from the staff sign-in page. Sessions persist on the current browser until sign-out or expiry. An account must be linked
 to an authorised staff profile in Supabase. If the account has no profile or
 the wrong role, contact an administrator.
 
@@ -120,7 +120,7 @@ verified transfer or correction is needed.
 | Role | Typical access |
 | --- | --- |
 | Instructor | Day-to-day register, students, curriculum, progression, feedback and reports |
-| Management | Read-only operational and management views for authorised centre data |
+| Management | Centre-scoped management views, student administration, requests and Pebble import; no instructor register route |
 | Admin | Instructor capabilities plus staff management, corrections, overrides and wider centre access |
 
 The frontend hides routes by role, but database RLS and server-side functions
@@ -164,12 +164,17 @@ before applying changes to a production project.
 
 ## Local development
 
+Requires Node.js 22.12+ or 24 and npm. From a fresh checkout:
+
 ```bash
-cd frontend
-npm install
-copy .env.example .env
+git clone https://github.com/t3hj/RoboThink-Register.git
+cd RoboThink-Register/frontend
+npm ci
+cp .env.example .env
 npm run dev
 ```
+
+In Windows PowerShell, replace `cp .env.example .env` with `Copy-Item .env.example .env`.
 
 Set these variables in `frontend/.env`:
 
@@ -229,6 +234,10 @@ data inside the authorised application environment.
 - Do not commit `.env`, service-role keys, passwords or auth mapping details.
 - Use synthetic placeholders when demonstrating database structure.
 
-## Staff sign-in
+## Review the engineering
 
-Google sign-in, persistent sessions, and admin approval are described in [Google sign-in setup](docs/google-sign-in.md). Email links remain available. New Auth accounts require admin approval before they receive staff access.
+- [Expected lesson calculation](frontend/src/lib/expectedLesson.ts) separates historical completions from the stored progression pointer.
+- [Unit tests](frontend/tests/) cover progression, attendance, assessments and correction edge cases.
+- [Google sign-in setup](docs/google-sign-in.md) documents provider configuration and staff approval.
+
+A local frontend build does not prove live database policy correctness. Use a separate development database with synthetic students for manual testing. Do not capture live student records for portfolio screenshots.
