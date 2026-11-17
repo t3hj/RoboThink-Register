@@ -101,9 +101,10 @@ function countKinds(rows: { kind: AttendanceKind }[]): AttendanceSummary {
  *  up with a catch-up session isn't a miss either, and catch-up sessions
  *  themselves never push the percentage up. */
 export function attendancePercentage(rows: AttendanceLike[]): number | null {
-  const { attended, missed } = summariseAttendance(rows)
-  const relevant = attended + missed
-  return relevant ? Math.round((attended / relevant) * 100) : null
+  const { attended, missed, madeUp } = summariseAttendance(rows)
+  const fulfilled = attended + madeUp
+  const relevant = fulfilled + missed
+  return relevant ? Math.round((fulfilled / relevant) * 100) : null
 }
 
 export type AttendanceFlag = 'missed_recently' | 'several_recent_missed' | 'no_attendance_recently' | null

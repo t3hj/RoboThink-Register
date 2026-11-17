@@ -40,9 +40,21 @@ The app matches each absence with one catch-up session at **any time after it**
 against the student and is labelled **Made up** in their attendance history. A
 catch-up can cover only one absence.
 
-Catch-ups never raise a student's percentage above what their regular sessions
-earned. They only cancel out an absence. So a student who attends 4 regular
-sessions, misses 1 and makes it up shows 100%.
+Attendance percentage is fulfilled regular sessions (attended or made up), divided
+by all marked regular sessions. Unused extra sessions do not increase it. So a
+student who attends 4 regular sessions, misses 1 and makes it up shows 100%.
+
+The student profile shows sessions attended, catch-up / extra sessions, absences
+made up and outstanding absences. Both the summary and attendance history use
+the same calculation, through today. The original absence remains in history.
+
+Completing two lessons does **not** mean two sessions. Use **Record another
+session** only when the student actually attends another session. Each separately
+recorded extra session on the same day counts once and can make up one absence.
+Session details replace the day's attendance count rather than adding to it;
+older attended dates without session details still count as one visit. Assessment,
+project and unfinished sessions also count as attendance. An explicit Absent or
+Not Arrived mark takes precedence over old session details until corrected.
 
 ## Quick answers
 

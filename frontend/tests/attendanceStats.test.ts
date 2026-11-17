@@ -123,6 +123,17 @@ const row = (date: string, status: 'Arrived' | 'Completed' | 'Absent' | 'Not Arr
 })
 
 describe('make-up sessions', () => {
+  it('counts a made-up absence as fulfilled even with no other regular attendance', () => {
+    expect(attendancePercentage([row('2026-09-08', 'Absent'), row('2026-09-12', 'Completed', 'catch_up')])).toBe(100)
+  })
+
+  it('credits made-up sessions alongside absences still outstanding, without counting the catch-up twice', () => {
+    expect(attendancePercentage([
+      row('2026-09-01', 'Completed'), row('2026-09-08', 'Completed'),
+      row('2026-09-15', 'Absent'), row('2026-09-16', 'Completed', 'catch_up'), row('2026-10-01', 'Absent'),
+    ])).toBe(75)
+  })
+
   it('an absence made up by a later catch-up is not a miss and the catch-up does not inflate the rate', () => {
     const rows = [row('2026-09-01', 'Completed'), row('2026-09-08', 'Absent'), row('2026-09-12', 'Completed', 'catch_up'), row('2026-09-15', 'Completed')]
     expect(summariseAttendance(rows)).toEqual({ attended: 2, missed: 0, madeUp: 1, extra: 1 })

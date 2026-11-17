@@ -18,7 +18,8 @@ import { formatShortDate, formatDisplayDate, formatTime12h } from '../lib/dates'
 import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
-import { attendancePercentage, classifyAttendance, describeSlots, groupAttendanceByMonth } from '../lib/attendanceStats'
+import { describeSlots, groupAttendanceByMonth } from '../lib/attendanceStats'
+import { studentAttendance } from '../lib/studentAttendance'
 import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import type {
   AttendedSession,
@@ -124,7 +125,7 @@ export default function StudentProfile() {
         .order('created_at', { ascending: false }),
       supabase.from('assessment_points').select('*').eq('active', true),
       supabase.from('remediation_plans').select('id,assessment_id,remediation_path').eq('student_id', id),
-      supabase.from('attendance').select('*').eq('student_id', id).order('date', { ascending: false }),
+      fetchAllRows(() => supabase.from('attendance').select('*').eq('student_id', id).order('date', { ascending: false }).order('id')),
       supabase
         .from('feedback_sheets')
         .select('*, lesson_records(date, lesson_number, level_id, levels(name)), attended_sessions(date, session_number, outcome, lessons(title, lesson_number))')
@@ -352,10 +353,9 @@ export default function StudentProfile() {
   }
 
   const completed = lessons.filter((l) => l.status === 'completed').length
-  const attended = attendance.filter((a) => a.status === 'Completed' || a.status === 'Arrived').length
-  const absent = attendance.filter((a) => a.status === 'Absent').length
-  const relevant = attended + absent
-  const attendancePct = relevant ? Math.round((attended / relevant) * 100) : null
+  const attendanceStats = studentAttendance(attendance, historySessions, todayISO())
+  const attendancePct = attendanceStats.percentage
+  const absent = attendanceStats.outstandingAbsences
   const needsAction = progress && progress.current_kind !== 'normal' && progress.current_kind !== 'complete'
   const outstandingFeedback = feedback.filter((f) => f.status !== 'given')
   const notFinishedCount = lessons.filter((l) => l.status === 'not_completed').length
@@ -466,10 +466,13 @@ export default function StudentProfile() {
           label="Attendance"
           tone={attendancePct != null && attendancePct < 80 ? 'warn' : 'good'}
         />
-        <StatCard value={absent} label="Absences" tone={absent > 2 ? 'bad' : undefined} />
+        <StatCard value={attendanceStats.sessionsAttended} label="Sessions attended" />
+        <StatCard value={attendanceStats.catchUpsAttended} label="Catch-up / extra sessions" />
+        <StatCard value={attendanceStats.madeUp} label="Absences made up" />
+        <StatCard value={absent} label="Outstanding absences" tone={absent > 2 ? 'bad' : undefined} />
       </div>
       <p className="-mt-3 mb-5 text-xs text-slate-600">
-        Assessments and project sessions count toward attendance, but not toward curriculum lesson completion or lesson progression.
+        Sessions attended includes catch-ups, assessments, projects and unfinished sessions. Completing multiple lessons does not add sessions; record each additional session separately. Each attended catch-up or extra session can make up one absence. Made-up absences remain in history and count as fulfilled attendance; unused extras do not increase the percentage.
       </p>
 
       <StudentProjectsPanel studentId={student.id} projects={projects} onChanged={() => void load()} />
@@ -647,15 +650,15 @@ export default function StudentProfile() {
           )}
 
           <h3 className="font-semibold mt-5 mb-3">Attendance</h3>
-          {attendance.length === 0 ? (
+          {attendanceStats.rows.length === 0 ? (
             <EmptyState title="No attendance recorded yet" />
           ) : (
             <>
               <p className="text-sm text-slate-600 mb-3">
                 Scheduled: {describeSlots(student, formatTime12h) || '—'}{student.attendance_pattern === 'fortnightly' ? ' · every other week' : ''}
-                {attendancePercentage(attendance) != null && <> · {attendancePercentage(attendance)}% attendance</>}
+                {attendancePct != null && <> · {attendancePct}% attendance</>}
               </p>
-              {groupAttendanceByMonth(classifyAttendance(attendance)).map(({ month, rows }) => (
+              {groupAttendanceByMonth(attendanceStats.rows).map(({ month, rows }) => (
                 <div key={month} className="mb-4">
                   <div className="text-xs uppercase tracking-wide text-slate-600 mb-1.5">{month}</div>
                   <ul className="divide-y divide-slate-100">
@@ -663,7 +666,8 @@ export default function StudentProfile() {
                       <li key={a.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
                         <div className="flex items-center gap-2">
                           {formatShortDate(a.date)}
-                          {a.session_type === 'catch_up' && <span className="badge">Catch-up</span>}
+                          {a.sessionNumber != null && <span className="text-xs text-slate-600">Session {a.sessionNumber}</span>}
+                          {(a.session_type === 'catch_up' || (a.catch_up && a.session_type !== 'special')) && <span className="badge">Catch-up</span>}
                           {a.session_type === 'special' && <span className="badge">Special session</span>}
                           {a.kind === 'made_up' && <span className="badge bg-[color:var(--rt-green-tint)] text-emerald-800">Made up</span>}
                         </div>
