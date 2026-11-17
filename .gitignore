@@ -36,3 +36,4 @@ dist/
 /C-map.pdf
 /dev.log
 /dev.err.log
+/supabase/.temp/

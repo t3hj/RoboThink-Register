@@ -341,8 +341,10 @@ export type TermTimeFollowupStatus = 'needs_follow_up' | 'contacted' | 'extended
 export interface TermTimeFollowup {
   id: string
   student_id: string
-  lesson_record_id: string
-  lessons_completed_in_block: number
+  lesson_record_id: string | null
+  lessons_completed_in_block: number | null
+  session_block: number | null
+  next_follow_up_date: string | null
   status: TermTimeFollowupStatus
   notes: string | null
   created_at: string
