@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/pagination'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, SubscriptionBadge } from '../components/ui'
 import LessonsToday from '../components/LessonsToday'
+import { isRemediationDue } from '../lib/assessment'
 import FeedbackControl from '../components/FeedbackControl'
 import AddToRegister from '../components/AddToRegister'
 import AssessmentPanel from '../components/AssessmentPanel'
@@ -20,7 +21,6 @@ import { findOutstandingFeedback, FEEDBACK_SHORT } from '../lib/feedback'
 import { isExpectedOnDate, slotOnDate } from '../lib/attendanceStats'
 import { closureName } from '../lib/ukHolidays'
 import { attendanceState, registerCompleteness, needsLeftAsideReminder } from '../lib/attendedSessionsUi'
-import { requiresAssessmentResult } from '../lib/assessment'
 import { resolveFeedbackTarget } from '../lib/bulkActions'
 import { useCentres } from '../lib/centres'
 import {
@@ -198,7 +198,7 @@ export default function Register() {
           fetchAllRows(() => supabase.from('student_progress').select('*').in('student_id', ids).order('student_id')),
           fetchAllRows(() => supabase
             .from('remediation_plans')
-            .select('*')
+            .select('*, assessment:assessments!remediation_plans_assessment_id_fkey(notes)')
             .in('student_id', ids)
             .in('status', ['required', 'in_progress', 'ready_for_reassessment', 'intervention_required']).order('id')),
           // Outstanding feedback, by student_id only — deliberately NOT
@@ -601,9 +601,6 @@ export default function Register() {
                       .map((f) => [f.attended_session_id as string, f]),
                   )
                   const expected = expectedLessons.get(s.id)
-                  const latestSessionToday = s.sessionsToday[s.sessionsToday.length - 1]
-                  const latestSessionLesson = lessons.find((lesson) => lesson.id === latestSessionToday?.actual_lesson_id)
-                  const assessmentWorkflowSessionId = latestSessionLesson && !requiresAssessmentResult(latestSessionLesson) ? latestSessionToday?.id ?? null : null
                   return (
                     <div key={s.id} className={visibleIds.has(s.id) ? "p-3 sm:p-4 flex flex-col gap-3" : "hidden"}>
                       <div className="flex flex-col sm:flex-row sm:items-start gap-3">
@@ -624,11 +621,15 @@ export default function Register() {
                               {s.attendance?.session_type === 'catch_up' && <span className="badge">Catch-up</span>}
                               {s.attendance?.session_type === 'special' && <span className="badge">Special session</span>}
                               {!s.attendance && !isExpectedOnDate(s, date) && <span className="badge">Catch-up</span>}
-                              {!expected && !s.current_lesson_id && (
+                              {!expected && !s.current_lesson_id && !isRemediationDue(s.plan) && (
                                 <Link to={`/students/${s.id}`} className="badge badge-assess hover:underline">No lesson set · choose</Link>
                               )}
                             </div>
-                            <p className="mt-0.5 text-sm text-slate-700 break-words">{expected ? `Lesson ${expected.lesson_number} — ${expected.title}` : 'No recommended lesson set'}</p>
+                            <p className="mt-0.5 text-sm text-slate-700 break-words">
+                            {isRemediationDue(s.plan)
+                              ? `Remediation lesson ${s.plan.lessons_completed + 1} of ${s.plan.lessons_required} due`
+                              : expected ? `Lesson ${expected.lesson_number} — ${expected.title}` : 'No recommended lesson set'}
+                          </p>
                             <div className="mt-1 text-xs text-slate-600 flex items-center flex-wrap gap-x-2 gap-y-1">
                               <span>{levelLabel({ name: levels.find((level) => level.id === expected?.level_id)?.name ?? s.progress?.level_name ?? s.levels?.name ?? '—' })}</span>
                               <SubscriptionBadge subscriptionId={s.subscription_id} />
@@ -653,15 +654,15 @@ export default function Register() {
                         onChanged={() => void loadRoster(date)}
                       />
 
-                      {(s.pending_assessment_point_id != null || (s.progress && s.progress.current_kind !== 'normal' && s.progress.current_kind !== 'complete')) && (
+                      {(s.plan || s.pending_assessment_point_id != null || (s.progress && s.progress.current_kind !== 'normal' && s.progress.current_kind !== 'complete')) && (
                         <AssessmentPanel
                           studentId={s.id}
                           pendingAssessmentPointId={s.pending_assessment_point_id}
                           focusTopic={s.progress?.focus_topic ?? null}
                           plan={s.plan}
-                          sessionId={assessmentWorkflowSessionId}
+                          date={date}
+                          attended={s.attendance?.status === 'Arrived' || s.attendance?.status === 'Completed'}
                           onDone={() => void loadRoster(date)}
-                          compact
                         />
                       )}
                     </div>

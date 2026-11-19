@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useToast } from './Toast'
 import { BusyButton } from './ui'
-import { todayISO } from '../lib/dates'
-import { remediationStatusLabel } from '../lib/assessment'
+import { isRemediationDue, remediationStatusLabel } from '../lib/assessment'
 import type { RemediationPlan } from '../types'
 
 interface Props {
@@ -12,72 +11,110 @@ interface Props {
   pendingAssessmentPointId: string | null
   focusTopic: string | null
   plan: RemediationPlan | null
-  /** The specific regular attended session used to log a remediation lesson. */
-  sessionId: string | null
-  onDone: () => void
-  /** Compact mode is used inline in the register row; full mode on the profile page. */
-  compact?: boolean
+  date?: string
+  attended?: boolean
+  onDone?: () => void
 }
 
-/** Shows remediation progress. Assessment results are always recorded from
- *  the Register lesson picker so there is one PASS/FAIL entry flow. */
-export default function AssessmentPanel({
-  studentId,
-  pendingAssessmentPointId,
-  focusTopic,
-  plan,
-  sessionId,
-  onDone,
-  compact,
-}: Props) {
+function RemediationLessonForm({ studentId, plan, date, onDone }: {
+  studentId: string
+  plan: RemediationPlan
+  date: string
+  onDone?: () => void
+}) {
   const { notify } = useToast()
-  const [busy, setBusy] = useState(false)
+  const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const sessionId = useRef<string | null>(null)
+  const saving = useRef(false)
 
-  async function completeRemediationLesson() {
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (saving.current || !title.trim()) return
+    saving.current = true
     setBusy(true)
-    const { error } = await supabase.rpc('complete_remediation_lesson', {
-      in_student_id: studentId,
-      in_date: todayISO(),
-      in_notes: notes.trim() || null,
-      in_attended_session_id: sessionId,
-    })
-    setBusy(false)
-    if (error) {
-      notify(error.message, 'error')
-      return
+    setError(null)
+    try {
+      sessionId.current ??= crypto.randomUUID()
+      const { error: saveError } = await supabase.rpc('record_remediation_lesson_session', {
+        in_student_id: studentId,
+        in_plan_id: plan.id,
+        in_lesson_number: plan.lessons_completed + 1,
+        in_date: date,
+        in_session_id: sessionId.current,
+        in_title: title.trim(),
+        in_notes: notes.trim() || null,
+      })
+      if (saveError) {
+        setError(saveError.message)
+        return
+      }
+      notify('Remediation lesson recorded', 'success')
+      onDone?.()
+    } finally {
+      saving.current = false
+      setBusy(false)
     }
-    notify('Remediation lesson recorded', 'success')
-    setNotes('')
-    onDone()
   }
 
+  const fieldClass = 'mt-1 block w-full rounded-lg border border-amber-200 bg-white p-2 text-sm text-slate-900'
+  return (
+    <form className="mt-3 grid gap-2" onSubmit={(event) => void save(event)}>
+      <label>
+        <span className="font-medium">Remediation lesson {plan.lessons_completed + 1} title</span>
+        <input className={fieldClass} value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={120} disabled={busy} />
+      </label>
+      <label>
+        <span className="font-medium">Lesson notes (optional)</span>
+        <textarea className={fieldClass} value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} maxLength={1000} disabled={busy} />
+      </label>
+      {error && <p className="text-sm text-rose-800" role="alert">{error}</p>}
+      <div>
+        <BusyButton type="submit" busy={busy} disabled={!title.trim()}>Record completed remediation lesson</BusyButton>
+      </div>
+    </form>
+  )
+}
+
+export default function AssessmentPanel({ studentId, pendingAssessmentPointId, focusTopic, plan, date, attended, onDone }: Props) {
   const status = remediationStatusLabel(plan)
-  const toneClass = { warn: 'border-amber-200 bg-amber-50 text-amber-900', bad: 'border-rose-300 bg-rose-50 text-rose-800', info: 'border-sky-200 bg-sky-50 text-sky-900' }
+  const focus = plan?.assessment?.notes
+  const focusNote = focus && <p className="mt-1 whitespace-pre-wrap break-words"><strong>Skills to practise</strong> · {focus}</p>
 
   if (plan?.status === 'intervention_required') {
     return (
-      <div className={`card p-3 ${toneClass.bad} text-sm ${compact ? '' : 'p-4'}`}>
+      <div className="card border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
         <div className="font-semibold">{status?.label}</div>
         <div>Reassessment was not passed after remediation. This needs manual follow-up before further progress.</div>
+        {focusNote}
       </div>
     )
   }
 
-  if (plan && (plan.status === 'required' || plan.status === 'in_progress')) {
+  if (isRemediationDue(plan)) {
     return (
-      <div className={`card p-3 ${toneClass.warn} text-sm ${compact ? '' : 'p-4'}`}>
+      <div className="card border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <div className="font-semibold">
           {status?.label}
           {plan.topic ? ` · ${plan.topic}` : ''}
         </div>
-        {!compact && <div className="mb-2">Failed assessment — 3 remediation lessons are required before reassessment.</div>}
-        {!sessionId ? (
-          <p className="text-xs mt-2">Record today's session first, then a remediation lesson can be logged against it.</p>
+        {focusNote}
+        {date ? (
+          attended ? (
+            <RemediationLessonForm
+              key={`${date}/${plan.id}/${plan.lessons_completed}`}
+              studentId={studentId}
+              plan={plan}
+              date={date}
+              onDone={onDone}
+            />
+          ) : (
+            <p className="mt-2 text-xs">Mark the student attended to record a completed remediation lesson.</p>
+          )
         ) : (
-          <BusyButton className="btn-primary text-sm mt-2" busy={busy} onClick={() => void completeRemediationLesson()}>
-            Complete remediation lesson
-          </BusyButton>
+          <Link to="/register" className="mt-2 inline-block text-xs font-medium underline">Open Register to record a remediation lesson</Link>
         )}
       </div>
     )
@@ -86,15 +123,16 @@ export default function AssessmentPanel({
   if (plan?.status === 'ready_for_reassessment' || pendingAssessmentPointId) {
     const isReassessment = plan?.status === 'ready_for_reassessment'
     return (
-      <div className={`card p-3 ${toneClass.info} text-sm ${compact ? '' : 'p-4'}`}>
+      <div className="card border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
         <div className="font-semibold">
           {status?.label ?? 'Assessment due'}
           {focusTopic ? ` · ${focusTopic}` : ''}
         </div>
-        <p className="text-xs mt-2">
+        {focusNote}
+        <p className="mt-2 text-xs">
           {isReassessment ? 'Select the reassessment lesson' : 'Select the assessment lesson'} in the Register lesson picker to record PASS/FAIL with the session.
         </p>
-        <Link to="/register" className="inline-block text-xs font-medium underline mt-2">Open Register</Link>
+        {!date && <Link to="/register" className="mt-2 inline-block text-xs font-medium underline">Open Register</Link>}
       </div>
     )
   }

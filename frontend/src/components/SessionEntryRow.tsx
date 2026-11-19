@@ -7,7 +7,7 @@ import FeedbackControl from './FeedbackControl'
 import { friendlyMessage } from '../lib/errors'
 import { levelLabel } from '../lib/curriculum'
 import { sessionRecommendedLesson } from '../lib/expectedLesson'
-import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
+import { isRemediationDue, REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import {
   NOT_FINISHED_REASONS,
   attendanceState,
@@ -51,6 +51,7 @@ type Draft = {
   projectId: string
   assessmentResult: AssessmentResult | ''
   remediationPath: RemediationPath | ''
+  focusNote: string
 }
 
 // Once the session RPC succeeds, retries only finish these follow-up writes.
@@ -64,7 +65,7 @@ type PendingSave = {
 }
 
 function blankDraft(defaultLessonId: string): Draft {
-  return { activity: 'lesson', lessonId: defaultLessonId, outcome: 'completed', leftAside: false, identifier: '', reason: '', note: '', projectId: '', assessmentResult: '', remediationPath: '' }
+  return { activity: 'lesson', lessonId: defaultLessonId, outcome: 'completed', leftAside: false, identifier: '', reason: '', note: '', projectId: '', assessmentResult: '', remediationPath: '', focusNote: '' }
 }
 
 export default function SessionEntryRow({
@@ -109,7 +110,7 @@ export default function SessionEntryRow({
   )
   const defaultLessonId = recommendedLesson?.id ?? (expectedLesson === undefined ? lessonsInLevel[0]?.id ?? '' : '')
 
-  const showBlankFormAutomatically = state === 'attended' && sessionsToday.length === 0 && !editingSessionId && !hasRecordedSession
+  const showBlankFormAutomatically = !isRemediationDue(plan) && state === 'attended' && sessionsToday.length === 0 && !editingSessionId && !hasRecordedSession
   const formOpen = draft != null || showBlankFormAutomatically
   const activeDraft: Draft | null = draft ?? (showBlankFormAutomatically ? blankDraft(defaultLessonId) : null)
 
@@ -136,6 +137,7 @@ export default function SessionEntryRow({
       projectId: session.project_id ?? '',
       assessmentResult: '',
       remediationPath: '',
+      focusNote: '',
     })
     setLessonScope('all')
   }
@@ -297,13 +299,17 @@ export default function SessionEntryRow({
     let sessionId: string | null = null
     let error: { message: string } | null = null
     if (requiresAssessmentResult(selectedForSave)) {
-      const assessmentResult = await supabase.rpc('record_assessment_lesson_session', {
+      const assessmentArgs = {
         in_student_id: student.id,
         in_assessment_lesson_id: activeDraft.lessonId,
         in_date: date,
-        in_result: activeDraft.outcome === 'not_finished' ? 'NOT_FINISHED' : activeDraft.assessmentResult,
         in_remediation_path: activeDraft.remediationPath || 'remediation_lessons',
-      })
+      }
+      const result = activeDraft.outcome === 'not_finished' ? 'NOT_FINISHED' : activeDraft.assessmentResult
+      const focusNote = activeDraft.focusNote.trim()
+      const assessmentResult = result === 'FAIL' && focusNote
+        ? await supabase.rpc('record_assessment_with_focus', { ...assessmentArgs, in_focus_note: focusNote })
+        : await supabase.rpc('record_assessment_lesson_session', { ...assessmentArgs, in_result: result })
       sessionId = typeof assessmentResult.data === 'string' ? assessmentResult.data : null
       error = assessmentResult.error
     } else {
@@ -416,11 +422,11 @@ export default function SessionEntryRow({
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div>
                     <span className="font-medium">Session {s.session_number}</span>
-                    <span className="text-slate-600"> · {s.project_id && !lesson ? `Project: ${projects.find((project) => project.id === s.project_id)?.name ?? 'Project'}` : lesson ? `${requiresAssessmentResult(lesson) ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
+                    <span className="text-slate-600"> · {s.remediation_title ? `Remediation: ${s.remediation_title}` : s.project_id && !lesson ? `Project: ${projects.find((project) => project.id === s.project_id)?.name ?? 'Project'}` : lesson ? `${requiresAssessmentResult(lesson) ? 'Assessment' : 'Lesson'} ${lesson.lesson_number}: ${lesson.title}` : 'Lesson'}</span>
                     {s.outcome === 'not_finished' && !requiresAssessmentResult(lesson) && <span className="badge ml-1.5">Not finished</span>}
                     {s.left_aside && <span className="badge badge-assess ml-1.5">Build {s.left_aside_identifier} left aside</span>}
                   </div>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                  {!s.remediation_title && <label className="flex items-center gap-1.5 text-xs text-slate-600">
                     <span>Project</span>
                     <select
                       className="p-1.5 border border-slate-200 rounded-md bg-white text-slate-700"
@@ -434,8 +440,8 @@ export default function SessionEntryRow({
                         <option key={project.id} value={project.id}>{project.name}{project.status === 'active' ? '' : ` (${project.status.replace('_', ' ')})`}</option>
                       ))}
                     </select>
-                  </label>
-                  {requiresAssessmentResult(lesson) ? (
+                  </label>}
+                  {!s.remediation_title && (requiresAssessmentResult(lesson) ? (
                     s.outcome === 'not_finished'
                       ? <span className="badge">Not finished</span>
                       : <span className="badge badge-assess">{s.assessment_records?.[0]?.result ?? 'No result saved'}</span>
@@ -446,7 +452,7 @@ export default function SessionEntryRow({
                     }}>
                       {editingSessionId === s.id ? 'Cancel' : 'Edit'}
                     </button>
-                  )}
+                  ))}
                 </div>
                 {fb && (
                   <div className="mt-1.5">
@@ -529,7 +535,7 @@ export default function SessionEntryRow({
             {lessonScope === 'recommended' && recommendedLesson && (
               <button
                 className={`w-full text-left p-2.5 rounded-lg border text-sm ${activeDraft.lessonId === recommendedLesson.id ? 'border-[color:var(--rt-blue)] bg-[color:var(--rt-blue-tint)]' : 'border-slate-200 bg-white'}`}
-                onClick={() => setDraft({ ...activeDraft, lessonId: recommendedLesson.id, assessmentResult: '', remediationPath: '' })}
+                onClick={() => setDraft({ ...activeDraft, lessonId: recommendedLesson.id, assessmentResult: '', remediationPath: '', focusNote: '' })}
               >
                 {requiresAssessmentResult(recommendedLesson) ? 'Assessment' : 'Lesson'} {recommendedLesson.lesson_number}: {recommendedLesson.title}
                 <span className="block text-xs text-slate-600">Student's current expected lesson</span>
@@ -546,7 +552,7 @@ export default function SessionEntryRow({
                   <button
                     key={l.id}
                     className={`w-full text-left p-2 rounded-lg border text-sm ${activeDraft.lessonId === l.id ? 'border-[color:var(--rt-blue)] bg-[color:var(--rt-blue-tint)]' : 'border-slate-200 bg-white'}`}
-                    onClick={() => setDraft({ ...activeDraft, lessonId: l.id, assessmentResult: '', remediationPath: '' })}
+                    onClick={() => setDraft({ ...activeDraft, lessonId: l.id, assessmentResult: '', remediationPath: '', focusNote: '' })}
                   >
                     {requiresAssessmentResult(l) ? 'Assessment' : 'Lesson'} {l.lesson_number}: {l.title}
                   </button>
@@ -563,6 +569,7 @@ export default function SessionEntryRow({
                   lessonId: e.target.value,
                   assessmentResult: e.target.value === activeDraft.lessonId ? activeDraft.assessmentResult : '',
                   remediationPath: e.target.value === activeDraft.lessonId ? activeDraft.remediationPath : '',
+                  focusNote: e.target.value === activeDraft.lessonId ? activeDraft.focusNote : '',
                 })}
                 aria-label="Choose any lesson"
               >
@@ -624,6 +631,18 @@ export default function SessionEntryRow({
                     </button>
                   ))}
                 </div>
+                {activeDraft.assessmentResult === 'FAIL' && (
+                  <label className="block mt-3 text-sm text-sky-900">
+                    <span className="block mb-1 font-medium">Skills to practise (optional)</span>
+                    <textarea
+                      className="w-full rounded-lg border border-sky-200 bg-white p-2"
+                      rows={2}
+                      maxLength={1000}
+                      value={activeDraft.focusNote}
+                      onChange={(event) => setDraft({ ...activeDraft, focusNote: event.target.value })}
+                    />
+                  </label>
+                )}
                 {failNeedsRemediationChoice && (
                   <fieldset className="mt-3">
                     <legend className="text-xs text-sky-900 mb-1">Remediation path (required before saving):</legend>
@@ -670,7 +689,7 @@ export default function SessionEntryRow({
               </button>
               <button
                 className={`flex-1 text-sm px-3 py-2 rounded-lg font-medium ${activeDraft.outcome === 'not_finished' ? 'bg-[color:var(--rt-yellow)] text-[color:var(--rt-ink)]' : 'btn-ghost'}`}
-                onClick={() => setDraft({ ...activeDraft, outcome: 'not_finished', assessmentResult: '', remediationPath: '' })}
+                onClick={() => setDraft({ ...activeDraft, outcome: 'not_finished', assessmentResult: '', remediationPath: '', focusNote: '' })}
               >
                 Not Finished
               </button>

@@ -1,12 +1,14 @@
 import CollapsiblePanel from './CollapsiblePanel'
 import { Link } from 'react-router-dom'
-import type { Lesson, Level, StudentProgress } from '../types'
+import type { Lesson, Level, RemediationPlan, StudentProgress } from '../types'
 import { groupLessonsToday, groupProjectsToday } from '../lib/lessonsToday'
+import { isRemediationDue } from '../lib/assessment'
 
 interface RosterLike {
   id: string
   full_name: string
   progress: StudentProgress | null
+  plan?: RemediationPlan | null
   /** History-derived lesson for the student's next session; preferred over
    *  progress.current_lesson_number when present. */
   expectedLesson?: Pick<Lesson, 'level_id' | 'lesson_number' | 'title'> | null
@@ -17,14 +19,15 @@ interface RosterLike {
  *  sorting logic lives in lib/lessonsToday.ts (unit tested) — this
  *  component is just the rendering. */
 export default function LessonsToday({ roster, levels }: { roster: RosterLike[]; levels: Level[] }) {
-  const programmes = groupLessonsToday(roster, levels)
+  const remediationStudents = roster.filter((student) => isRemediationDue(student.plan))
+  const programmes = groupLessonsToday(roster.filter((student) => !isRemediationDue(student.plan)), levels)
   const projects = groupProjectsToday(roster)
 
-  if (programmes.length === 0 && projects.length === 0) return null
+  if (programmes.length === 0 && projects.length === 0 && remediationStudents.length === 0) return null
 
   return (
-    <CollapsiblePanel title="Lessons to be done today" countLabel={`${programmes.reduce((count, programme) => count + programme.groups.length, 0)} folders${projects.length ? ` · ${projects.length} projects` : ''}`} accent="yellow">
-      <p className="text-xs text-slate-600 mb-3">Pull these lesson folders before the session starts.</p>
+    <CollapsiblePanel title="Lessons to be done today" countLabel={`${programmes.reduce((count, programme) => count + programme.groups.length, 0)} folders${projects.length ? ` · ${projects.length} projects` : ''}${remediationStudents.length ? ` · ${remediationStudents.length} remediation` : ''}`} accent="yellow">
+      {programmes.length > 0 && <p className="text-xs text-slate-600 mb-3">Pull these lesson folders before the session starts.</p>}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
         {programmes.map(({ programme, groups: programmeGroups }) => {
           return (
@@ -57,6 +60,19 @@ export default function LessonsToday({ roster, levels }: { roster: RosterLike[];
           )
         })}
       </div>
+      {remediationStudents.length > 0 && (
+        <div className="mt-3">
+          <div className="text-sm font-semibold text-slate-800">Remediation</div>
+          <ul className="ml-1 text-sm text-slate-600">
+            {remediationStudents.map((student) => (
+              <li key={student.id}>
+                <Link to={`/students/${student.id}`} className="hover:underline">{student.full_name}</Link>
+                {student.plan?.topic && ` · ${student.plan.topic}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {projects.length > 0 && (
         <div className="mt-4 pt-3 border-t border-slate-100">
           <div className="text-sm font-semibold text-slate-800">Projects</div>
