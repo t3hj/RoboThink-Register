@@ -11,6 +11,10 @@ export const REMEDIATION_PATH_OPTIONS: { value: RemediationPath; label: string; 
   { value: 'remediation_lessons', label: '3 remediation lessons, then reassess', hint: 'Complete 3 similar-concept lessons first' },
 ]
 
+export function isRemediationDue(plan: RemediationPlan | null | undefined): plan is RemediationPlan & { status: 'required' | 'in_progress' } {
+  return plan?.status === 'required' || plan?.status === 'in_progress'
+}
+
 /** A single, clear status line for the Register row and Student page —
  *  never relies on colour alone (see the accompanying `tone`). */
 export function remediationStatusLabel(plan: Pick<RemediationPlan, 'status' | 'remediation_path' | 'lessons_completed' | 'lessons_required'> | null): {

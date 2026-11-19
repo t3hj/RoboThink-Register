@@ -76,7 +76,6 @@ export default function StudentProfile() {
   const [lastOverride, setLastOverride] = useState<ProgressOverride | null>(null)
   const [levels, setLevels] = useState<Level[]>([])
   const [curriculumLessons, setCurriculumLessons] = useState<Lesson[]>([])
-  const [latestSessionId, setLatestSessionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
@@ -97,12 +96,12 @@ export default function StudentProfile() {
     if (!id) return
     setLoading(true)
     setError(null)
-    const [sRes, pRes, planRes, lRes, rRes, aRes, pointRes, planHistoryRes, attRes, fRes, projectRes, ovRes, latestSessionRes, sessionsRes, curriculum] = await Promise.all([
+    const [sRes, pRes, planRes, lRes, rRes, aRes, pointRes, planHistoryRes, attRes, fRes, projectRes, ovRes, sessionsRes, curriculum] = await Promise.all([
       supabase.from('students').select('*, levels(name), subscriptions(name), centres(name), student_schedules(day_of_week,start_time,active)').eq('id', id).maybeSingle(),
       supabase.from('student_progress').select('*').eq('student_id', id).maybeSingle(),
       supabase
         .from('remediation_plans')
-        .select('*')
+        .select('*, assessment:assessments!remediation_plans_assessment_id_fkey(notes)')
         .eq('student_id', id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -141,14 +140,6 @@ export default function StudentProfile() {
         .select('*, profiles(name)')
         .eq('student_id', id)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from('attended_sessions')
-        .select('id, date, session_number')
-        .eq('student_id', id)
-        .order('date', { ascending: false })
-        .order('session_number', { ascending: false })
         .limit(1)
         .maybeSingle(),
       fetchAllRows(() => supabase
@@ -200,7 +191,6 @@ export default function StudentProfile() {
     setLastOverride(override && studentData && override.new_lesson_id === studentData.current_lesson_id ? override : null)
     setLevels(curriculum.levels)
     setCurriculumLessons(curriculum.lessons)
-    setLatestSessionId((latestSessionRes.data as { id: string } | null)?.id ?? null)
     setLoading(false)
   }, [id])
 
@@ -356,7 +346,8 @@ export default function StudentProfile() {
   const attendanceStats = studentAttendance(attendance, historySessions, todayISO())
   const attendancePct = attendanceStats.percentage
   const absent = attendanceStats.outstandingAbsences
-  const needsAction = progress && progress.current_kind !== 'normal' && progress.current_kind !== 'complete'
+  const needsAction = plan || student.pending_assessment_point_id || (progress && progress.current_kind !== 'normal' && progress.current_kind !== 'complete')
+  const remediationTitles = new Map(historySessions.map((session) => [session.id, session.remediation_title]))
   const outstandingFeedback = feedback.filter((f) => f.status !== 'given')
   const notFinishedCount = lessons.filter((l) => l.status === 'not_completed').length
 
@@ -438,8 +429,6 @@ export default function StudentProfile() {
             pendingAssessmentPointId={student.pending_assessment_point_id}
             focusTopic={progress?.focus_topic ?? null}
             plan={plan}
-            sessionId={latestSessionId}
-            onDone={() => void load()}
           />
         </div>
       )}
@@ -523,6 +512,7 @@ export default function StudentProfile() {
                           {a.passed ? 'PASS' : 'FAIL'}
                         </span>
                         <span className="text-slate-600"> · {assessmentLesson ? `Assessment ${assessmentLesson.lesson_number}: ${assessmentLesson.title}` : a.type} · attempt {a.attempt_number}</span>
+                        {a.notes && <p className="mt-1 whitespace-pre-wrap break-words text-slate-600">{a.notes}</p>}
                       </div>
                       <div className="flex flex-wrap items-center justify-end gap-3 text-xs">
                         <span className="text-slate-600 sm:whitespace-nowrap sm:text-right">{formatShortDate(a.date)} · {a.profiles?.name ?? 'Unassigned'}</span>
@@ -540,7 +530,11 @@ export default function StudentProfile() {
                   <li key={r.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm">
                     <div>
                       <span className="font-medium">Remediation lesson {r.lesson_number}</span>
+                      {r.attended_session_id && remediationTitles.get(r.attended_session_id) && (
+                        <span> · {remediationTitles.get(r.attended_session_id)}</span>
+                      )}
                       {r.topic && <span className="text-slate-600"> · {r.topic}</span>}
+                      {r.notes && <p className="mt-1 whitespace-pre-wrap break-words text-slate-600">{r.notes}</p>}
                     </div>
                     <div className="text-slate-600 text-xs sm:whitespace-nowrap sm:text-right">
                       {formatShortDate(r.date)} · {r.profiles?.name ?? 'Unassigned'}
@@ -595,8 +589,10 @@ export default function StudentProfile() {
             <ul className="divide-y divide-slate-100">
               {historySessions.map((session) => {
                 const linkedAssessment = assessments.find((assessment) => assessment.attended_session_id === session.id)
-                const assessmentOrRemediation = Boolean(linkedAssessment || session.assessment_records?.length || session.remediation_lessons?.length)
-                const title = session.project_id
+                const assessmentOrRemediation = Boolean(linkedAssessment || session.assessment_records?.length || session.remediation_title || session.remediation_lessons?.length)
+                const title = session.remediation_title
+                  ? `Remediation: ${session.remediation_title}`
+                  : session.project_id
                   ? `Project: ${session.student_projects?.name ?? 'Project'}`
                   : session.lessons
                   ? `${requiresAssessmentResult(curriculumLessons.find((lesson) => lesson.id === session.actual_lesson_id)) ? 'Assessment' : session.lessons.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${session.lessons.lesson_number}: ${session.lessons.title}`

@@ -225,6 +225,7 @@ export interface RemediationPlan {
   lessons_completed: number
   status: RemediationStatus
   remediation_path: RemediationPath
+  assessment?: { notes: string | null } | null
   created_at: string
   completed_at: string | null
 }
@@ -322,6 +323,7 @@ export interface AttendedSession {
   session_number: number
   actual_lesson_id: string | null
   project_id?: string | null
+  remediation_title?: string | null
   outcome: SessionOutcome
   lesson_record_id: string | null
   instructor_id: string | null
