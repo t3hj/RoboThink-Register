@@ -46,3 +46,44 @@ access and that instructors can only see their own centres.
 - Review the Dashboard's "Registers still to fill in" weekly with the team.
   Percentages are only as accurate as the register.
 - Mark students who leave **Inactive** rather than deleting them.
+
+## Management attendance and follow-ups
+
+The Management dashboard follows the selected brand and working centre. Use
+**Today**, **This week** (Monday–Sunday), **Last week**, **This month**, or a custom
+date range. Click a total or use the attendance tabs to see student names, dates,
+centres and separately recorded sessions. Every name opens the student profile.
+
+- **Students attended** counts people; **Sessions attended** counts visits. Two
+  completed lessons do not create two attendance sessions. Use **Record another
+  session** only for a separate attended session. An attended historical date
+  without session details counts once.
+- **Missed classes** keeps the original absence visible. **Outstanding absences**
+  excludes absences already made up. Catch-ups show booked, attended and missed
+  separately, including the absence they covered. A missed catch-up does not
+  create another owed regular class. Future bookings cannot make up an absence.
+- **Unmarked registers** lists past expected classes with missing marks, where
+  the centre's register ran. It does not label unmarked or future classes absent;
+  closures, join dates and fortnightly schedules are respected.
+- **Term-time follow-ups** become due after every **12 attended sessions** in the
+  available register history, with an early warning at 10. Unfinished, assessment,
+  project and attended catch-up sessions count; absences and unmarked sessions do
+  not. Two explicitly recorded sessions on the same day count twice.
+- Managers and admins can save a follow-up's status, notes and next contact date.
+  **Follow up later** requires a date; a past next contact date is marked overdue.
+  Renewed and not-continuing decisions are hidden unless **Include resolved** is
+  selected. Decisions belong to their 12-session block, so a renewal at session
+  12 does not suppress the next follow-up at session 24.
+- Older lesson-based follow-ups are retained separately for reference. New
+  reminders are calculated from attendance, without relying on lesson numbers.
+
+**Needs attention** and term-time reminders show the current position, regardless
+of the selected attendance period. Attendance percentages credit made-up regular
+absences as fulfilled and never count unused extras twice. Each student's
+catch-ups can cover only that same student's absences. Trends remain available
+under **Attendance trends** below the operational lists.
+
+Deployment includes the `management_session_followups` database migration. It
+adds session-block decisions and next-contact dates, gives management scoped
+insert/update access and removes the old lesson-number follow-up creation from
+the internal progression helper. Existing follow-up records are preserved.
