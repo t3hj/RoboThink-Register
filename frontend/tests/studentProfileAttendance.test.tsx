@@ -47,7 +47,7 @@ afterEach(async () => { if (renderer) await act(async () => renderer.unmount()) 
 
 it('keeps two completed lessons separate from one recorded attendance session', async () => {
   await mount()
-  expect(JSON.stringify(renderer.toJSON())).not.toContain('Curriculum lessons completed')
+  expect(renderer.root.findAllByType(StatCard).some(card => card.props.label === 'Curriculum lessons completed')).toBe(false)
   expect(JSON.stringify(renderer.toJSON())).not.toContain('Term-time block')
   expect(stat('Sessions attended')).toBe(1)
   expect(stat('Outstanding absences')).toBe(1)

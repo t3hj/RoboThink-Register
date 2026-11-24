@@ -3,7 +3,11 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchAllRows } from '../lib/pagination'
 import { PageHeader, LoadingPanel, ErrorPanel, EmptyState, StatCard } from '../components/ui'
 import { addDays, todayISO } from '../lib/dates'
-import type { Assessment, Attendance, LessonRecord, RemediationPlan, Student } from '../types'
+import { curriculumCompletions } from '../lib/curriculumCompletions'
+import { countKinds, rateFromSummary } from '../lib/attendanceStats'
+import { studentAttendance } from '../lib/studentAttendance'
+import { loadCurriculum } from '../lib/curriculumData'
+import type { AssessmentPoint, AttendedSession, Assessment, Attendance, LessonRecord, RemediationPlan, Student } from '../types'
 
 type Range = '7' | '30' | '90' | 'custom'
 
@@ -11,41 +15,77 @@ export default function Reports() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [range, setRange] = useState<Range>('30')
-  const [from, setFrom] = useState(addDays(todayISO(), -30))
+  const [from, setFrom] = useState(addDays(todayISO(), -29))
   const [to, setTo] = useState(todayISO())
   const [studentFilter, setStudentFilter] = useState('all')
 
+  const [levelNames, setLevelNames] = useState(new Map<number, string>())
+  const [visitsInRange, setVisitsInRange] = useState<ReturnType<typeof studentAttendance>['rows']>([])
+  const [appliedPeriod, setAppliedPeriod] = useState({ from, to })
   const [attendance, setAttendance] = useState<Attendance[]>([])
-  const [lessons, setLessons] = useState<LessonRecord[]>([])
+  const [lessons, setLessons] = useState<ReturnType<typeof curriculumCompletions>>([])
   const [students, setStudents] = useState<Student[]>([])
   const [assessments, setAssessments] = useState<Assessment[]>([])
   const [remediationPlans, setRemediationPlans] = useState<RemediationPlan[]>([])
 
-  const load = useCallback(async (fromDate: string, toDate: string) => {
+  const readReport = useCallback(async (fromDate: string, toDate: string) => {
     setLoading(true)
     setError(null)
-    const [aRes, lRes, sRes, asRes, rpRes] = await Promise.all([
-      fetchAllRows(() => supabase.from('attendance').select('*').gte('date', fromDate).lte('date', toDate).order('id')),
-      fetchAllRows(() => supabase.from('lesson_records').select('*, profiles(name), levels(name)')
+    const [aRes, lRes, sRes, asRes, rpRes, vRes, points, curriculum, sessionDates] = await Promise.all([
+      fetchAllRows(() => supabase.from('attendance').select('id,student_id,date,status,session_type,catch_up').lte('date', todayISO()).order('id')),
+      fetchAllRows(() => supabase.from('lesson_records').select('*, profiles(name), attended_sessions(id)')
         .eq('status', 'completed').gte('date', fromDate).lte('date', toDate).order('id')),
       fetchAllRows(() => supabase.from('students').select('*').order('full_name').order('id')),
-      fetchAllRows(() => supabase.from('assessments').select('*').gte('date', fromDate).lte('date', toDate).order('id')),
+      fetchAllRows(() => supabase.from('assessments').select('*, profiles(name)').gte('date', fromDate).lte('date', toDate).order('id')),
       fetchAllRows(() => supabase.from('remediation_plans').select('*').neq('status', 'completed').order('id')),
+      fetchAllRows(() => supabase.from('attended_sessions').select('id,student_id,date,outcome,actual_lesson_id,lesson_record_id,project_id,remediation_title,remediation_lessons(id),profiles(name)').gte('date', fromDate).lte('date', toDate).order('id')),
+      fetchAllRows(() => supabase.from('assessment_points').select('id,after_lesson_id').order('id')),
+      loadCurriculum(),
+      fetchAllRows(() => supabase.from('attended_sessions').select('id,student_id,date,session_number').lte('date', todayISO()).order('id')),
     ])
-    if (aRes.error || lRes.error || sRes.error || asRes.error || rpRes.error) {
+    if (aRes.error || lRes.error || sRes.error || asRes.error || rpRes.error || vRes.error || points.error || sessionDates.error) {
       setError(
-        aRes.error?.message ?? lRes.error?.message ?? sRes.error?.message ?? asRes.error?.message ?? rpRes.error?.message ?? 'Unknown error',
+        aRes.error?.message ?? lRes.error?.message ?? sRes.error?.message ?? asRes.error?.message ?? rpRes.error?.message ?? vRes.error?.message ?? points.error?.message ?? sessionDates.error?.message ?? 'Unknown error',
       )
       setLoading(false)
       return
     }
-    setAttendance((aRes.data ?? []) as Attendance[])
-    setLessons((lRes.data ?? []) as LessonRecord[])
+    // Match make-ups across the whole history before selecting report dates.
+    const marks = (aRes.data ?? []) as Attendance[]
+    const grouped = <T extends { student_id: string }>(rows: T[]) => {
+      const groups = new Map<string, T[]>()
+      for (const row of rows) {
+        const existing = groups.get(row.student_id)
+        if (existing) existing.push(row)
+        else groups.set(row.student_id, [row])
+      }
+      return groups
+    }
+    const marksByStudent = grouped(marks)
+    const sessionsByStudent = grouped((sessionDates.data ?? []) as Pick<AttendedSession, 'id' | 'student_id' | 'session_number' | 'date'>[])
+    const withinRange = (row: { date: string }) => row.date >= fromDate && row.date <= toDate
+    setVisitsInRange((sRes.data ?? []).flatMap(student => studentAttendance(
+      marksByStudent.get(student.id) ?? [], sessionsByStudent.get(student.id) ?? [], todayISO()
+    ).rows.filter(withinRange)))
+    setAttendance(marks.filter(withinRange))
+    setAppliedPeriod({ from: fromDate, to: toDate })
+    setLevelNames(new Map(curriculum.levels.map(level => [level.id, level.name])))
+    setLessons(curriculumCompletions(curriculum.lessons, (vRes.data ?? []) as unknown as AttendedSession[], (lRes.data ?? []) as LessonRecord[],
+      (asRes.data ?? []) as Assessment[], (points.data ?? []) as AssessmentPoint[], todayISO()))
     setStudents((sRes.data ?? []) as Student[])
     setAssessments((asRes.data ?? []) as Assessment[])
     setRemediationPlans((rpRes.data ?? []) as RemediationPlan[])
     setLoading(false)
   }, [])
+
+  const load = useCallback(async (start: string, end: string) => {
+    try {
+      await readReport(start, end)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Unable to load report')
+      setLoading(false)
+    }
+  }, [readReport])
 
   useEffect(() => {
     void load(from, to)
@@ -67,13 +107,10 @@ export default function Reports() {
   // ---- attendance summary ----
   const attSummary = useMemo(() => {
     const rows = studentFilter === 'all' ? attendance : attendance.filter((a) => a.student_id === studentFilter)
-    const arrived = rows.filter((a) => a.status === 'Arrived').length
-    const completed = rows.filter((a) => a.status === 'Completed').length
-    const absent = rows.filter((a) => a.status === 'Absent').length
-    const present = arrived + completed
-    const pct = present + absent > 0 ? Math.round((present / (present + absent)) * 100) : null
-    return { arrived, completed, absent, pct }
-  }, [attendance, studentFilter])
+    const visits = visitsInRange.filter(row => studentFilter === 'all' || row.student_id === studentFilter)
+    const summary = countKinds(visits)
+    return { present: summary.attended + summary.extra, absent: summary.missed, pct: rateFromSummary(summary), marks: rows.length }
+  }, [attendance, studentFilter, visitsInRange])
 
   // ---- lesson progress ----
   const lessonSummary = useMemo(() => {
@@ -84,7 +121,7 @@ export default function Reports() {
     for (const l of rows) {
       const instructor = l.profiles?.name ?? 'Unassigned'
       byInstructor.set(instructor, (byInstructor.get(instructor) ?? 0) + 1)
-      const level = l.levels?.name ?? `Level ${l.level_id}`
+      const level = levelNames.get(l.lesson.level_id) ?? `Level ${l.lesson.level_id}`
       byLevel.set(level, (byLevel.get(level) ?? 0) + 1)
       byStudent.set(l.student_id, (byStudent.get(l.student_id) ?? 0) + 1)
     }
@@ -97,16 +134,17 @@ export default function Reports() {
         .map(([id, count]) => [nameOf(id), count] as const)
         .sort((a, b) => b[1] - a[1]),
     }
-  }, [lessons, students, studentFilter])
+  }, [lessons, students, studentFilter, levelNames])
 
   // ---- student overview ----
   const studentOverview = useMemo(() => {
-    const relevant = attendance.filter((a) => a.student_id && (studentFilter === 'all' || a.student_id === studentFilter))
+    const relevant = visitsInRange.filter((a) => a.student_id && (studentFilter === 'all' || a.student_id === studentFilter))
     const perStudent = new Map<string, { present: number; absent: number }>()
     for (const a of relevant) {
+      if (!a.student_id) continue
       const rec = perStudent.get(a.student_id) ?? { present: 0, absent: 0 }
-      if (a.status === 'Absent') rec.absent++
-      else if (a.status === 'Arrived' || a.status === 'Completed') rec.present++
+      if (a.kind === 'missed') rec.absent++
+      else if (a.kind === 'attended' || a.kind === 'made_up') rec.present++
       perStudent.set(a.student_id, rec)
     }
     const active = students.filter((s) => s.active && (studentFilter === 'all' || s.id === studentFilter))
@@ -122,13 +160,15 @@ export default function Reports() {
       else normal.push(s.full_name)
     }
     return {
-      total: students.length,
+      total: studentFilter === 'all' ? students.length : students.filter(s => s.id === studentFilter).length,
       active: active.length,
       poor: poor.sort((a, b) => a.pct - b.pct),
       normalCount: normal.length,
     }
-  }, [students, attendance, studentFilter])
+  }, [students, visitsInRange, studentFilter])
 
+  const selectedAssessments = assessments.filter(a => studentFilter === 'all' || a.student_id === studentFilter)
+  const selectedPlans = remediationPlans.filter(p => studentFilter === 'all' || p.student_id === studentFilter)
   const simpleBar = (label: string, count: number, max: number) => (
     <li key={label} className="py-1.5 text-sm">
       <div className="flex justify-between mb-0.5">
@@ -153,7 +193,7 @@ export default function Reports() {
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle={`${from} → ${to}`} accent="yellow" />
+      <PageHeader title="Reports" subtitle={`${appliedPeriod.from} → ${appliedPeriod.to}`} accent="yellow" />
 
       <div className="flex flex-wrap items-end gap-2 mb-6">
         <label className="text-sm">
@@ -194,20 +234,20 @@ export default function Reports() {
             ))}
           </select>
         </label>
-        <button className="btn-primary text-sm" onClick={applyRange}>
+        <button className="btn-primary text-sm" onClick={applyRange} disabled={range === 'custom' && (!from || !to || from > to)}>
           Apply
         </button>
       </div>
 
       <h3 className="font-semibold mb-3">Attendance</h3>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard value={attSummary.arrived + attSummary.completed} label="Present" tone="good" />
-        <StatCard value={attSummary.absent} label="Absent" tone={attSummary.absent > 0 ? 'bad' : undefined} />
+        <StatCard value={attSummary.present} label="Sessions attended" tone="good" />
+        <StatCard value={attSummary.absent} label="Outstanding absences" tone={attSummary.absent > 0 ? 'bad' : undefined} />
         <StatCard value={attSummary.pct == null ? '—' : `${attSummary.pct}%`} label="Attendance rate" />
-        <StatCard value={attendance.length} label="Register marks" />
+        <StatCard value={attSummary.marks} label="Register marks" />
       </div>
 
-      <h3 className="font-semibold mb-3">Lesson progress</h3>
+      <h3 className="font-semibold mb-3">Curriculum lessons and assessments completed</h3>
       <div className="grid md:grid-cols-3 gap-6 mb-6">
         <section className="card p-4">
           <div className="font-medium mb-2">By instructor · {lessonSummary.total} total</div>
@@ -237,16 +277,16 @@ export default function Reports() {
 
       <h3 className="font-semibold mb-3">Assessments & remediation</h3>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard value={assessments.filter((a) => a.passed === true).length} label="Passed" tone="good" />
-        <StatCard value={assessments.filter((a) => a.passed === false).length} label="Failed" tone={assessments.some((a) => a.passed === false) ? 'warn' : undefined} />
+        <StatCard value={selectedAssessments.filter((a) => a.passed === true).length} label="Passed" tone="good" />
+        <StatCard value={selectedAssessments.filter((a) => a.passed === false).length} label="Failed" tone={selectedAssessments.some((a) => a.passed === false) ? 'warn' : undefined} />
         <StatCard
-          value={remediationPlans.filter((p) => p.status === 'required' || p.status === 'in_progress').length}
+          value={selectedPlans.filter((p) => p.status === 'required' || p.status === 'in_progress').length}
           label="In remediation"
         />
         <StatCard
-          value={remediationPlans.filter((p) => p.status === 'intervention_required').length}
+          value={selectedPlans.filter((p) => p.status === 'intervention_required').length}
           label="Intervention required"
-          tone={remediationPlans.some((p) => p.status === 'intervention_required') ? 'bad' : undefined}
+          tone={selectedPlans.some((p) => p.status === 'intervention_required') ? 'bad' : undefined}
         />
       </div>
 

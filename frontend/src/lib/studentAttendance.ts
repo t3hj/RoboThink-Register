@@ -1,5 +1,5 @@
 import type { Attendance, AttendedSession } from '../types'
-import { attendancePercentage, classifyAttendance, summariseAttendance } from './attendanceStats'
+import { classifyAttendance, countKinds, rateFromSummary } from './attendanceStats'
 
 type Session = Pick<AttendedSession, 'id' | 'date' | 'session_number'> & Partial<Pick<AttendedSession, 'student_id'>>
 type AttendanceUnit = Pick<Attendance, 'id' | 'date' | 'status' | 'session_type' | 'catch_up' | 'time_in' | 'time_out'> & {
@@ -46,13 +46,14 @@ export function studentAttendance(attendance: Attendance[], sessions: Session[],
       })
     })
   }
-  const summary = summariseAttendance(units)
+  const rows = classifyAttendance(units)
+  const summary = countKinds(rows)
   return {
-    rows: classifyAttendance(units),
+    rows,
     sessionsAttended: summary.attended + summary.extra,
     catchUpsAttended: summary.extra,
     madeUp: summary.madeUp,
     outstandingAbsences: summary.missed,
-    percentage: attendancePercentage(units),
+    percentage: rateFromSummary(summary),
   }
 }

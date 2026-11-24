@@ -90,7 +90,7 @@ export function summariseRange<T extends AttendanceLike & { date: string }>(all:
   return countKinds(classifyAttendance(all).filter((r) => r.date >= from && r.date <= to))
 }
 
-function countKinds(rows: { kind: AttendanceKind }[]): AttendanceSummary {
+export function countKinds(rows: { kind: AttendanceKind }[]): AttendanceSummary {
   const out: AttendanceSummary = { attended: 0, missed: 0, madeUp: 0, extra: 0 }
   for (const { kind } of rows) {
     if (kind === 'attended') out.attended++
@@ -107,7 +107,10 @@ function countKinds(rows: { kind: AttendanceKind }[]): AttendanceSummary {
  *  up with a catch-up session isn't a miss either, and catch-up sessions
  *  themselves never push the percentage up. */
 export function attendancePercentage(rows: AttendanceLike[]): number | null {
-  const { attended, missed, madeUp } = summariseAttendance(rows)
+  return rateFromSummary(summariseAttendance(rows))
+}
+
+export function rateFromSummary({ attended, missed, madeUp }: AttendanceSummary): number | null {
   const fulfilled = attended + madeUp
   const relevant = fulfilled + missed
   return relevant ? Math.round((fulfilled / relevant) * 100) : null
