@@ -127,26 +127,18 @@ export default function Register() {
       scheduledQuery = slotIds.length > 0 ? scheduledQuery.or(`preferred_day.eq.${dow},id.in.(${slotIds.join(',')})`) : scheduledQuery.eq('preferred_day', dow)
       if (selectedCentreId) scheduledQuery = scheduledQuery.eq('centre_id', selectedCentreId)
       scheduledQuery = scheduledQuery.order('id')
-      const { data: scheduled, error: schedErr } = await fetchAllRows(() => scheduledQuery)
-
-      if (!isCurrent()) return
-      if (schedErr) {
-        setError(schedErr.message)
-        setLoading(false)
-        return
-      }
-
       let attendanceQuery = supabase.from('attendance').select('*').eq('date', forDate)
       if (selectedCentreId) attendanceQuery = attendanceQuery.eq('centre_id', selectedCentreId)
       attendanceQuery = attendanceQuery.order('id')
-      const { data: att, error: attErr } = await fetchAllRows(() => attendanceQuery)
+      const [scheduledRows, attendanceRows] = await Promise.all([
+        fetchAllRows(() => scheduledQuery),
+        fetchAllRows(() => attendanceQuery),
+      ])
       if (!isCurrent()) return
-      if (attErr) {
-        setError(attErr.message)
-        setLoading(false)
-        return
-      }
-
+      if (scheduledRows.error) throw scheduledRows.error
+      if (attendanceRows.error) throw attendanceRows.error
+      const scheduled = scheduledRows.data
+      const att = attendanceRows.data
       const attendance = (att ?? []) as Attendance[]
       // Fortnightly students only appear in their "on" weeks. Off-week students
       // who nevertheless have an attendance row today are picked up as extras.
