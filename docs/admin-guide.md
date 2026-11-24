@@ -58,6 +58,10 @@ centres and separately recorded sessions. Every name opens the student profile.
   completed lessons do not create two attendance sessions. Use **Record another
   session** only for a separate attended session. An attended historical date
   without session details counts once.
+- **Curriculum lessons completed** in Learning history counts each curriculum
+  item once per student. A finished assessment counts for either Pass or Fail.
+  An unfinished attempt adds a visit only. Reports use the same rule within the
+  selected dates and credit the first recorded completion in that period.
 - **Missed classes** keeps the original absence visible. **Outstanding absences**
   excludes absences already made up. Catch-ups show booked, attended and missed
   separately, including the absence they covered. A missed catch-up does not

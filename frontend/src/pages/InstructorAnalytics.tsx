@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { fetchAllRows } from '../lib/pagination'
 import { supabase } from '../lib/supabaseClient'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState, StatusBadge } from '../components/ui'
 import { todayISO, addDays, formatShortDate } from '../lib/dates'
 import { parseLevelName } from '../lib/curriculum'
-import { attendancePercentage, attendanceFlag, FLAG_LABELS, summariseRange, isExpectedOnDate } from '../lib/attendanceStats'
+import { attendancePercentage, attendanceFlag, FLAG_LABELS, rateFromSummary, summariseRange, isExpectedOnDate } from '../lib/attendanceStats'
 import { AttendanceTrendChart, lastTwelveWeekStarts, weeklyAttendancePoints } from '../components/AnalyticsCharts'
 import type { Attendance, Student, StudentProgress } from '../types'
 
@@ -20,6 +21,7 @@ export default function InstructorAnalytics() {
 
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [studentHistory, setStudentHistory] = useState<Attendance[]>([])
+  const [historyError, setHistoryError] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
 
   const weekStart = addDays(today, -6)
@@ -29,23 +31,22 @@ export default function InstructorAnalytics() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const [sRes, pRes, taRes, waRes, trendRes] = await Promise.all([
-      supabase.from('students').select('*, student_schedules(day_of_week,start_time,active)').eq('active', true).order('full_name'),
-      supabase.from('student_progress').select('*'),
-      supabase.from('attendance').select('*').eq('date', today),
-      supabase.from('attendance').select('*').gte('date', weekStart).lte('date', today),
-      supabase.from('attendance').select('*').gte('date', trendStart).lte('date', today),
+    const [sRes, pRes, trendRes] = await Promise.all([
+      fetchAllRows(() => supabase.from('students').select('*, student_schedules(day_of_week,start_time,active)').eq('active', true).order('full_name').order('id')),
+      fetchAllRows(() => supabase.from('student_progress').select('*').order('student_id')),
+      fetchAllRows(() => supabase.from('attendance').select('*').gte('date', trendStart).lte('date', today).order('id')),
     ])
-    if (sRes.error || pRes.error || taRes.error || waRes.error || trendRes.error) {
-      setError(sRes.error?.message ?? pRes.error?.message ?? taRes.error?.message ?? waRes.error?.message ?? trendRes.error?.message ?? 'Unknown error')
+    if (sRes.error || pRes.error || trendRes.error) {
+      setError(sRes.error?.message ?? pRes.error?.message ?? trendRes.error?.message ?? 'Unable to load analytics')
       setLoading(false)
       return
     }
     setStudents((sRes.data ?? []) as Student[])
     setProgress((pRes.data ?? []) as StudentProgress[])
-    setTodayAttendance((taRes.data ?? []) as Attendance[])
-    setWeekAttendance((waRes.data ?? []) as Attendance[])
-    setTrendAttendance((trendRes.data ?? []) as Attendance[])
+    const marks = (trendRes.data ?? []) as Attendance[]
+    setTodayAttendance(marks.filter(row => row.date === today))
+    setWeekAttendance(marks.filter(row => row.date >= weekStart))
+    setTrendAttendance(marks)
     setLoading(false)
   }, [today, weekStart, trendStart])
 
@@ -60,21 +61,25 @@ export default function InstructorAnalytics() {
     }
     let cancelled = false
     setHistoryLoading(true)
+    setHistoryError(false)
+    setStudentHistory([])
     supabase
       .from('attendance')
       .select('*')
       .eq('student_id', selectedStudentId)
+      .lte('date', today)
       .order('date', { ascending: false })
       .limit(30)
       .then(({ data, error }) => {
         if (cancelled) return
+        setHistoryError(Boolean(error))
         if (!error) setStudentHistory((data ?? []) as Attendance[])
         setHistoryLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [selectedStudentId])
+  }, [selectedStudentId, today])
 
   const expectedToday = useMemo(() => students.filter((s) => isExpectedOnDate(s, today)), [students, today])
   const expectedIds = useMemo(() => new Set(expectedToday.map((s) => s.id)), [expectedToday])
@@ -98,10 +103,9 @@ export default function InstructorAnalytics() {
       const d = addDays(weekStart, i)
       expected += students.filter((s) => isExpectedOnDate(s, d)).length
     }
-    const { attended, missed } = summariseRange(trendAttendance, weekStart, today)
+    const summary = summariseRange(trendAttendance, weekStart, today)
     const catchUp = weekAttendance.filter((a) => a.session_type === 'catch_up').length
-    const pct = attended + missed ? Math.round((attended / (attended + missed)) * 100) : null
-    return { expected, attended, missed, catchUp, pct }
+    return { expected, attended: summary.attended + summary.extra, missed: summary.missed, catchUp, pct: rateFromSummary(summary) }
   }, [weekAttendance, trendAttendance, students, weekStart, today])
 
   const trendPoints = useMemo(() => weeklyAttendancePoints(trendAttendance, weekStarts), [trendAttendance, weekStarts])
@@ -190,7 +194,7 @@ export default function InstructorAnalytics() {
         <StatCard value={weekStats.attended} label="Attended" tone="good" />
         <StatCard value={weekStats.missed} label="Missed" tone={weekStats.missed > 0 ? 'bad' : undefined} />
         <StatCard value={weekStats.pct == null ? '—' : `${weekStats.pct}%`} label="Attendance %" />
-        <StatCard value={weekStats.catchUp} label="Catch-up sessions" />
+        <StatCard value={weekStats.catchUp} label="Catch-ups on the register" />
       </div>
 
       <div className="grid md:grid-cols-2 gap-6 mb-6">
@@ -226,11 +230,13 @@ export default function InstructorAnalytics() {
           </select>
           {historyLoading ? (
             <div className="text-sm text-slate-600">Loading…</div>
+          ) : historyError ? (
+            <p role="alert">Unable to load this student’s attendance.</p>
           ) : selectedStudent ? (
             <>
               <div className="flex items-center gap-3 mb-3">
                 <div className="text-2xl font-bold">{selectedPct == null ? '—' : `${selectedPct}%`}</div>
-                <div className="text-sm text-slate-600">attendance ({studentHistory.length} recent sessions)</div>
+                <div className="text-sm text-slate-600">attendance ({studentHistory.length} recent register marks)</div>
               </div>
               {selectedFlag && (
                 <div className="badge badge-assess mb-3">{FLAG_LABELS[selectedFlag]}</div>

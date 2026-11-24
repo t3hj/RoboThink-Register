@@ -47,10 +47,11 @@ afterEach(async () => { if (renderer) await act(async () => renderer.unmount()) 
 
 it('keeps two completed lessons separate from one recorded attendance session', async () => {
   await mount()
-  expect(stat('Curriculum lessons completed')).toBe(2)
+  expect(renderer.root.findAllByType(StatCard).some(card => card.props.label === 'Curriculum lessons completed')).toBe(false)
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Term-time block')
   expect(stat('Sessions attended')).toBe(1)
   expect(stat('Outstanding absences')).toBe(1)
-  expect(stat('Attendance')).toBe('50%')
+  expect(stat('Attendance rate')).toBe('50%')
 })
 
 it('uses the second recorded session to make up an absence in both summary and history', async () => {
@@ -60,9 +61,22 @@ it('uses the second recorded session to make up an absence in both summary and h
   expect(stat('Catch-up / extra sessions')).toBe(1)
   expect(stat('Absences made up')).toBe(1)
   expect(stat('Outstanding absences')).toBe(0)
-  expect(stat('Attendance')).toBe('100%')
+  expect(stat('Attendance rate')).toBe('100%')
   const text = JSON.stringify(renderer.toJSON())
   expect(text).toContain('Made up')
   const historyRate = renderer.root.findAllByType('p').find((p) => JSON.stringify(p.children).includes('% attendance'))!
   expect(JSON.stringify(historyRate.children)).toContain('100')
 })
+
+it.each([[0, 1, 0], [11, 1, 11], [12, 1, 12], [13, 2, 1], [24, 2, 12]])(
+  'shows the term-time milestone for %i recorded visits', async (visits, block, progress) => {
+    backend.tables.students[0].subscriptions = { name: 'Term Time' }
+    backend.tables.attendance = []
+    backend.tables.attended_sessions = Array.from({ length: visits }, (_, index) => ({
+      id: 'session-' + index, date: '2026-11-08', session_number: index + 1,
+    }))
+    await mount()
+    expect(stat('Sessions attended')).toBe(visits)
+    expect(stat(`Term-time block ${block}${progress === 12 ? ' complete' : ''}`)).toBe(`${progress} / 12`)
+  },
+)

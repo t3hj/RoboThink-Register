@@ -19,7 +19,8 @@ import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
 import { describeSlots, groupAttendanceByMonth } from '../lib/attendanceStats'
-import { completedCurriculumLessons } from '../lib/completedCurriculumLessons'
+import { curriculumCompletions } from '../lib/curriculumCompletions'
+import { TERM_TIME_BLOCK_SIZE } from '../lib/managementAnalytics'
 import { studentAttendance } from '../lib/studentAttendance'
 import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import type {
@@ -117,13 +118,13 @@ export default function StudentProfile() {
         .select('*, profiles(name)')
         .eq('student_id', id)
         .order('date', { ascending: false }),
-      supabase
+      fetchAllRows(() => supabase
         .from('assessments')
         .select('*, profiles(name), levels(name)')
         .eq('student_id', id)
         .order('date', { ascending: false })
-        .order('created_at', { ascending: false }),
-      supabase.from('assessment_points').select('*').eq('active', true),
+        .order('created_at', { ascending: false }).order('id')),
+      fetchAllRows(() => supabase.from('assessment_points').select('*').order('id')),
       supabase.from('remediation_plans').select('id,assessment_id,remediation_path').eq('student_id', id),
       fetchAllRows(() => supabase.from('attendance').select('*').eq('student_id', id).order('date', { ascending: false }).order('id')),
       supabase
@@ -353,7 +354,8 @@ export default function StudentProfile() {
   }
 
   const through = todayISO()
-  const completed = completedCurriculumLessons(curriculumLessons, historySessions, lessons, through)
+  const unlinkedResults = assessments.filter(a => !a.assessment_point_id && !a.attended_session_id && a.date <= through && (a.passed != null || a.result === 'PASS' || a.result === 'FAIL')).length
+  const completions = curriculumCompletions(curriculumLessons, historySessions, lessons, assessments, assessmentPoints, through)
   const attendanceStats = studentAttendance(attendance, historySessions, through)
   const attendancePct = attendanceStats.percentage
   const detailedVisits = attendanceStats.rows.filter(row => row.sessionNumber != null && (row.kind === 'attended' || row.kind === 'extra')).length
@@ -364,7 +366,9 @@ export default function StudentProfile() {
   const linkedRecordIds = new Set(historySessions.map((session) => session.lesson_record_id))
   const lessonById = new Map(curriculumLessons.map((lesson) => [lesson.id, lesson]))
   const outstandingFeedback = feedback.filter((f) => f.status !== 'given')
-  const notFinishedCount = lessons.filter((l) => l.status === 'not_completed').length
+  const visits = attendanceStats.sessionsAttended
+  const block = Math.max(1, Math.ceil(visits / TERM_TIME_BLOCK_SIZE))
+  const visitsInBlock = visits - (block - 1) * TERM_TIME_BLOCK_SIZE
 
   return (
     <div>
@@ -463,29 +467,27 @@ export default function StudentProfile() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <StatCard value={completed.length} label="Curriculum lessons completed" />
-        <StatCard value={notFinishedCount} label="Not-finished attempts" />
+        <StatCard value={visits} label="Sessions attended" />
+        {student.subscriptions?.name === 'Term Time' && (
+          <StatCard value={`${visitsInBlock} / ${TERM_TIME_BLOCK_SIZE}`}
+            label={`Term-time block ${block}${visitsInBlock === TERM_TIME_BLOCK_SIZE ? ' complete' : ''}`} />
+        )}
         <StatCard
           value={attendancePct == null ? '—' : `${attendancePct}%`}
-          label="Attendance"
+          label="Attendance rate"
           tone={attendancePct != null && attendancePct < 80 ? 'warn' : 'good'}
         />
-        <StatCard value={attendanceStats.sessionsAttended} label="Sessions attended" />
         <StatCard value={attendanceStats.catchUpsAttended} label="Catch-up / extra sessions" />
         <StatCard value={attendanceStats.madeUp} label="Absences made up" />
         <StatCard value={absent} label="Outstanding absences" tone={absent > 2 ? 'bad' : undefined} />
       </div>
       <p className="-mt-3 mb-5 text-xs text-slate-600">
-        Sessions attended counts recorded visits, including catch-ups, assessments and projects. An attended day with no session details counts as one visit. Curriculum lessons completed counts each distinct standard lesson once, including historical lesson entries. Repeats, assessments, projects and remediation add no new curriculum completion. Each attended catch-up or extra session can cover one absence.
+        Sessions attended counts recorded visits, including catch-ups, assessments and projects. An attended day with no session details counts as one visit. Each attended catch-up or extra session can cover one absence.
       </p>
 
       <details className="mb-5 text-sm">
-        <summary className="cursor-pointer font-medium">See how these totals were counted</summary>
+        <summary className="cursor-pointer font-medium">See how visits were counted</summary>
         <p className="mt-2">Sessions attended: {detailedVisits} with session details + {attendanceStats.sessionsAttended - detailedVisits} from attendance marks alone = {attendanceStats.sessionsAttended}.</p>
-        <p className="mt-2">Distinct curriculum lessons completed: {completed.length}.</p>
-        <ul className="mt-1 list-disc pl-5">
-          {completed.map(lesson => <li key={lesson.id}>{levels.find(level => level.id === lesson.level_id)?.name ?? `Level ${lesson.level_id}`} · Lesson {lesson.lesson_number} · {lesson.title}</li>)}
-        </ul>
       </details>
 
       <StudentProjectsPanel studentId={student.id} projects={projects} onChanged={() => void load()} />
@@ -519,6 +521,14 @@ export default function StudentProfile() {
             )}
           </div>
           <p className="text-xs text-slate-600 mb-3">Learning history lists curriculum lessons, assessment results and remediation. Recorded sessions below shows each visit, including assessment and project sessions.</p>
+          <details className="mb-3 text-sm">
+            <summary className="cursor-pointer font-medium">Curriculum lessons completed · {completions.length}</summary>
+            <p className="mt-1 text-slate-600">Each finished curriculum lesson or assessment counts once. Both Pass and Fail are finished attempts.</p>
+            {unlinkedResults > 0 && <p className="mt-1 text-slate-600">Historical assessment results without a curriculum link: {unlinkedResults}. These appear in assessment history and cannot independently identify a completed lesson.</p>}
+            <ul className="mt-1 list-disc pl-5">{completions.map(({ lesson, date }) =>
+              <li key={lesson.id}>{levels.find(level => level.id === lesson.level_id)?.name} · {lesson.title} · {formatShortDate(date)}</li>
+            )}</ul>
+          </details>
           {(assessments.length > 0 || remediationLessons.length > 0) && (
             <>
               <h4 className="font-medium mb-2">Assessments & remediation</h4>
@@ -590,7 +600,7 @@ export default function StudentProfile() {
                             kind: 'convert',
                             id: l.id,
                             date: l.date,
-                            lessonId: assessmentPoints.find((point) => point.level_id === l.level_id)?.after_lesson_id ?? '',
+                            lessonId: assessmentPoints.find((point) => point.active && point.level_id === l.level_id)?.after_lesson_id ?? '',
                             result: '',
                             remediationPath: 'remediation_lessons',
                           })}
@@ -742,7 +752,7 @@ export default function StudentProfile() {
                   <option value="">Choose an assessment</option>
                   {levels.map((level) => {
                     const levelAssessments = curriculumLessons
-                      .filter((lesson) => requiresAssessmentResult(lesson) && lesson.level_id === level.id && assessmentPoints.some((point) => point.after_lesson_id === lesson.id))
+                      .filter((lesson) => requiresAssessmentResult(lesson) && lesson.level_id === level.id && assessmentPoints.some((point) => point.active && point.after_lesson_id === lesson.id))
                       .sort((a, b) => a.lesson_number - b.lesson_number)
                     return levelAssessments.length > 0 ? (
                       <optgroup key={level.id} label={level.name}>
