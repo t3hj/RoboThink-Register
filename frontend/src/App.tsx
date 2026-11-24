@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { CentreProvider } from './lib/centres'
@@ -6,20 +7,21 @@ import { ToastProvider } from './components/Toast'
 import { LoadingPanel } from './components/ui'
 import AppNavigation from './components/AppNavigation'
 import Auth from './pages/Auth'
-import Dashboard from './pages/Dashboard'
-import Register from './pages/Register'
-import Students from './pages/Students'
-import StudentProfile from './pages/StudentProfile'
-import Curriculum from './pages/Curriculum'
-import Reports from './pages/Reports'
-import InstructorAnalytics from './pages/InstructorAnalytics'
-import ManagementDashboard from './pages/ManagementDashboard'
-import StaffManagement from './pages/StaffManagement'
-import Help from './pages/Help'
-import Requests from './pages/Requests'
-import ImportStudents from './pages/ImportStudents'
-import NotFound from './pages/NotFound'
 import type { Role } from './types'
+
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Register = lazy(() => import('./pages/Register'))
+const Students = lazy(() => import('./pages/Students'))
+const StudentProfile = lazy(() => import('./pages/StudentProfile'))
+const Curriculum = lazy(() => import('./pages/Curriculum'))
+const Reports = lazy(() => import('./pages/Reports'))
+const InstructorAnalytics = lazy(() => import('./pages/InstructorAnalytics'))
+const ManagementDashboard = lazy(() => import('./pages/ManagementDashboard'))
+const StaffManagement = lazy(() => import('./pages/StaffManagement'))
+const Help = lazy(() => import('./pages/Help'))
+const Requests = lazy(() => import('./pages/Requests'))
+const ImportStudents = lazy(() => import('./pages/ImportStudents'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 
 /** Each route lists which roles can see it. Management gets its own,
  *  separate, read-only area rather than the day-to-day operational pages —
@@ -69,6 +71,7 @@ function Layout() {
 
         <main id="main-content" className="lg:col-span-4 min-w-0">
           <div key={`${activeBrand}:${pathname}`} className="page-enter">
+          <Suspense fallback={<LoadingPanel label="Loading page…" />}>
           <Routes>
             <Route path="/" element={<RoleRoute roles={['admin', 'instructor']}><Dashboard /></RoleRoute>} />
             <Route path="/register" element={<RoleRoute roles={['admin', 'instructor']}><Register /></RoleRoute>} />
@@ -85,6 +88,7 @@ function Layout() {
             <Route path="/help" element={<Help />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
           </div>
         </main>
       </div>

@@ -92,7 +92,7 @@ export default function StudentProfile() {
   const [removeSessionId, setRemoveSessionId] = useState<string | null>(null)
   const [historyAdd, setHistoryAdd] = useState<{ date: string; lessonId: string; outcome: 'completed' | 'not_finished' }>({ date: todayISO(), lessonId: '', outcome: 'completed' })
 
-  const load = useCallback(async () => {
+  const loadProfile = useCallback(async () => {
     if (!id) return
     setLoading(true)
     setError(null)
@@ -193,6 +193,15 @@ export default function StudentProfile() {
     setCurriculumLessons(curriculum.lessons)
     setLoading(false)
   }, [id])
+
+  const load = useCallback(async () => {
+    try {
+      await loadProfile()
+    } catch (failure) {
+      setError(failure && typeof failure === 'object' && 'message' in failure ? String(failure.message) : 'Unable to load student')
+      setLoading(false)
+    }
+  }, [loadProfile])
 
   useEffect(() => {
     void load()
@@ -348,6 +357,9 @@ export default function StudentProfile() {
   const absent = attendanceStats.outstandingAbsences
   const needsAction = plan || student.pending_assessment_point_id || (progress && progress.current_kind !== 'normal' && progress.current_kind !== 'complete')
   const remediationTitles = new Map(historySessions.map((session) => [session.id, session.remediation_title]))
+  const assessmentBySession = new Map(assessments.map((assessment) => [assessment.attended_session_id, assessment]))
+  const linkedRecordIds = new Set(historySessions.map((session) => session.lesson_record_id))
+  const lessonById = new Map(curriculumLessons.map((lesson) => [lesson.id, lesson]))
   const outstandingFeedback = feedback.filter((f) => f.status !== 'given')
   const notFinishedCount = lessons.filter((l) => l.status === 'not_completed').length
 
@@ -572,7 +584,7 @@ export default function StudentProfile() {
                           })}
                         >Convert to assessment</button>
                         <RemoveUnlinkedLesson recordId={l.id} lessonNumber={l.lesson_number}
-                          linked={historySessions.some((session) => session.lesson_record_id === l.id)} onRemoved={load} />
+                          linked={linkedRecordIds.has(l.id)} onRemoved={load} />
                       </div>
                     )}
                   </div>
@@ -588,14 +600,14 @@ export default function StudentProfile() {
           ) : (
             <ul className="divide-y divide-slate-100">
               {historySessions.map((session) => {
-                const linkedAssessment = assessments.find((assessment) => assessment.attended_session_id === session.id)
+                const linkedAssessment = assessmentBySession.get(session.id)
                 const assessmentOrRemediation = Boolean(linkedAssessment || session.assessment_records?.length || session.remediation_title || session.remediation_lessons?.length)
                 const title = session.remediation_title
                   ? `Remediation: ${session.remediation_title}`
                   : session.project_id
                   ? `Project: ${session.student_projects?.name ?? 'Project'}`
                   : session.lessons
-                  ? `${requiresAssessmentResult(curriculumLessons.find((lesson) => lesson.id === session.actual_lesson_id)) ? 'Assessment' : session.lessons.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${session.lessons.lesson_number}: ${session.lessons.title}`
+                  ? `${requiresAssessmentResult(lessonById.get(session.actual_lesson_id ?? '')) ? 'Assessment' : session.lessons.lesson_kind === 'assessment' ? 'Assessment' : 'Lesson'} ${session.lessons.lesson_number}: ${session.lessons.title}`
                     : 'Session'
                 return (
                   <li key={session.id} className="py-2 flex items-center justify-between gap-3 text-sm">
@@ -734,11 +746,12 @@ export default function StudentProfile() {
                   {(['PASS', 'FAIL'] as const).map((result) => (
                     <button key={result} type="button" className={`flex-1 px-3 py-2 rounded-lg font-medium ${assessmentHistoryEdit.result === result ? result === 'PASS' ? 'btn-primary' : 'bg-rose-600 text-white' : 'btn-ghost'}`} onClick={() => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, result, remediationPath: assessmentHistoryEdit.remediationPath || 'remediation_lessons' })} disabled={assessmentHistoryBusy}>{result}</button>
                   ))}
-                  {assessmentHistoryEdit.kind === 'convert' && (
-                    <button type="button" className={`flex-1 px-3 py-2 rounded-lg font-medium ${assessmentHistoryEdit.result === 'NOT_FINISHED' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, result: 'NOT_FINISHED' })} disabled={assessmentHistoryBusy}>Not finished</button>
-                  )}
+                  <button type="button" className={`flex-1 px-3 py-2 rounded-lg font-medium ${assessmentHistoryEdit.result === 'NOT_FINISHED' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setAssessmentHistoryEdit({ ...assessmentHistoryEdit, result: 'NOT_FINISHED' })} disabled={assessmentHistoryBusy}>Not finished</button>
                 </div>
               </fieldset>
+              {assessmentHistoryEdit.kind === 'edit' && assessmentHistoryEdit.result === 'NOT_FINISHED' && (
+                <p className="text-sm text-slate-600">The visit and feedback stay in Recorded sessions. Saving clears the assessment result and any unstarted remediation plan for this attempt.</p>
+              )}
               {assessmentHistoryEdit.result === 'FAIL' && (
                 <fieldset className="rounded-lg border border-sky-200 bg-sky-50 p-3">
                   <legend className="text-xs text-sky-900 px-1">Remediation path</legend>
