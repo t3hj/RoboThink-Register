@@ -19,7 +19,7 @@ import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
 import { describeSlots, groupAttendanceByMonth } from '../lib/attendanceStats'
-import { completedCurriculumLessons } from '../lib/completedCurriculumLessons'
+import { TERM_TIME_BLOCK_SIZE } from '../lib/managementAnalytics'
 import { studentAttendance } from '../lib/studentAttendance'
 import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import type {
@@ -353,7 +353,6 @@ export default function StudentProfile() {
   }
 
   const through = todayISO()
-  const completed = completedCurriculumLessons(curriculumLessons, historySessions, lessons, through)
   const attendanceStats = studentAttendance(attendance, historySessions, through)
   const attendancePct = attendanceStats.percentage
   const detailedVisits = attendanceStats.rows.filter(row => row.sessionNumber != null && (row.kind === 'attended' || row.kind === 'extra')).length
@@ -364,7 +363,9 @@ export default function StudentProfile() {
   const linkedRecordIds = new Set(historySessions.map((session) => session.lesson_record_id))
   const lessonById = new Map(curriculumLessons.map((lesson) => [lesson.id, lesson]))
   const outstandingFeedback = feedback.filter((f) => f.status !== 'given')
-  const notFinishedCount = lessons.filter((l) => l.status === 'not_completed').length
+  const visits = attendanceStats.sessionsAttended
+  const block = Math.max(1, Math.ceil(visits / TERM_TIME_BLOCK_SIZE))
+  const visitsInBlock = visits - (block - 1) * TERM_TIME_BLOCK_SIZE
 
   return (
     <div>
@@ -463,29 +464,27 @@ export default function StudentProfile() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <StatCard value={completed.length} label="Curriculum lessons completed" />
-        <StatCard value={notFinishedCount} label="Not-finished attempts" />
+        <StatCard value={visits} label="Sessions attended" />
+        {student.subscriptions?.name === 'Term Time' && (
+          <StatCard value={`${visitsInBlock} / ${TERM_TIME_BLOCK_SIZE}`}
+            label={`Term-time block ${block}${visitsInBlock === TERM_TIME_BLOCK_SIZE ? ' complete' : ''}`} />
+        )}
         <StatCard
           value={attendancePct == null ? '—' : `${attendancePct}%`}
-          label="Attendance"
+          label="Attendance rate"
           tone={attendancePct != null && attendancePct < 80 ? 'warn' : 'good'}
         />
-        <StatCard value={attendanceStats.sessionsAttended} label="Sessions attended" />
         <StatCard value={attendanceStats.catchUpsAttended} label="Catch-up / extra sessions" />
         <StatCard value={attendanceStats.madeUp} label="Absences made up" />
         <StatCard value={absent} label="Outstanding absences" tone={absent > 2 ? 'bad' : undefined} />
       </div>
       <p className="-mt-3 mb-5 text-xs text-slate-600">
-        Sessions attended counts recorded visits, including catch-ups, assessments and projects. An attended day with no session details counts as one visit. Curriculum lessons completed counts each distinct standard lesson once, including historical lesson entries. Repeats, assessments, projects and remediation add no new curriculum completion. Each attended catch-up or extra session can cover one absence.
+        Sessions attended counts recorded visits, including catch-ups, assessments and projects. An attended day with no session details counts as one visit. Each attended catch-up or extra session can cover one absence.
       </p>
 
       <details className="mb-5 text-sm">
-        <summary className="cursor-pointer font-medium">See how these totals were counted</summary>
+        <summary className="cursor-pointer font-medium">See how visits were counted</summary>
         <p className="mt-2">Sessions attended: {detailedVisits} with session details + {attendanceStats.sessionsAttended - detailedVisits} from attendance marks alone = {attendanceStats.sessionsAttended}.</p>
-        <p className="mt-2">Distinct curriculum lessons completed: {completed.length}.</p>
-        <ul className="mt-1 list-disc pl-5">
-          {completed.map(lesson => <li key={lesson.id}>{levels.find(level => level.id === lesson.level_id)?.name ?? `Level ${lesson.level_id}`} · Lesson {lesson.lesson_number} · {lesson.title}</li>)}
-        </ul>
       </details>
 
       <StudentProjectsPanel studentId={student.id} projects={projects} onChanged={() => void load()} />
