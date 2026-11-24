@@ -19,6 +19,7 @@ import { todayISO } from '../lib/dates'
 import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
 import { describeSlots, groupAttendanceByMonth } from '../lib/attendanceStats'
+import { completedCurriculumLessons } from '../lib/completedCurriculumLessons'
 import { studentAttendance } from '../lib/studentAttendance'
 import { REMEDIATION_PATH_OPTIONS, requiresAssessmentResult } from '../lib/assessment'
 import type {
@@ -351,9 +352,11 @@ export default function StudentProfile() {
     return <EmptyState title="Student not found" hint="They may have been removed, or you don't have access." robot />
   }
 
-  const completed = lessons.filter((l) => l.status === 'completed').length
-  const attendanceStats = studentAttendance(attendance, historySessions, todayISO())
+  const through = todayISO()
+  const completed = completedCurriculumLessons(curriculumLessons, historySessions, lessons, through)
+  const attendanceStats = studentAttendance(attendance, historySessions, through)
   const attendancePct = attendanceStats.percentage
+  const detailedVisits = attendanceStats.rows.filter(row => row.sessionNumber != null && (row.kind === 'attended' || row.kind === 'extra')).length
   const absent = attendanceStats.outstandingAbsences
   const needsAction = plan || student.pending_assessment_point_id || (progress && progress.current_kind !== 'normal' && progress.current_kind !== 'complete')
   const remediationTitles = new Map(historySessions.map((session) => [session.id, session.remediation_title]))
@@ -460,7 +463,7 @@ export default function StudentProfile() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <StatCard value={completed} label="Curriculum lessons completed" />
+        <StatCard value={completed.length} label="Curriculum lessons completed" />
         <StatCard value={notFinishedCount} label="Not-finished attempts" />
         <StatCard
           value={attendancePct == null ? '—' : `${attendancePct}%`}
@@ -473,8 +476,17 @@ export default function StudentProfile() {
         <StatCard value={absent} label="Outstanding absences" tone={absent > 2 ? 'bad' : undefined} />
       </div>
       <p className="-mt-3 mb-5 text-xs text-slate-600">
-        Sessions attended includes catch-ups, assessments, projects and unfinished sessions. Completing multiple lessons does not add sessions; record each additional session separately. Each attended catch-up or extra session can make up one absence. Made-up absences remain in history and count as fulfilled attendance; unused extras do not increase the percentage.
+        Sessions attended counts recorded visits, including catch-ups, assessments and projects. An attended day with no session details counts as one visit. Curriculum lessons completed counts each distinct standard lesson once, including historical lesson entries. Repeats, assessments, projects and remediation add no new curriculum completion. Each attended catch-up or extra session can cover one absence.
       </p>
+
+      <details className="mb-5 text-sm">
+        <summary className="cursor-pointer font-medium">See how these totals were counted</summary>
+        <p className="mt-2">Sessions attended: {detailedVisits} with session details + {attendanceStats.sessionsAttended - detailedVisits} from attendance marks alone = {attendanceStats.sessionsAttended}.</p>
+        <p className="mt-2">Distinct curriculum lessons completed: {completed.length}.</p>
+        <ul className="mt-1 list-disc pl-5">
+          {completed.map(lesson => <li key={lesson.id}>{levels.find(level => level.id === lesson.level_id)?.name ?? `Level ${lesson.level_id}`} · Lesson {lesson.lesson_number} · {lesson.title}</li>)}
+        </ul>
+      </details>
 
       <StudentProjectsPanel studentId={student.id} projects={projects} onChanged={() => void load()} />
 

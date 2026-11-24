@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { fetchAllRows } from './pagination'
 import type { Level, Lesson } from '../types'
 
 interface CurriculumData {
@@ -18,8 +19,8 @@ export async function loadCurriculum(force = false): Promise<CurriculumData> {
   if (inflight && !force) return inflight
   inflight = (async () => {
     const [levelsRes, lessonsRes] = await Promise.all([
-      supabase.from('levels').select('*').order('sort_order'),
-      supabase.from('lessons').select('*').order('level_id').order('lesson_number'),
+      fetchAllRows(() => supabase.from('levels').select('*').order('sort_order').order('id')),
+      fetchAllRows(() => supabase.from('lessons').select('*').order('level_id').order('lesson_number').order('id')),
     ])
     if (levelsRes.error) throw levelsRes.error
     if (lessonsRes.error) throw lessonsRes.error

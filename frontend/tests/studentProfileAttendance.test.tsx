@@ -9,7 +9,7 @@ vi.mock('../src/lib/auth', () => ({ useAuth: () => ({ role: 'instructor', profil
 vi.mock('../src/lib/centres', () => ({ useCentres: () => ({ activeCentres: [] }) }))
 vi.mock('../src/components/Toast', () => ({ useToast: () => ({ notify: vi.fn() }) }))
 vi.mock('../src/lib/dates', async (original) => ({ ...await original<typeof import('../src/lib/dates')>(), todayISO: () => '2026-11-17' }))
-vi.mock('../src/lib/curriculumData', () => ({ loadCurriculum: async () => ({ levels: [], lessons: [] }) }))
+vi.mock('../src/lib/curriculumData', () => ({ loadCurriculum: async () => ({ levels: [], lessons: [1, 2].map(n => ({ id: 'l' + n, level_id: 1, lesson_number: n, title: 'Lesson ' + n, lesson_kind: 'normal' })) }) }))
 vi.mock('../src/components/StudentProjectsPanel', () => ({ default: () => null }))
 vi.mock('../src/components/StartingLessonCard', () => ({ default: () => null }))
 vi.mock('../src/components/AssessmentPanel', () => ({ default: () => null }))
@@ -35,7 +35,7 @@ async function mount() {
 beforeEach(() => {
   backend.tables = {
     students: [{ id: 'student', full_name: 'Test Student', active: true, preferred_day: 'Sunday' }],
-    lesson_records: [1, 2].map((number) => ({ id: `lesson-${number}`, lesson_number: number, date: '2026-11-08', status: 'completed' })),
+    lesson_records: [1, 2].map((number) => ({ id: `lesson-${number}`, level_id: 1, lesson_number: number, date: '2026-11-08', status: 'completed' })),
     attendance: [
       { id: 'absent', date: '2026-11-01', status: 'Absent', session_type: 'regular' },
       { id: 'attended', date: '2026-11-08', status: 'Completed', session_type: 'regular' },
