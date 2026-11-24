@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/auth'
@@ -7,383 +7,616 @@ import { useCentres } from '../lib/centres'
 import { useToast } from '../components/Toast'
 import { PageHeader, StatCard, LoadingPanel, ErrorPanel, EmptyState } from '../components/ui'
 import { todayISO, addDays, formatShortDate, formatTime12h } from '../lib/dates'
-import { attendancePercentage, attendanceFlag, sessionTimeBreakdown, summariseAttendance, summariseRange, isExpectedOnDate } from '../lib/attendanceStats'
-import { AttendanceTrendChart, CentreAttendanceChart, StudentRetentionChart, lastTwelveWeekStarts, studentRetentionCohorts, weeklyAttendancePoints, type CentreAttendancePoint } from '../components/AnalyticsCharts'
-import type { Attendance, Student, TermTimeFollowup, TermTimeFollowupStatus } from '../types'
+import { fetchAllRows } from '../lib/pagination'
+import { attendancePercentage, weeklySlots } from '../lib/attendanceStats'
+import {
+  managementAnalytics,
+  mondayOf,
+  type ManagementAttendanceRow,
+  type ManagementData,
+  type TermTimeEntry,
+} from '../lib/managementAnalytics'
+import TermTimeFollowupsPanel, { type FollowupUpdate } from '../components/TermTimeFollowupsPanel'
+import {
+  AttendanceTrendChart,
+  CentreAttendanceChart,
+  StudentRetentionChart,
+  lastTwelveWeekStarts,
+  studentRetentionCohorts,
+  weeklyAttendancePoints,
+} from '../components/AnalyticsCharts'
+import type { Attendance, AttendedSession, FeedbackSheet, Student, TermTimeFollowup } from '../types'
 
-const FOLLOWUP_OPTIONS: { value: TermTimeFollowupStatus; label: string }[] = [
-  { value: 'needs_follow_up', label: 'Needs follow-up' },
-  { value: 'contacted', label: 'Contacted' },
-  { value: 'extended', label: 'Extended' },
-  { value: 'not_continuing', label: 'Not continuing' },
-  { value: 'snoozed', label: 'Snoozed / follow up later' },
+type Tab = 'attended' | 'missed' | 'catchups' | 'unmarked'
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'attended', label: 'Attended' },
+  { id: 'missed', label: 'Missed classes' },
+  { id: 'catchups', label: 'Catch-ups' },
+  { id: 'unmarked', label: 'Unmarked registers' },
 ]
-
-/** `all` must cover the whole period plus some margin so make-ups that land
- *  just outside it are still matched to their absence. */
-function rangeStats(all: Attendance[], from: string, to: string, expected: number) {
-  const { attended, missed } = summariseRange(all, from, to)
-  const catchUp = all.filter((a) => a.date >= from && a.date <= to && a.session_type === 'catch_up').length
-  return { expected, attended, missed, catchUp, pct: attended + missed ? Math.round((attended / (attended + missed)) * 100) : null }
-}
-
-function expectedSessionsInRange(students: Student[], from: string, to: string): number {
-  let n = 0
-  let d = from
-  while (d <= to) {
-    n += students.filter((s) => isExpectedOnDate(s, d)).length
-    d = addDays(d, 1)
-  }
-  return n
-}
+const isAttended = (row: ManagementAttendanceRow) => row.kind === 'attended' || row.kind === 'extra'
 
 export default function ManagementDashboard() {
-  const { role } = useAuth()
+  const { role, profile } = useAuth()
   const { activeBrand } = useBrand()
-  const { centres } = useCentres()
+  const {
+    centres,
+    selectedCentreId,
+    selectedCentre,
+    isAllCentres,
+    loading: centresLoading,
+    error: centresError,
+    refresh,
+  } = useCentres()
   const { notify } = useToast()
   const today = todayISO()
-  const weekStart = addDays(today, -6)
-  const prevWeekStart = addDays(today, -13)
-  const prevWeekEnd = addDays(today, -7)
-  const monthStart = addDays(today, -29)
-  const prevMonthStart = addDays(today, -59)
-  const prevMonthEnd = addDays(today, -30)
-  const weekStarts = useMemo(() => lastTwelveWeekStarts(today), [today])
-  const trendStart = weekStarts[0]
-
-  const [students, setStudents] = useState<Student[]>([])
-  const [todayAtt, setTodayAtt] = useState<Attendance[]>([])
-  const [allAtt, setAllAtt] = useState<Attendance[]>([])
-  const [trendAtt, setTrendAtt] = useState<Attendance[]>([])
-  const [followups, setFollowups] = useState<TermTimeFollowup[]>([])
+  const [from, setFrom] = useState(mondayOf(today))
+  const [to, setTo] = useState(addDays(mondayOf(today), 6))
+  const [tab, setTab] = useState<Tab>('attended')
+  const [search, setSearch] = useState('')
+  const [data, setData] = useState<ManagementData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [loadedScope, setLoadedScope] = useState('')
+  const scope = JSON.stringify([activeBrand, selectedCentreId, isAllCentres, centresLoading, centresError])
+  const activeScope = useRef(scope)
+  activeScope.current = scope
+  const requestId = useRef(0)
 
   const load = useCallback(async () => {
+    if (centresLoading || centresError || (!selectedCentreId && !isAllCentres)) return
+    const requestedScope = JSON.stringify([activeBrand, selectedCentreId, isAllCentres, centresLoading, centresError])
+    const request = ++requestId.current
+    const isCurrent = () => request === requestId.current && activeScope.current === requestedScope
     setLoading(true)
     setError(null)
-    const [sRes, taRes, allRes, trendRes, ftRes] = await Promise.all([
-      supabase.from('students').select('*, student_schedules(day_of_week,start_time,active)'),
-      supabase.from('attendance').select('*').eq('date', today),
-      // Used for "long absence" detection — most recent attendance per student.
-      supabase.from('attendance').select('*').order('date', { ascending: false }).limit(2000),
-      supabase.from('attendance').select('*').gte('date', trendStart).lte('date', today),
-      supabase.from('term_time_followups').select('*, students(full_name)').order('created_at', { ascending: false }),
-    ])
-    if (sRes.error || taRes.error || allRes.error || trendRes.error || ftRes.error) {
+    try {
+      const studentsRes = await fetchAllRows(() => {
+        let query = supabase
+          .from('students')
+          .select('*, subscriptions(name), student_schedules(day_of_week,start_time,active)')
+          .eq('brand', activeBrand)
+          .order('id')
+        if (selectedCentreId) query = query.eq('centre_id', selectedCentreId)
+        return query
+      })
+      if (!isCurrent()) return
+      if (studentsRes.error) throw studentsRes.error
+      const students = (studentsRes.data ?? []) as Student[]
+      const ids = students.map((student) => student.id)
+      // Keep every page and batch the ID filters so a large centre does not
+      // silently lose history or exceed URL limits. Empty centres issue no reads.
+      async function readRows<T>(table: string) {
+        const result: T[] = []
+        for (let offset = 0; offset < ids.length; offset += 100) {
+          const batch = ids.slice(offset, offset + 100)
+          const response = await fetchAllRows(() =>
+            supabase.from(table).select('*').in('student_id', batch).order('id'),
+          )
+          if (response.error) throw response.error
+          result.push(...((response.data ?? []) as T[]))
+        }
+        return result
+      }
+      const [attendance, sessions, followups, feedback] = await Promise.all([
+        readRows<Attendance>('attendance'),
+        readRows<AttendedSession>('attended_sessions'),
+        readRows<TermTimeFollowup>('term_time_followups'),
+        readRows<FeedbackSheet>('feedback_sheets'),
+      ])
+      if (!isCurrent()) return
+      setData({ students, attendance, sessions, followups, feedback })
+      setLoadedScope(requestedScope)
+    } catch (failure) {
+      if (!isCurrent()) return
       setError(
-        sRes.error?.message ??
-          taRes.error?.message ??
-          allRes.error?.message ??
-          trendRes.error?.message ??
-          ftRes.error?.message ??
-          'Unknown error',
+        failure && typeof failure === 'object' && 'message' in failure
+          ? String(failure.message)
+          : 'Unable to load management dashboard',
       )
-      setLoading(false)
-      return
+      setLoadedScope(requestedScope)
+    } finally {
+      if (isCurrent()) setLoading(false)
     }
-    setStudents((sRes.data ?? []) as Student[])
-    setTodayAtt((taRes.data ?? []) as Attendance[])
-    setAllAtt((allRes.data ?? []) as Attendance[])
-    setTrendAtt((trendRes.data ?? []) as Attendance[])
-    setFollowups((ftRes.data ?? []) as TermTimeFollowup[])
-    setLoading(false)
-  }, [today, trendStart])
+  }, [activeBrand, selectedCentreId, isAllCentres, centresLoading, centresError])
 
   useEffect(() => {
     void load()
+    return () => {
+      requestId.current++
+    }
   }, [load])
+  const validRange = Boolean(from && to && from <= to && to <= addDays(from, 365))
+  const stats = useMemo(
+    () => (data && validRange ? managementAnalytics(data, from, to, today) : null),
+    [data, from, to, today, validRange],
+  )
+  const weekStarts = useMemo(() => lastTwelveWeekStarts(today), [today])
+  const weekPoints = useMemo(
+    () =>
+      stats
+        ? weeklyAttendancePoints(
+            stats.rows.map((row) => ({ ...row, student_id: row.student.id })),
+            weekStarts,
+          )
+        : [],
+    [stats, weekStarts],
+  )
 
-  async function setFollowupStatus(id: string, status: TermTimeFollowupStatus) {
-    const { error: err } = await supabase.from('term_time_followups').update({ status }).eq('id', id)
-    if (err) {
-      notify(err.message, 'error')
-      return
+  async function saveFollowup(entry: TermTimeEntry, update: FollowupUpdate): Promise<boolean> {
+    if (!profile || !['admin', 'management'].includes(role ?? '')) return false
+    const requestedScope = activeScope.current
+    const { data: saved, error: failure } = await supabase
+      .from('term_time_followups')
+      .upsert(
+        {
+          student_id: entry.student.id,
+          session_block: entry.block,
+          ...update,
+          updated_by: profile.id,
+        },
+        { onConflict: 'student_id,session_block' },
+      )
+      .select('*')
+      .maybeSingle()
+    if (activeScope.current !== requestedScope) return false
+    if (failure || !saved) {
+      notify(failure?.message ?? 'Follow-up was not saved. Refresh and try again.', 'error')
+      return false
     }
-    notify('Follow-up status updated', 'success')
-    void load()
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            followups: [
+              ...current.followups.filter(
+                (row) =>
+                  row.id !== saved.id && !(row.student_id === entry.student.id && row.session_block === entry.block),
+              ),
+              saved as TermTimeFollowup,
+            ],
+          }
+        : current,
+    )
+    notify('Follow-up saved', 'success')
+    return true
   }
 
-  const active = useMemo(() => students.filter((s) => s.active), [students])
-
-  const todayStats = useMemo(() => {
-    const expected = active.filter((s) => isExpectedOnDate(s, today))
-    const attMap = new Map(todayAtt.map((a) => [a.student_id, a]))
-    const studentMap = new Map(active.map((s) => [s.id, s]))
-    const notArrivedStudents = expected.filter((s) => (attMap.get(s.id)?.status ?? 'Not Arrived') === 'Not Arrived')
-    const notArrived = notArrivedStudents.length
-    const attended = todayAtt.filter((a) => a.status === 'Arrived' || a.status === 'Completed').length
-    const absentToday = todayAtt.filter((a) => a.status === 'Absent')
-    const absent = absentToday.length
-    const catchUpToday = todayAtt.filter((a) => a.session_type === 'catch_up' || a.session_type === 'special')
-    const catchUp = todayAtt.filter((a) => a.session_type === 'catch_up').length
-    const special = todayAtt.filter((a) => a.session_type === 'special').length
-    const newToday = active.filter((s) => s.date_joined === today)
-    // "Did not attend" = expected but marked Absent, plus expected but still
-    // Not Arrived (i.e. hasn't shown up yet / didn't come in) — both are
-    // genuinely useful to a manager checking who to follow up with.
-    const didNotAttend = [
-      ...absentToday.filter((a) => expected.some((s) => s.id === a.student_id)).map((a) => studentMap.get(a.student_id)).filter((s): s is Student => Boolean(s)),
-      ...notArrivedStudents,
-    ]
-    return {
-      expected: expected.length,
-      attended,
-      notArrived,
-      absent,
-      pct: attended + absent ? Math.round((attended / (attended + absent)) * 100) : null,
-      catchUp,
-      special,
-      newToday,
-      didNotAttend,
-      catchUpStudents: catchUpToday.map((a) => studentMap.get(a.student_id)).filter((s): s is Student => Boolean(s)),
-    }
-  }, [active, todayAtt, today])
-
-  const week = useMemo(() => rangeStats(trendAtt, weekStart, today, expectedSessionsInRange(active, weekStart, today)), [trendAtt, active, weekStart, today])
-  const prevWeek = useMemo(
-    () => rangeStats(trendAtt, prevWeekStart, prevWeekEnd, expectedSessionsInRange(active, prevWeekStart, prevWeekEnd)),
-    [trendAtt, active, prevWeekStart, prevWeekEnd],
-  )
-  const month = useMemo(() => rangeStats(trendAtt, monthStart, today, expectedSessionsInRange(active, monthStart, today)), [trendAtt, active, monthStart, today])
-  const prevMonth = useMemo(
-    () => rangeStats(trendAtt, prevMonthStart, prevMonthEnd, expectedSessionsInRange(active, prevMonthStart, prevMonthEnd)),
-    [trendAtt, active, prevMonthStart, prevMonthEnd],
-  )
-  const newThisMonth = useMemo(() => active.filter((s) => s.date_joined && s.date_joined >= monthStart).length, [active, monthStart])
-  const newLastMonth = useMemo(
-    () => active.filter((s) => s.date_joined && s.date_joined >= prevMonthStart && s.date_joined < monthStart).length,
-    [active, prevMonthStart, monthStart],
-  )
-
-  const movement = useMemo(() => {
-    const byStudent = new Map<string, Attendance[]>()
-    for (const a of allAtt) byStudent.set(a.student_id, [...(byStudent.get(a.student_id) ?? []), a])
-    const declining: Student[] = []
-    const longAbsent: Student[] = []
-    for (const s of active) {
-      const rows = byStudent.get(s.id) ?? []
-      const flag = attendanceFlag({ rows, today, hasSchedule: Boolean(s.preferred_day), frequency: s.attendance_pattern })
-      if (flag === 'several_recent_missed') declining.push(s)
-      else if (flag === 'no_attendance_recently') longAbsent.push(s)
-    }
-    const newStudents = active.filter((s) => s.date_joined && s.date_joined >= addDays(today, -30))
-    return { declining, longAbsent, newStudents }
-  }, [allAtt, active, today])
-
-  const outstandingFollowups = followups.filter((f) => f.status === 'needs_follow_up')
-  const sessionBreakdown = useMemo(() => sessionTimeBreakdown(active), [active])
-  const trendPoints = useMemo(() => weeklyAttendancePoints(trendAtt, weekStarts), [trendAtt, weekStarts])
-  const retentionCohorts = useMemo(() => studentRetentionCohorts(students, weekStarts, today), [students, weekStarts, today])
-  const centreAttendance = useMemo<CentreAttendancePoint[]>(() => {
-    const centreForStudent = new Map(students.map((student) => [student.id, student.centre_id]))
-    return centres.map((centre) => {
-      const rows = trendAtt.filter((row) => centreForStudent.get(row.student_id) === centre.id)
-      const { attended, missed } = summariseAttendance(rows)
-      return { id: centre.id, name: centre.name, attended, missed, rate: attendancePercentage(rows) }
-    })
-  }, [centres, students, trendAtt])
-
-  if (loading) return <LoadingPanel label="Loading management dashboard…" />
+  if (centresLoading) return <LoadingPanel label="Loading working centre…" />
+  if (centresError) return <ErrorPanel message={centresError} onRetry={() => void refresh()} />
+  if (!selectedCentreId && !isAllCentres)
+    return (
+      <EmptyState
+        title="No working centre available"
+        hint="Please contact an administrator to check your centre assignment."
+      />
+    )
+  if (loading || loadedScope !== scope) return <LoadingPanel label="Loading management dashboard…" />
   if (error) return <ErrorPanel message={error} onRetry={() => void load()} />
-
-  const delta = (cur: number | null, prev: number | null) => {
-    if (cur == null || prev == null) return ''
-    const d = cur - prev
-    if (d === 0) return '(no change)'
-    return d > 0 ? `(+${d} vs last)` : `(${d} vs last)`
+  if (!data) return null
+  const studentById = new Map(data.students.map((student) => [student.id, student]))
+  const activeStudents = data.students.filter((student) => student.active)
+  const newStudents = activeStudents.filter(
+    (student) =>
+      student.date_joined && student.date_joined >= `${today.slice(0, 7)}-01` && student.date_joined <= today,
+  )
+  const scheduleGroups = new Map<string, { day: string; time: string | null; students: Set<string> }>()
+  for (const student of activeStudents) {
+    for (const slot of weeklySlots(student)) {
+      const key = `${slot.day}|${slot.time ?? ''}`
+      const group = scheduleGroups.get(key) ?? { ...slot, students: new Set<string>() }
+      group.students.add(student.id)
+      scheduleGroups.set(key, group)
+    }
   }
+  const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+  const schedules = [...scheduleGroups.values()].sort(
+    (a, b) => dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day) || (a.time ?? '').localeCompare(b.time ?? ''),
+  )
+  const centreName = (student: Student) =>
+    centres.find((centre) => centre.id === student.centre_id)?.name ?? student.centres?.name ?? 'Centre not set'
+  const matches = (student: Student) => student.full_name.toLowerCase().includes(search.trim().toLowerCase())
+  const rows = stats
+    ? tab === 'attended'
+      ? stats.attended
+      : tab === 'missed'
+        ? stats.missed
+        : tab === 'catchups'
+          ? stats.catchUps
+          : []
+    : []
+  function selectRange(start: string, end: string) {
+    setFrom(start)
+    setTo(end)
+  }
+  const tabCounts = stats
+    ? {
+        attended: stats.attended.length,
+        missed: stats.missed.length,
+        catchups: stats.catchUps.length,
+        unmarked: stats.unmarked.length,
+      }
+    : null
+  const centrePoints = stats
+    ? centres.map((centre) => {
+        const rows = stats.rows.filter((row) => row.student.centre_id === centre.id && row.date >= weekStarts[0])
+        return {
+          id: centre.id,
+          name: centre.name,
+          attended: rows.filter(isAttended).length,
+          missed: rows.filter((row) => row.kind === 'missed').length,
+          rate: attendancePercentage(rows.map((row) => ({ ...row, student_id: row.student.id }))),
+        }
+      })
+    : []
 
   return (
     <div>
-      <PageHeader title="Management dashboard" subtitle={`Read-only operational overview · ${activeBrand === 'robothink' ? 'RoboThink' : 'Creative IQ'} · 12-week attendance`} accent="blue" />
-
-      <div className="grid xl:grid-cols-2 gap-6 mb-6">
-        <AttendanceTrendChart points={trendPoints} title="Overall attendance · Last 12 weeks" />
-        <CentreAttendanceChart points={centreAttendance} />
-        <StudentRetentionChart cohorts={retentionCohorts} />
-      </div>
-
-      <h2 className="text-lg font-semibold mb-3">Today</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard value={todayStats.expected} label="Expected today" />
-        <StatCard value={todayStats.attended} label="Attended" tone="good" />
-        <StatCard value={todayStats.notArrived} label="Not arrived" />
-        <StatCard value={todayStats.absent} label="Absent" tone={todayStats.absent > 0 ? 'bad' : undefined} />
-        <StatCard value={todayStats.pct == null ? '—' : `${todayStats.pct}%`} label="Attendance %" />
-        <StatCard value={todayStats.catchUp + todayStats.special} label="Catch-up/special today" />
-        <StatCard value={todayStats.newToday.length} label="New students today" />
-      </div>
-      {todayStats.newToday.length > 0 && (
-        <p className="text-sm text-slate-600 -mt-4 mb-6">
-          First time today: {todayStats.newToday.map((s) => s.full_name).join(', ')}
+      <PageHeader
+        title="Management dashboard"
+        subtitle={`${activeBrand === 'robothink' ? 'RoboThink' : 'Creative IQ'} · ${isAllCentres ? 'All centres' : (selectedCentre?.name ?? 'Working centre')}`}
+        accent="blue"
+        actions={
+          <button className="btn-ghost" onClick={() => void load()}>
+            Refresh
+          </button>
+        }
+      />
+      <section className="card p-4 mb-5" aria-label="Dashboard period">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-sm">
+            From
+            <input
+              className="block mt-1 border rounded-lg p-2"
+              type="date"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+            />
+          </label>
+          <label className="text-sm">
+            To
+            <input
+              className="block mt-1 border rounded-lg p-2"
+              type="date"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+            />
+          </label>
+          <button className="btn-ghost" onClick={() => selectRange(today, today)}>
+            Today
+          </button>
+          <button className="btn-ghost" onClick={() => selectRange(mondayOf(today), addDays(mondayOf(today), 6))}>
+            This week
+          </button>
+          <button
+            className="btn-ghost"
+            onClick={() => selectRange(addDays(mondayOf(today), -7), addDays(mondayOf(today), -1))}
+          >
+            Last week
+          </button>
+          <button className="btn-ghost" onClick={() => selectRange(`${today.slice(0, 7)}-01`, today)}>
+            This month
+          </button>
+        </div>
+        <p className="text-xs text-slate-600 mt-3">
+          Weeks run Monday–Sunday. Attendance counts through today; future catch-ups are bookings. Follow-ups and
+          concerns show the current position across recorded history.
         </p>
-      )}
-
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <section className="card p-4">
-          <h3 className="font-semibold mb-3">Did not attend today</h3>
-          {todayStats.didNotAttend.length === 0 ? (
-            <p className="text-sm text-slate-600">Everyone expected today has arrived.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {todayStats.didNotAttend.map((s) => (
-                <li key={s.id} className="py-1.5 text-sm">
-                  <Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link>
-                </li>
+        {!validRange && (
+          <p role="alert" className="text-sm text-rose-700 mt-2">
+            Choose a valid date range of up to one year.
+          </p>
+        )}
+      </section>
+      {stats && (
+        <>
+          <section className="mb-6" aria-labelledby="attention-title">
+            <h2 id="attention-title" className="text-lg font-semibold mb-3">
+              Needs attention
+            </h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <a href="#term-time-followups">
+                <StatCard
+                  label="Term-time follow-ups due"
+                  value={stats.due.length}
+                  tone={stats.due.length ? 'warn' : undefined}
+                />
+              </a>
+              <a href="#term-time-followups">
+                <StatCard label="Awaiting parent reply" value={stats.awaitingReply.length} />
+              </a>
+              <a href="#term-time-followups">
+                <StatCard
+                  label="Overdue follow-ups"
+                  value={stats.overdue.length}
+                  tone={stats.overdue.length ? 'bad' : undefined}
+                />
+              </a>
+              <a href="#feedback-outstanding">
+                <StatCard label="Feedback outstanding" value={stats.feedbackOutstanding.length} />
+              </a>
+            </div>
+          </section>
+          <section className="mb-6" aria-labelledby="period-title">
+            <h2 id="period-title" className="text-lg font-semibold mb-3">
+              {formatShortDate(from)} – {formatShortDate(to)}
+            </h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <button className="text-left" onClick={() => setTab('attended')}>
+                <StatCard label="Students attended" value={stats.uniqueAttended} tone="good" />
+              </button>
+              <button className="text-left" onClick={() => setTab('attended')}>
+                <StatCard label="Sessions attended" value={stats.attended.length} />
+              </button>
+              <button className="text-left" onClick={() => setTab('missed')}>
+                <StatCard label="Missed classes" value={stats.missed.length} />
+              </button>
+              <button className="text-left" onClick={() => setTab('missed')}>
+                <StatCard
+                  label="Outstanding absences"
+                  value={stats.outstanding.length}
+                  tone={stats.outstanding.length ? 'warn' : undefined}
+                />
+              </button>
+              <button className="text-left" onClick={() => setTab('catchups')}>
+                <StatCard label="Catch-ups attended" value={stats.catchUpsAttended} />
+              </button>
+              <button className="text-left" onClick={() => setTab('missed')}>
+                <StatCard label="Absences made up" value={stats.madeUp.length} />
+              </button>
+              <button className="text-left" onClick={() => setTab('unmarked')}>
+                <StatCard label="Unmarked registers" value={stats.unmarked.length} />
+              </button>
+              <StatCard
+                label="Attendance after make-ups"
+                value={stats.percentage == null ? '—' : `${stats.percentage}%`}
+              />
+            </div>
+            <p className="text-xs text-slate-600 mt-3">
+              {stats.expected} scheduled sessions through today · {stats.stillDue} scheduled later in this period ·{' '}
+              {stats.catchUpsBooked} catch-ups booked · {stats.catchUpsMissed} catch-ups missed. Made-up absences remain
+              listed as missed classes, with their make-up date. Extra sessions never count twice.
+            </p>
+          </section>
+          <section className="card p-4 mb-6" aria-labelledby="attendance-list-title">
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+              <h2 id="attendance-list-title" className="font-semibold">
+                Student attendance
+              </h2>
+              <label className="text-sm">
+                Find student
+                <input
+                  type="search"
+                  className="ml-2 border rounded-lg p-2"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </label>
+            </div>
+            <div role="tablist" aria-label="Attendance lists" className="flex flex-wrap gap-2 mb-3">
+              {TABS.map((item) => (
+                <button
+                  key={item.id}
+                  role="tab"
+                  id={`tab-${item.id}`}
+                  aria-controls="attendance-panel"
+                  aria-selected={tab === item.id}
+                  className={tab === item.id ? 'btn-primary text-sm' : 'btn-ghost text-sm'}
+                  onClick={() => setTab(item.id)}
+                >
+                  {item.label} ({tabCounts?.[item.id]})
+                </button>
               ))}
-            </ul>
-          )}
-        </section>
-        <section className="card p-4">
-          <h3 className="font-semibold mb-3">Catch-up / special sessions today</h3>
-          {todayStats.catchUpStudents.length === 0 ? (
-            <p className="text-sm text-slate-600">None today.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {todayStats.catchUpStudents.map((s) => (
-                <li key={s.id} className="py-1.5 text-sm">
-                  <Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      <h2 className="text-lg font-semibold mb-3">Scheduled by session time</h2>
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <section className="card p-4">
-          <h3 className="font-semibold mb-3 text-sm text-slate-600 uppercase tracking-wide">Weekday</h3>
-          {sessionBreakdown.weekday.length === 0 ? (
-            <p className="text-sm text-slate-600">No weekday schedules set.</p>
-          ) : (
-            <ul className="space-y-2">
-              {sessionBreakdown.weekday.map((b) => (
-                <li key={b.label} className="flex items-center justify-between text-sm">
-                  <span>{formatTime12h(b.label)}</span>
-                  <span className="font-semibold">{b.count} student{b.count === 1 ? '' : 's'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <section className="card p-4">
-          <h3 className="font-semibold mb-3 text-sm text-slate-600 uppercase tracking-wide">Weekend</h3>
-          {sessionBreakdown.weekend.length === 0 ? (
-            <p className="text-sm text-slate-600">No weekend schedules set.</p>
-          ) : (
-            <ul className="space-y-2">
-              {sessionBreakdown.weekend.map((b) => (
-                <li key={b.label} className="flex items-center justify-between text-sm">
-                  <span>{formatTime12h(b.label)}</span>
-                  <span className="font-semibold">{b.count} student{b.count === 1 ? '' : 's'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <section className="card p-4">
-          <h3 className="font-semibold mb-3">This week</h3>
-          <dl className="text-sm space-y-1.5">
-            <div className="flex justify-between"><dt className="text-slate-600">Expected sessions</dt><dd className="font-medium">{week.expected} {delta(week.expected, prevWeek.expected)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Attended</dt><dd className="font-medium">{week.attended} {delta(week.attended, prevWeek.attended)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Missed</dt><dd className="font-medium">{week.missed} {delta(week.missed, prevWeek.missed)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Attendance %</dt><dd className="font-medium">{week.pct == null ? '—' : `${week.pct}%`} {delta(week.pct, prevWeek.pct)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Catch-up sessions</dt><dd className="font-medium">{week.catchUp} {delta(week.catchUp, prevWeek.catchUp)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Active students</dt><dd className="font-medium">{active.length}</dd></div>
-          </dl>
-        </section>
-
-        <section className="card p-4">
-          <h3 className="font-semibold mb-3">This month</h3>
-          <dl className="text-sm space-y-1.5">
-            <div className="flex justify-between"><dt className="text-slate-600">Total sessions</dt><dd className="font-medium">{month.attended + month.missed} {delta(month.attended + month.missed, prevMonth.attended + prevMonth.missed)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Attendance %</dt><dd className="font-medium">{month.pct == null ? '—' : `${month.pct}%`} {delta(month.pct, prevMonth.pct)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Missed</dt><dd className="font-medium">{month.missed} {delta(month.missed, prevMonth.missed)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Catch-up/special</dt><dd className="font-medium">{month.catchUp} {delta(month.catchUp, prevMonth.catchUp)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">New students</dt><dd className="font-medium">{newThisMonth} {delta(newThisMonth, newLastMonth)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Appear to have stopped attending</dt><dd className="font-medium">{movement.longAbsent.length}</dd></div>
-          </dl>
-        </section>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <section className="card p-4">
-          <h3 className="font-semibold mb-3">Student movement</h3>
-          <div className="text-xs uppercase text-slate-600 mb-1">New (last 30 days) — {movement.newStudents.length}</div>
-          {movement.newStudents.length === 0 ? (
-            <p className="text-sm text-slate-600 mb-3">None</p>
-          ) : (
-            <ul className="text-sm mb-3">
-              {movement.newStudents.slice(0, 8).map((s) => (
-                <li key={s.id}><Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link> <span className="text-slate-600">· joined {s.date_joined && formatShortDate(s.date_joined)}</span></li>
-              ))}
-            </ul>
-          )}
-          <div className="text-xs uppercase text-slate-600 mb-1">Declining attendance — {movement.declining.length}</div>
-          {movement.declining.length === 0 ? (
-            <p className="text-sm text-slate-600 mb-3">None</p>
-          ) : (
-            <ul className="text-sm mb-3">
-              {movement.declining.slice(0, 8).map((s) => (
-                <li key={s.id}><Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link></li>
-              ))}
-            </ul>
-          )}
-          <div className="text-xs uppercase text-slate-600 mb-1">May have stopped attending — {movement.longAbsent.length}</div>
-          {movement.longAbsent.length === 0 ? (
-            <p className="text-sm text-slate-600">None</p>
-          ) : (
-            <ul className="text-sm">
-              {movement.longAbsent.slice(0, 8).map((s) => (
-                <li key={s.id}><Link to={`/students/${s.id}`} className="hover:underline">{s.full_name}</Link></li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="card card-accent-top p-4" style={{ ['--accent-color' as string]: 'var(--rt-yellow)' }}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Term Time follow-ups</h3>
-            <span className="badge badge-assess">{outstandingFollowups.length} outstanding</span>
-          </div>
-          {followups.length === 0 ? (
-            <EmptyState title="No Term Time follow-ups yet" hint="Created automatically when a Term Time student completes a 12-lesson block." />
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {followups.slice(0, 12).map((f) => (
-                <li key={f.id} className="py-2 text-sm">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div>
-                      <Link to={`/students/${f.student_id}`} className="font-medium hover:underline">{f.students?.full_name ?? 'Student'}</Link>
-                      <span className="text-slate-600"> · {f.lessons_completed_in_block} lessons completed</span>
-                    </div>
-                    {role === 'admin' ? (
-                      <select
-                        className="p-1 border border-slate-200 rounded text-xs"
-                        value={f.status}
-                        onChange={(e) => void setFollowupStatus(f.id, e.target.value as TermTimeFollowupStatus)}
-                        aria-label={`Follow-up status for ${f.students?.full_name ?? 'student'}`}
+            </div>
+            <div role="tabpanel" id="attendance-panel" aria-labelledby={`tab-${tab}`}>
+              {tab === 'unmarked' ? (
+                stats.unmarked.filter((row) => matches(row.student)).length ? (
+                  <ul className="divide-y divide-slate-100">
+                    {stats.unmarked
+                      .filter((row) => matches(row.student))
+                      .map((row) => (
+                        <li
+                          key={`${row.student.id}-${row.date}`}
+                          className="py-3 text-sm flex flex-wrap justify-between gap-2"
+                        >
+                          <div>
+                            <Link to={`/students/${row.student.id}`} className="font-medium hover:underline">
+                              {row.student.full_name}
+                            </Link>
+                            <span className="text-slate-600">
+                              {' '}
+                              · {centreName(row.student)} · {formatShortDate(row.date)}
+                            </span>
+                          </div>
+                          <span>{row.reason}</span>
+                        </li>
+                      ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-slate-600 py-4">No unmarked registers in this period.</p>
+                )
+              ) : rows.filter((row) => matches(row.student)).length ? (
+                <ul className="divide-y divide-slate-100">
+                  {rows
+                    .filter((row) => matches(row.student))
+                    .map((row) => (
+                      <li
+                        key={`${row.student.id}-${row.id}`}
+                        className="py-3 text-sm flex flex-wrap justify-between gap-2"
                       >
-                        {FOLLOWUP_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="badge">{FOLLOWUP_OPTIONS.find((o) => o.value === f.status)?.label}</span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+                        <div>
+                          <Link to={`/students/${row.student.id}`} className="font-medium hover:underline">
+                            {row.student.full_name}
+                          </Link>
+                          <span className="text-slate-600">
+                            {' '}
+                            · {centreName(row.student)} · {formatShortDate(row.date)}
+                            {row.sessionNumber != null ? ` · session ${row.sessionNumber}` : ''}
+                          </span>
+                        </div>
+                        <span>
+                          {row.makeUpDate
+                            ? `Made up ${formatShortDate(row.makeUpDate)}`
+                            : row.absenceDate
+                              ? `Made up absence on ${formatShortDate(row.absenceDate)}`
+                              : isAttended(row)
+                                ? row.kind === 'extra'
+                                  ? 'Extra session attended'
+                                  : 'Attended'
+                                : row.kind === 'extra_missed'
+                                  ? 'Catch-up missed'
+                                  : row.status === 'Absent'
+                                    ? 'Outstanding absence'
+                                    : row.date >= today
+                                      ? 'Booked'
+                                      : 'Not marked'}
+                          {row.session_type === 'special'
+                            ? ' · special'
+                            : row.kind === 'extra' || row.catch_up || row.session_type === 'catch_up'
+                              ? ' · catch-up'
+                              : ''}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-600 py-4">No matching students in this list.</p>
+              )}
+            </div>
+          </section>
+          <div className="grid xl:grid-cols-2 gap-6 mb-6">
+            <TermTimeFollowupsPanel
+              entries={stats.termTime}
+              editable={role === 'admin' || role === 'management'}
+              today={today}
+              onSave={saveFollowup}
+            />
+            <section className="card p-4">
+              <h2 className="font-semibold mb-3">Attendance concerns</h2>
+              <p className="text-xs text-slate-600 mb-2">
+                Unresolved recent absences, repeated misses and long gaps. Made-up absences are excluded; fortnightly
+                students have a longer gap allowance.
+              </p>
+              {stats.concerns.length ? (
+                <ul className="divide-y divide-slate-100">
+                  {stats.concerns.map(({ student, label, lastAttended }) => (
+                    <li key={student.id} className="py-3 text-sm">
+                      <Link to={`/students/${student.id}`} className="font-medium hover:underline">
+                        {student.full_name}
+                      </Link>
+                      <p className="text-xs text-slate-600 mt-1">
+                        {label} · {centreName(student)} ·{' '}
+                        {lastAttended
+                          ? `last attended ${formatShortDate(lastAttended)}`
+                          : 'No attended session recorded'}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-600">No attendance concerns flagged.</p>
+              )}
+            </section>
+            <section id="feedback-outstanding" className="card p-4 scroll-mt-4">
+              <h2 className="font-semibold mb-3">Outstanding feedback</h2>
+              {stats.feedbackOutstanding.length ? (
+                <ul className="divide-y divide-slate-100">
+                  {stats.feedbackOutstanding.map((feedback) => (
+                    <li key={feedback.id} className="py-2 text-sm">
+                      <Link to={`/students/${feedback.student_id}`} className="font-medium hover:underline">
+                        {studentById.get(feedback.student_id)?.full_name}
+                      </Link>
+                      <span className="text-slate-600">
+                        {' '}
+                        · {feedback.status === 'not_written' ? 'Not written' : 'Written, not given'} · waiting since{' '}
+                        {formatShortDate(feedback.created_at.slice(0, 10))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-600">All feedback has been given.</p>
+              )}
+            </section>
+            {stats.legacyFollowups.length > 0 && (
+              <section className="card p-4">
+                <h2 className="font-semibold mb-2">Earlier follow-ups</h2>
+                <p className="text-xs text-slate-600 mb-3">
+                  These were created under the previous lesson-based rule and are kept for reference. New reminders use
+                  attended sessions.
+                </p>
+                <ul className="text-sm space-y-2">
+                  {stats.legacyFollowups.map((row) => (
+                    <li key={row.id}>
+                      <Link to={`/students/${row.student_id}`} className="font-medium hover:underline">
+                        {studentById.get(row.student_id)?.full_name}
+                      </Link>
+                      <span className="text-slate-600">
+                        {' '}
+                        · {row.status.replaceAll('_', ' ')}
+                        {row.notes ? ` · ${row.notes}` : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+          <details className="mb-6">
+            <summary className="font-semibold cursor-pointer mb-3">Enrolment and scheduled sessions</summary>
+            <div className="grid xl:grid-cols-2 gap-6">
+              <section className="card p-4">
+                <h2 className="font-semibold mb-3">
+                  {activeStudents.length} active students · {newStudents.length} new this month
+                </h2>
+                {newStudents.length ? (
+                  <ul className="text-sm space-y-2">
+                    {newStudents.map((student) => (
+                      <li key={student.id}>
+                        <Link to={`/students/${student.id}`} className="font-medium hover:underline">
+                          {student.full_name}
+                        </Link>
+                        <span className="text-slate-600"> · joined {formatShortDate(student.date_joined!)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-slate-600">No new students this month.</p>
+                )}
+              </section>
+              <section className="card p-4">
+                <h2 className="font-semibold mb-2">Scheduled by day and time</h2>
+                <p className="text-xs text-slate-600 mb-3">
+                  Typical active student schedules, including multiple weekly slots. Fortnightly students attend only in
+                  their on weeks.
+                </p>
+                {schedules.length ? (
+                  <ul className="text-sm space-y-2">
+                    {schedules.map((slot) => (
+                      <li key={`${slot.day}|${slot.time ?? ''}`} className="flex justify-between gap-2">
+                        <span>
+                          {slot.day} · {formatTime12h(slot.time)}
+                        </span>
+                        <span>{slot.students.size} students</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-slate-600">No schedules set.</p>
+                )}
+              </section>
+            </div>
+          </details>
+          <details className="mb-6">
+            <summary className="font-semibold cursor-pointer mb-3">Attendance trends · last 12 weeks</summary>
+            <div className="grid xl:grid-cols-2 gap-6">
+              <AttendanceTrendChart points={weekPoints} />
+              <CentreAttendanceChart points={centrePoints} />
+              <StudentRetentionChart cohorts={studentRetentionCohorts(data.students, weekStarts, today)} />
+            </div>
+          </details>
+        </>
+      )}
     </div>
   )
 }

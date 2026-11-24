@@ -2,7 +2,7 @@ import type { Attendance, AttendanceStatus, Student } from '../types'
 import { addDays, dayName, parseISODate } from './dates'
 import { isClosedDay } from './ukHolidays'
 
-type AttendanceLike = Pick<Attendance, 'status'> & Partial<Pick<Attendance, 'date' | 'session_type' | 'catch_up'>>
+type AttendanceLike = Pick<Attendance, 'status'> & Partial<Pick<Attendance, 'date' | 'session_type' | 'catch_up' | 'student_id'>>
 
 /** How a single attendance row counts towards a student's attendance record.
  *  - attended: a regular session the student came to
@@ -11,8 +11,9 @@ type AttendanceLike = Pick<Attendance, 'status'> & Partial<Pick<Attendance, 'dat
  *              before or after it (not counted against the student)
  *  - extra:    a catch-up/special session that attended — it either made up
  *              an absence (above) or is a bonus session; never inflates the %
+ *  - extra_missed: a missed catch-up/special; does not add another owed class
  *  - pending:  'Not Arrived' — the register hasn't been marked yet */
-export type AttendanceKind = 'attended' | 'missed' | 'made_up' | 'extra' | 'pending'
+export type AttendanceKind = 'attended' | 'missed' | 'made_up' | 'extra' | 'extra_missed' | 'pending'
 
 /** An absence can be made up by a catch-up/special session up to this many
  *  days before it (e.g. a fortnightly student who doubles up the week before)
@@ -32,10 +33,11 @@ function daysBetween(a: string, b: string): number {
  *  date or session_type are treated as ordinary regular sessions, so callers
  *  that only have a status still get the plain attended/(attended+absent)
  *  result. Returns new objects in the same order as the input. */
-export function classifyAttendance<T extends AttendanceLike>(rows: T[]): (T & { kind: AttendanceKind })[] {
+export function classifyAttendance<T extends AttendanceLike>(rows: T[]): (T & { kind: AttendanceKind; makeUpDate?: string; absenceDate?: string })[] {
+  const pairs = new Map<number, number>()
   const kinds: AttendanceKind[] = rows.map((r) => {
     if (r.status === 'Not Arrived') return 'pending'
-    if (r.status === 'Absent') return 'missed'
+    if (r.status === 'Absent') return isExtraSession(r) ? 'extra_missed' : 'missed'
     return isExtraSession(r) ? 'extra' : 'attended'
   })
 
@@ -49,6 +51,7 @@ export function classifyAttendance<T extends AttendanceLike>(rows: T[]): (T & { 
     let bestGap = Infinity
     rows.forEach((candidate, j) => {
       if (used.has(j) || kinds[j] !== 'extra' || !candidate.date || !didAttend(candidate.status)) return
+      if (candidate.student_id !== absence.student_id) return
       const gap = daysBetween(absence.date!, candidate.date)
       if (gap < -MAKE_UP_DAYS_BEFORE || gap > MAKE_UP_DAYS_AFTER) return
       // Prefer a session after the absence, then the closest one.
@@ -61,9 +64,12 @@ export function classifyAttendance<T extends AttendanceLike>(rows: T[]): (T & { 
     if (best >= 0) {
       used.add(best)
       kinds[i] = 'made_up'
+      pairs.set(i, best)
+      pairs.set(best, i)
     }
   }
-  return rows.map((r, i) => ({ ...r, kind: kinds[i] }))
+  return rows.map((r, i) => ({ ...r, kind: kinds[i], ...(pairs.has(i) ? kinds[i] === 'made_up'
+    ? { makeUpDate: rows[pairs.get(i)!].date } : { absenceDate: rows[pairs.get(i)!].date } : {}) }))
 }
 
 export interface AttendanceSummary {
@@ -129,6 +135,7 @@ export function attendanceFlag({ rows, today, hasSchedule, frequency, quietDays 
   const quiet = quietDays ?? (frequency === 'fortnightly' ? 35 : 21)
   // An absence that has been made up is not a miss.
   const sorted = classifyAttendance(rows)
+    .filter((r) => r.kind !== 'extra_missed' && r.kind !== 'pending')
     .map((r) => (r.kind === 'made_up' ? { ...r, status: 'Not Arrived' as const } : r))
     .sort((a, b) => b.date.localeCompare(a.date))
   const recent3 = sorted.slice(0, 3)
