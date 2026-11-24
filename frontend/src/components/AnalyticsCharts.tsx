@@ -31,16 +31,17 @@ export function lastTwelveWeekStarts(today: string): string[] {
   return Array.from({ length: 12 }, (_, index) => addDays(currentWeekStart, (index - 11) * 7))
 }
 
-export function weeklyAttendancePoints(rows: Attendance[], weekStarts: string[]): WeeklyAttendancePoint[] {
+export function weeklyAttendancePoints(rows: (Pick<Attendance, 'date' | 'status'> & Partial<Pick<Attendance, 'session_type' | 'catch_up' | 'student_id'>>)[], weekStarts: string[]): WeeklyAttendancePoint[] {
   // Classify across every row first so an absence is still recognised as
   // made up when its catch-up session falls in the following week.
   const classified = classifyAttendance(rows)
   return weekStarts.map((weekStart) => {
     const end = addDays(weekStart, 6)
     const weekRows = classified.filter((row) => row.date >= weekStart && row.date <= end)
-    const attended = weekRows.filter((row) => row.kind === 'attended').length
+    const attended = weekRows.filter((row) => row.kind === 'attended' || row.kind === 'extra').length
+    const fulfilled = weekRows.filter((row) => row.kind === 'attended' || row.kind === 'made_up').length
     const missed = weekRows.filter((row) => row.kind === 'missed').length
-    return { weekStart, attended, missed, rate: attended + missed ? Math.round((attended / (attended + missed)) * 100) : null }
+    return { weekStart, attended, missed, rate: fulfilled + missed ? Math.round((fulfilled / (fulfilled + missed)) * 100) : null }
   })
 }
 
@@ -76,7 +77,7 @@ export function AttendanceTrendChart({ points, title = 'Attendance over the last
       <div className="flex items-start justify-between gap-3 mb-2">
         <div>
           <h3 id="attendance-trend-title" className="font-semibold">{title}</h3>
-          <p className="text-xs text-slate-600 mt-1">Attendance rate from sessions marked arrived, completed, or absent.</p>
+          <p className="text-xs text-slate-600 mt-1">Regular attendance after make-ups. Each catch-up covers only that student's absence.</p>
         </div>
         <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 whitespace-nowrap">
           <span className="w-2.5 h-2.5 rounded-full bg-[color:var(--rt-primary)]" aria-hidden="true" /> Attendance %
@@ -105,7 +106,7 @@ export function AttendanceTrendChart({ points, title = 'Attendance over the last
           ) : null)}
         </svg>
       )}
-      <p className="text-xs text-slate-600 mt-1">Weeks begin Monday. Point details include attended and missed counts.</p>
+      <p className="text-xs text-slate-600 mt-1">Weeks begin Monday. Point details show attended sessions and outstanding absences; made-up absences count as fulfilled.</p>
     </section>
   )
 }
