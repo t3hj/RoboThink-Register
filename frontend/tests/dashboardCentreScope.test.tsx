@@ -18,11 +18,22 @@ vi.mock('../src/lib/centres', () => ({ useCentres: () => ({ selectedCentreId: ba
 vi.mock('../src/lib/dates', async (original) => ({ ...await original<typeof import('../src/lib/dates')>(), todayISO: () => '2026-10-29' }))
 vi.mock('../src/lib/supabaseClient', () => ({ supabase: { from: (table: string) => {
   const filters: Filter[] = []; let limit = Infinity; let head = false
+  let offset = 0
   const delayed = table === 'students' ? backend.delayedStudents : null
   if (table === 'students') backend.delayedStudents = null
   const query: Record<string, unknown> = {
     select: (_columns: string, options?: { head?: boolean }) => { head = !!options?.head; return query },
     order: () => query,
+    range: (from: number, to: number) => {
+      offset = from
+      limit = to - from + 1
+      return query
+    },
+    not: (column: string, operator: string, value: unknown) => {
+      if (operator !== 'is' || value !== null) throw new Error('Unsupported negated filter')
+      filters.push({ method: 'isNotNull', column, value })
+      return query
+    },
     limit: (value: number) => { limit = value; return query },
     then: async (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
       backend.calls.push({ table, filters: [...filters] })
@@ -30,12 +41,13 @@ vi.mock('../src/lib/supabaseClient', () => ({ supabase: { from: (table: string) 
         if (backend.failTable === table) return resolve({ data: null, count: null, error: { message: 'Failed to fetch' } })
         const result = delayed ? await delayed : { data: backend.tables[table] ?? [], error: null }
         let data = result.data.filter((row) => filters.every(({ method, column, value }) => {
+          if (method === 'isNotNull') return row[column] != null
           if (method === 'eq') return row[column] === value
           if (method === 'neq') return row[column] !== value
           if (method === 'in') return (value as unknown[]).includes(row[column])
           if (method === 'gte') return String(row[column]) >= String(value)
           return String(row[column]) <= String(value)
-        })).slice(0, limit)
+        })).slice(offset, offset + limit)
         return resolve({ data: head ? null : data, count: data.length, error: result.error })
       } catch (error) { return reject(error) }
     },
@@ -215,4 +227,17 @@ describe('dashboard arrivals versus session outcomes', () => {
     expect(renderer.root.findAllByType(StatCard)).toHaveLength(0)
     expect(renderer.root.findAllByProps({ role: 'alert' })).toHaveLength(1)
   })
+})
+
+it('keeps older attended dates pending until an outcome is recorded for that date', async () => {
+  const visit = { student_id: 'a', centre_id: 'a', date: '2026-10-01' }
+  backend.tables.attendance.push({ ...visit, status: 'Completed' })
+  const registerLink = () => renderer.root.findByProps({ 'aria-labelledby': 'unmarked-heading' })
+    .findAllByType('a').filter(link => link.props.href === '/register?date=2026-10-01')
+  await mount()
+  expect(registerLink()).toHaveLength(1)
+  await act(async () => renderer.unmount())
+  backend.tables.attended_sessions = [{ ...visit, outcome: 'not_finished' }]
+  await mount()
+  expect(registerLink()).toHaveLength(0)
 })
